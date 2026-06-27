@@ -93,9 +93,9 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView textBorderWidth, textBorderAlpha;
     private SeekBar seekCornerRadius; // 新增：圆角半径 SeekBar
     private TextView textCornerRadius; // 新增：圆角半径 TextView
-    private SeekBar seekShadowWidth, seekShadowAlpha;
-    private EditText editShadowColor;
-    private TextView textShadowWidth, textShadowAlpha;
+//    private SeekBar seekShadowWidth, seekShadowAlpha;
+//    private EditText editShadowColor;
+//    private TextView textShadowWidth, textShadowAlpha;
     private Switch switchShowCloseButton; // 新增：关闭按钮显示开关
     private Switch switchCloseOnOutsideClick; // 点击窗口外关闭窗口开关
     private Switch switchBackPrioritizeWebview; // 侧边返回手势行为
@@ -191,11 +191,11 @@ public class SettingsActivity extends AppCompatActivity {
         seekCornerRadius = findViewById(R.id.seek_corner_radius);
         textCornerRadius = findViewById(R.id.text_corner_radius);
         
-        seekShadowWidth = findViewById(R.id.seek_shadow_width);
-        seekShadowAlpha = findViewById(R.id.seek_shadow_alpha);
-        editShadowColor = findViewById(R.id.edit_shadow_color);
-        textShadowWidth = findViewById(R.id.text_shadow_width);
-        textShadowAlpha = findViewById(R.id.text_shadow_alpha);
+//        seekShadowWidth = findViewById(R.id.seek_shadow_width);
+//        seekShadowAlpha = findViewById(R.id.seek_shadow_alpha);
+//        editShadowColor = findViewById(R.id.edit_shadow_color);
+//        textShadowWidth = findViewById(R.id.text_shadow_width);
+//        textShadowAlpha = findViewById(R.id.text_shadow_alpha);
         
         // 关闭按钮显示开关
         switchShowCloseButton = findViewById(R.id.switch_show_close_button);
@@ -312,16 +312,16 @@ public class SettingsActivity extends AppCompatActivity {
         textBorderAlpha.setText("边框透明度: " + String.format("%.2f", borderAlpha / 100.0f));
         
         // 加载阴影设置
-        int shadowWidth = preferences.getInt(KEY_SHADOW_WIDTH, 0);
-        seekShadowWidth.setProgress(shadowWidth);
-        textShadowWidth.setText("阴影宽度: " + shadowWidth + "dp");
+//        int shadowWidth = preferences.getInt(KEY_SHADOW_WIDTH, 0);
+//        seekShadowWidth.setProgress(shadowWidth);
+//        textShadowWidth.setText("阴影宽度: " + shadowWidth + "dp");
         
-        String shadowColor = preferences.getString(KEY_SHADOW_COLOR, "#000000");
-        editShadowColor.setText(shadowColor);
+//        String shadowColor = preferences.getString(KEY_SHADOW_COLOR, "#000000");
+//        editShadowColor.setText(shadowColor);
         
-        int shadowAlpha = preferences.getInt(KEY_SHADOW_ALPHA, 0); // 关键修复：默认值从 30 改为 60
-        seekShadowAlpha.setProgress(shadowAlpha);
-        textShadowAlpha.setText("阴影透明度: " + String.format("%.2f", shadowAlpha / 100.0f));
+//        int shadowAlpha = preferences.getInt(KEY_SHADOW_ALPHA, 0); // 关键修复：默认值从 30 改为 60
+//        seekShadowAlpha.setProgress(shadowAlpha);
+//        textShadowAlpha.setText("阴影透明度: " + String.format("%.2f", shadowAlpha / 100.0f));
         
         // 加载关闭按钮显示设置
         boolean showCloseButton = preferences.getBoolean(KEY_SHOW_CLOSE_BUTTON, true);
@@ -454,13 +454,13 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putString(KEY_BORDER_COLOR, borderColor);
         editor.putInt(KEY_BORDER_ALPHA, seekBorderAlpha.getProgress());
         
-        editor.putInt(KEY_SHADOW_WIDTH, seekShadowWidth.getProgress());
-        String shadowColor = editShadowColor.getText().toString().trim();
-        if (TextUtils.isEmpty(shadowColor) || !shadowColor.startsWith("#")) {
-            shadowColor = "#000000";
-        }
-        editor.putString(KEY_SHADOW_COLOR, shadowColor);
-        editor.putInt(KEY_SHADOW_ALPHA, seekShadowAlpha.getProgress());
+//        editor.putInt(KEY_SHADOW_WIDTH, seekShadowWidth.getProgress());
+//        String shadowColor = editShadowColor.getText().toString().trim();
+//        if (TextUtils.isEmpty(shadowColor) || !shadowColor.startsWith("#")) {
+//            shadowColor = "#000000";
+//        }
+//        editor.putString(KEY_SHADOW_COLOR, shadowColor);
+//        editor.putInt(KEY_SHADOW_ALPHA, seekShadowAlpha.getProgress());
         
         // 保存关闭按钮显示设置
         editor.putBoolean(KEY_SHOW_CLOSE_BUTTON, switchShowCloseButton.isChecked());
@@ -542,10 +542,10 @@ public class SettingsActivity extends AppCompatActivity {
             borderColor = "#4CAF50";
         }
         
-        String shadowColor = editShadowColor.getText().toString().trim();
-        if (TextUtils.isEmpty(shadowColor) || !shadowColor.startsWith("#")) {
-            shadowColor = "#000000";
-        }
+//        String shadowColor = editShadowColor.getText().toString().trim();
+//        if (TextUtils.isEmpty(shadowColor) || !shadowColor.startsWith("#")) {
+//            shadowColor = "#000000";
+//        }
         
         // 更新 AI 窗口大小、位置、边框和阴影
         Intent sizeIntent = new Intent(this, FloatWindowService.class);
@@ -557,9 +557,9 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("corner_radius", seekCornerRadius.getProgress()); // 新增：圆角半径
         sizeIntent.putExtra("border_color", borderColor);
         sizeIntent.putExtra("border_alpha", seekBorderAlpha.getProgress() / 100.0f);
-        sizeIntent.putExtra("shadow_width", seekShadowWidth.getProgress());
-        sizeIntent.putExtra("shadow_color", shadowColor);
-        sizeIntent.putExtra("shadow_alpha", seekShadowAlpha.getProgress() / 100.0f);
+//        sizeIntent.putExtra("shadow_width", seekShadowWidth.getProgress());
+//        sizeIntent.putExtra("shadow_color", shadowColor);
+//        sizeIntent.putExtra("shadow_alpha", seekShadowAlpha.getProgress() / 100.0f);
         sizeIntent.putExtra("show_close_button", switchShowCloseButton.isChecked()); // 新增：关闭按钮显示
         sizeIntent.putExtra("close_on_outside_click", switchCloseOnOutsideClick.isChecked()); // 点击窗口外关闭窗口
         sizeIntent.putExtra("back_prioritize_webview", switchBackPrioritizeWebview.isChecked()); // 侧边返回手势行为
@@ -733,26 +733,26 @@ public class SettingsActivity extends AppCompatActivity {
         });
         
         // 阴影宽度 - 实时更新
-        seekShadowWidth.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                textShadowWidth.setText("阴影宽度: " + progress + "dp");
-                applyCurrentSettings();
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-        });
+//        seekShadowWidth.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+//            @Override
+//            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+//                textShadowWidth.setText("阴影宽度: " + progress + "dp");
+//                applyCurrentSettings();
+//            }
+//            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+//            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+//        });
         
         // 阴影透明度 - 实时更新
-        seekShadowAlpha.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                textShadowAlpha.setText("阴影透明度: " + String.format("%.2f", progress / 100.0f));
-                applyCurrentSettings();
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-        });
+//        seekShadowAlpha.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+//            @Override
+//            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+//                textShadowAlpha.setText("阴影透明度: " + String.format("%.2f", progress / 100.0f));
+//                applyCurrentSettings();
+//            }
+//            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+//            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+//        });
         
         // 输入法上移距离 - 实时更新
         seekKeyboardOffset.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -975,10 +975,10 @@ public class SettingsActivity extends AppCompatActivity {
             borderColor = "#4CAF50";
         }
         
-        String shadowColor = editShadowColor.getText().toString().trim();
-        if (TextUtils.isEmpty(shadowColor) || !shadowColor.startsWith("#")) {
-            shadowColor = "#000000";
-        }
+//        String shadowColor = editShadowColor.getText().toString().trim();
+//        if (TextUtils.isEmpty(shadowColor) || !shadowColor.startsWith("#")) {
+//            shadowColor = "#000000";
+//        }
         
         Intent sizeIntent = new Intent(this, FloatWindowService.class);
         sizeIntent.setAction("UPDATE_WINDOW_SIZE");
@@ -989,9 +989,9 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("corner_radius", seekCornerRadius.getProgress()); // 新增：圆角半径
         sizeIntent.putExtra("border_color", borderColor);
         sizeIntent.putExtra("border_alpha", seekBorderAlpha.getProgress() / 100.0f);
-        sizeIntent.putExtra("shadow_width", seekShadowWidth.getProgress());
-        sizeIntent.putExtra("shadow_color", shadowColor);
-        sizeIntent.putExtra("shadow_alpha", seekShadowAlpha.getProgress() / 100.0f);
+//        sizeIntent.putExtra("shadow_width", seekShadowWidth.getProgress());
+//        sizeIntent.putExtra("shadow_color", shadowColor);
+//        sizeIntent.putExtra("shadow_alpha", seekShadowAlpha.getProgress() / 100.0f);
         sizeIntent.putExtra("show_close_button", switchShowCloseButton.isChecked()); // 新增：关闭按钮显示
         sizeIntent.putExtra("close_on_outside_click", switchCloseOnOutsideClick.isChecked()); // 点击窗口外关闭窗口
         sizeIntent.putExtra("back_prioritize_webview", switchBackPrioritizeWebview.isChecked()); // 侧边返回手势行为

@@ -387,22 +387,22 @@
             android:progress="0"
             android:layout_marginBottom="24dp" />
 
-        <!-- 分隔线 -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#DDDDDD"
-            android:layout_marginBottom="24dp" />
+<!--        &lt;!&ndash; 分隔线 &ndash;&gt;-->
+<!--        <View-->
+<!--            android:layout_width="match_parent"-->
+<!--            android:layout_height="1dp"-->
+<!--            android:background="#DDDDDD"-->
+<!--            android:layout_marginBottom="24dp" />-->
 
-        <!-- AI 对话窗口边框和阴影设置 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="AI 窗口边框和阴影"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:textColor="#333333"
-            android:layout_marginBottom="16dp" />
+<!--        &lt;!&ndash; AI 对话窗口边框和阴影设置 &ndash;&gt;-->
+<!--        <TextView-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:text="AI 窗口边框和阴影"-->
+<!--            android:textSize="20sp"-->
+<!--            android:textStyle="bold"-->
+<!--            android:textColor="#333333"-->
+<!--            android:layout_marginBottom="16dp" />-->
 
         <!-- 边框宽度 -->
         <TextView
@@ -481,61 +481,61 @@
             android:layout_marginBottom="24dp" />
 
         <!-- 阴影宽度 -->
-        <TextView
-            android:id="@+id/text_shadow_width"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="阴影宽度: 20dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
+<!--        <TextView-->
+<!--            android:id="@+id/text_shadow_width"-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:text="阴影宽度: 20dp"-->
+<!--            android:textSize="14sp"-->
+<!--            android:textColor="#666666"-->
+<!--            android:layout_marginBottom="8dp" />-->
 
-        <SeekBar
-            android:id="@+id/seek_shadow_width"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="50"
-            android:progress="20"
-            android:layout_marginBottom="16dp" />
+<!--        <SeekBar-->
+<!--            android:id="@+id/seek_shadow_width"-->
+<!--            android:layout_width="match_parent"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:max="50"-->
+<!--            android:progress="20"-->
+<!--            android:layout_marginBottom="16dp" />-->
 
-        <!-- 阴影颜色 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="阴影颜色 (RGB)"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
+<!--        &lt;!&ndash; 阴影颜色 &ndash;&gt;-->
+<!--        <TextView-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:text="阴影颜色 (RGB)"-->
+<!--            android:textSize="14sp"-->
+<!--            android:textColor="#666666"-->
+<!--            android:layout_marginBottom="8dp" />-->
 
-        <EditText
-            android:id="@+id/edit_shadow_color"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="格式：#RRGGBB，默认 #000000"
-            android:inputType="text"
-            android:padding="12dp"
-            android:background="@android:drawable/edit_text"
-            android:textSize="14sp"
-            android:text="#000000"
-            android:layout_marginBottom="16dp" />
+<!--        <EditText-->
+<!--            android:id="@+id/edit_shadow_color"-->
+<!--            android:layout_width="match_parent"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:hint="格式：#RRGGBB，默认 #000000"-->
+<!--            android:inputType="text"-->
+<!--            android:padding="12dp"-->
+<!--            android:background="@android:drawable/edit_text"-->
+<!--            android:textSize="14sp"-->
+<!--            android:text="#000000"-->
+<!--            android:layout_marginBottom="16dp" />-->
 
-        <!-- 阴影透明度 -->
-        <TextView
-            android:id="@+id/text_shadow_alpha"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="阴影透明度: 0.60"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
+<!--        &lt;!&ndash; 阴影透明度 &ndash;&gt;-->
+<!--        <TextView-->
+<!--            android:id="@+id/text_shadow_alpha"-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:text="阴影透明度: 0.60"-->
+<!--            android:textSize="14sp"-->
+<!--            android:textColor="#666666"-->
+<!--            android:layout_marginBottom="8dp" />-->
 
-        <SeekBar
-            android:id="@+id/seek_shadow_alpha"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100"
-            android:progress="60"
-            android:layout_marginBottom="24dp" />
+<!--        <SeekBar-->
+<!--            android:id="@+id/seek_shadow_alpha"-->
+<!--            android:layout_width="match_parent"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:max="100"-->
+<!--            android:progress="60"-->
+<!--            android:layout_marginBottom="24dp" />-->
 
         <!-- 显示关闭按钮 -->
         <TextView
