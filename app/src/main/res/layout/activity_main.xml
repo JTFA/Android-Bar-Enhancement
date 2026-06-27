@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="24dp"
+    android:background="#F5F5F5">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="悬浮窗应用"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:textColor="#333333"
+        android:layout_marginBottom="40dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="请先授予悬浮窗权限，然后启动服务"
+        android:textSize="14sp"
+        android:textColor="#666666"
+        android:layout_marginBottom="32dp"
+        android:gravity="center" />
+
+    <Button
+        android:id="@+id/btn_check_permission"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="检查/申请悬浮窗权限"
+        android:textSize="16sp"
+        android:padding="16dp"
+        android:layout_marginBottom="16dp"
+        android:backgroundTint="#2196F3" />
+
+    <Button
+        android:id="@+id/btn_start_service"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="启动悬浮窗服务"
+        android:textSize="16sp"
+        android:padding="16dp"
+        android:backgroundTint="#4CAF50" />
+
+    <Button
+        android:id="@+id/btn_open_settings"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="打开样式设置"
+        android:textSize="16sp"
+        android:padding="16dp"
+        android:layout_marginTop="16dp"
+        android:backgroundTint="#FF9800" />
+
+    <Button
+        android:id="@+id/btn_test_simple"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="🔧 测试：显示红色条（简化版）"
+        android:textSize="16sp"
+        android:padding="16dp"
+        android:layout_marginTop="16dp"
+        android:backgroundTint="#F44336" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="提示：启动服务后，Activity将关闭，悬浮窗将在后台运行"
+        android:textSize="12sp"
+        android:textColor="#999999"
+        android:layout_marginTop="24dp"
+        android:gravity="center" />
+
+</LinearLayout>
