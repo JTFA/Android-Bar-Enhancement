@@ -51,7 +51,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="底部提示条样式"
+            android:text="触发区域"
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="#333333"
@@ -110,24 +110,6 @@
             android:layout_height="wrap_content"
             android:max="60"
             android:progress="30"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 提示条透明度 -->
-        <TextView
-            android:id="@+id/text_bar_alpha"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="透明度: 0.80"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_bar_alpha"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100"
-            android:progress="80"
             android:layout_marginBottom="16dp" />
 
         <!-- 提示条位置 Y -->

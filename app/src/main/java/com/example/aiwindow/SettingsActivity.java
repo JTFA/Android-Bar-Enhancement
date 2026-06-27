@@ -3,7 +3,11 @@ package com.example.aiwindow;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.text.Editable;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -71,8 +75,8 @@ public class SettingsActivity extends AppCompatActivity {
     private EditText editAiUrl;
     
     // 提示条样式控件
-    private SeekBar seekBarWidth, seekBarHeight, seekBarCorner, seekBarAlpha;
-    private TextView textWidth, textHeight, textCorner, textAlpha;
+    private SeekBar seekBarWidth, seekBarHeight, seekBarCorner;
+    private TextView textWidth, textHeight, textCorner;
     private SeekBar seekBarPositionY;
     private TextView textPositionY;
     private SeekBar seekLongPressDuration;
@@ -159,13 +163,11 @@ public class SettingsActivity extends AppCompatActivity {
         seekBarWidth = findViewById(R.id.seek_bar_width);
         seekBarHeight = findViewById(R.id.seek_bar_height);
         seekBarCorner = findViewById(R.id.seek_bar_corner);
-        seekBarAlpha = findViewById(R.id.seek_bar_alpha);
         seekBarPositionY = findViewById(R.id.seek_bar_position_y);
         
         textWidth = findViewById(R.id.text_bar_width);
         textHeight = findViewById(R.id.text_bar_height);
         textCorner = findViewById(R.id.text_bar_corner);
-        textAlpha = findViewById(R.id.text_bar_alpha);
         textPositionY = findViewById(R.id.text_bar_position_y);
         
         // 长按时间控件
@@ -269,11 +271,6 @@ public class SettingsActivity extends AppCompatActivity {
         int barCorner = preferences.getInt(KEY_BAR_CORNER, 30);
         seekBarCorner.setProgress(barCorner);
         textCorner.setText("圆角: " + barCorner + "dp");
-        
-        // 加载提示条透明度
-        int barAlpha = preferences.getInt(KEY_BAR_ALPHA, 0);
-        seekBarAlpha.setProgress(barAlpha);
-        textAlpha.setText("透明度: " + String.format("%.2f", barAlpha / 100.0f));
         
         // 加载 AI 窗口宽度
         int windowWidth = preferences.getInt(KEY_WINDOW_WIDTH, 340);
@@ -417,7 +414,6 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putInt(KEY_BAR_WIDTH, seekBarWidth.getProgress());
         editor.putInt(KEY_BAR_HEIGHT, seekBarHeight.getProgress());
         editor.putInt(KEY_BAR_CORNER, seekBarCorner.getProgress());
-        editor.putInt(KEY_BAR_ALPHA, seekBarAlpha.getProgress());
         editor.putInt(KEY_BAR_POSITION_Y, seekBarPositionY.getProgress());
         editor.putInt(KEY_LONG_PRESS_DURATION, seekLongPressDuration.getProgress());
         
@@ -529,7 +525,6 @@ public class SettingsActivity extends AppCompatActivity {
         styleIntent.putExtra("width", seekBarWidth.getProgress());
         styleIntent.putExtra("height", seekBarHeight.getProgress());
         styleIntent.putExtra("corner", seekBarCorner.getProgress());
-        styleIntent.putExtra("alpha", seekBarAlpha.getProgress() / 100.0f);
         styleIntent.putExtra("position_y", seekBarPositionY.getProgress());
         styleIntent.putExtra("pressed_bar_enabled", switchPressedBarEnabled.isChecked());
         styleIntent.putExtra("pressed_bar_color", getPressedBarColorSafe());
@@ -588,7 +583,6 @@ public class SettingsActivity extends AppCompatActivity {
         animIntent.putExtra("width", seekBarWidth.getProgress());
         animIntent.putExtra("height", seekBarHeight.getProgress());
         animIntent.putExtra("corner", seekBarCorner.getProgress());
-        animIntent.putExtra("alpha", seekBarAlpha.getProgress() / 100.0f);
         animIntent.putExtra("position_y", seekBarPositionY.getProgress());
         animIntent.putExtra("long_press_duration", seekLongPressDuration.getProgress());
         // 按下状态样式
@@ -657,23 +651,6 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {}
         });
-
-        // 提示条透明度调节 - 实时更新
-        seekBarAlpha.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                float alpha = progress / 100.0f;
-                textAlpha.setText("透明度: " + String.format("%.2f", alpha));
-                applyCurrentSettings(); // 实时应用
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {}
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {}
-        });
-        
 
         // 提示条位置 Y - 实时更新
         seekBarPositionY.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -815,6 +792,9 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
                 applyCurrentSettings();
+                if (isChecked) {
+                    triggerPressedPreview();
+                }
             }
         });
         
@@ -824,6 +804,7 @@ public class SettingsActivity extends AppCompatActivity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textPressedBarWidth.setText("按下时宽度: " + progress + "dp");
                 applyCurrentSettings();
+                triggerPressedPreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -835,6 +816,7 @@ public class SettingsActivity extends AppCompatActivity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textPressedBarHeight.setText("按下时高度: " + progress + "dp");
                 applyCurrentSettings();
+                triggerPressedPreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -846,6 +828,7 @@ public class SettingsActivity extends AppCompatActivity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textPressedBarCorner.setText("按下时圆角: " + progress + "dp");
                 applyCurrentSettings();
+                triggerPressedPreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -858,6 +841,7 @@ public class SettingsActivity extends AppCompatActivity {
                 float alpha = progress / 100.0f;
                 textPressedBarAlpha.setText("按下时透明度: " + String.format("%.2f", alpha));
                 applyCurrentSettings();
+                triggerPressedPreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -869,6 +853,7 @@ public class SettingsActivity extends AppCompatActivity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textPressedBarFeather.setText("边缘羽化宽度: " + progress + "dp");
                 applyCurrentSettings();
+                triggerPressedPreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -881,21 +866,34 @@ public class SettingsActivity extends AppCompatActivity {
                 String posYText = progress >= 0 ? "按下时位置Y: " + progress + "dp (向上)" : "按下时位置Y: " + progress + "dp (向下)";
                 textPressedBarPositionY.setText(posYText);
                 applyCurrentSettings();
+                triggerPressedPreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
         
-        // 按下时位置Y - 实时更新
-        seekPressedBarPositionY.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+        // 按下时颜色编辑框 TextWatcher（实时预览）
+        editPressedBarColor.addTextChangedListener(new android.text.TextWatcher() {
+            private Handler textHandler = new Handler(Looper.getMainLooper());
+            private Runnable textTimeout;
             @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                String posYText = progress >= 0 ? "按下时位置 Y: " + progress + "dp (向上)" : "按下时位置 Y: " + progress + "dp (向下)";
-                textPressedBarPositionY.setText(posYText);
-                applyCurrentSettings();
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                if (textTimeout != null) {
+                    textHandler.removeCallbacks(textTimeout);
+                }
+                textTimeout = new Runnable() {
+                    @Override
+                    public void run() {
+                        applyCurrentSettings();
+                        triggerPressedPreview();
+                    }
+                };
+                textHandler.postDelayed(textTimeout, 300);
             }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+            @Override
+            public void afterTextChanged(android.text.Editable s) {}
         });
         
         // 背景遮罩透明度 - 实时更新
@@ -939,7 +937,6 @@ public class SettingsActivity extends AppCompatActivity {
         styleIntent.putExtra("width", seekBarWidth.getProgress());
         styleIntent.putExtra("height", seekBarHeight.getProgress());
         styleIntent.putExtra("corner", seekBarCorner.getProgress());
-        styleIntent.putExtra("alpha", seekBarAlpha.getProgress() / 100.0f);
         styleIntent.putExtra("position_y", seekBarPositionY.getProgress());
         styleIntent.putExtra("long_press_duration", seekLongPressDuration.getProgress());
         styleIntent.putExtra("pressed_bar_enabled", switchPressedBarEnabled.isChecked());
@@ -1017,7 +1014,6 @@ public class SettingsActivity extends AppCompatActivity {
         animIntent.putExtra("width", seekBarWidth.getProgress());
         animIntent.putExtra("height", seekBarHeight.getProgress());
         animIntent.putExtra("corner", seekBarCorner.getProgress());
-        animIntent.putExtra("alpha", seekBarAlpha.getProgress() / 100.0f);
         animIntent.putExtra("position_y", seekBarPositionY.getProgress());
         animIntent.putExtra("long_press_duration", seekLongPressDuration.getProgress());
         // 按下状态样式
@@ -1041,6 +1037,62 @@ public class SettingsActivity extends AppCompatActivity {
             return "#333333";
         }
         return color;
+    }
+    
+    /**
+     * 触发按下样式预览（自动显示按下样式覆盖层，1秒无操作后自动隐藏）
+     */
+    private void triggerPressedPreview() {
+        Intent intent = new Intent(this, FloatWindowService.class);
+        intent.setAction("UPDATE_STYLE");
+        intent.putExtra("show_pressed_preview", true);
+        startService(intent);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 进入设置页面时，将底部提示条透明度设为50%
+        Intent intent = new Intent(this, FloatWindowService.class);
+        intent.setAction("UPDATE_STYLE");
+        intent.putExtra("width", seekBarWidth.getProgress());
+        intent.putExtra("height", seekBarHeight.getProgress());
+        intent.putExtra("corner", seekBarCorner.getProgress());
+        intent.putExtra("alpha", 0.5f);
+        intent.putExtra("position_y", seekBarPositionY.getProgress());
+        intent.putExtra("long_press_duration", seekLongPressDuration.getProgress());
+        intent.putExtra("pressed_bar_enabled", switchPressedBarEnabled.isChecked());
+        intent.putExtra("pressed_bar_color", getPressedBarColorSafe());
+        intent.putExtra("pressed_bar_alpha", seekPressedBarAlpha.getProgress());
+        intent.putExtra("pressed_bar_width", seekPressedBarWidth.getProgress());
+        intent.putExtra("pressed_bar_height", seekPressedBarHeight.getProgress());
+        intent.putExtra("pressed_bar_corner", seekPressedBarCorner.getProgress());
+        intent.putExtra("pressed_bar_feather_width", seekPressedBarFeather.getProgress());
+        intent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
+        startService(intent);
+    }
+    
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // 离开设置页面时，将底部提示条透明度设为0
+        Intent intent = new Intent(this, FloatWindowService.class);
+        intent.setAction("UPDATE_STYLE");
+        intent.putExtra("width", seekBarWidth.getProgress());
+        intent.putExtra("height", seekBarHeight.getProgress());
+        intent.putExtra("corner", seekBarCorner.getProgress());
+        intent.putExtra("alpha", 0.0f);
+        intent.putExtra("position_y", seekBarPositionY.getProgress());
+        intent.putExtra("long_press_duration", seekLongPressDuration.getProgress());
+        intent.putExtra("pressed_bar_enabled", switchPressedBarEnabled.isChecked());
+        intent.putExtra("pressed_bar_color", getPressedBarColorSafe());
+        intent.putExtra("pressed_bar_alpha", seekPressedBarAlpha.getProgress());
+        intent.putExtra("pressed_bar_width", seekPressedBarWidth.getProgress());
+        intent.putExtra("pressed_bar_height", seekPressedBarHeight.getProgress());
+        intent.putExtra("pressed_bar_corner", seekPressedBarCorner.getProgress());
+        intent.putExtra("pressed_bar_feather_width", seekPressedBarFeather.getProgress());
+        intent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
+        startService(intent);
     }
 
     /**

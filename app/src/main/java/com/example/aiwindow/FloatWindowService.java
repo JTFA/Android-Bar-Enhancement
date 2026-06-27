@@ -97,7 +97,7 @@ public class FloatWindowService extends Service {
     private int currentWidth = 375;
     private int currentHeight = 9; // dp
     private int currentCornerRadius = 30; // dp
-    private float currentAlpha = 0.8f;
+    private float currentAlpha = 0.0f;
     private int barPositionX = 0; // x 偏移
     private int barPositionY = 389; // y 偏移（距底部，越靠近屏幕底部值越大）
     private int longPressDuration = 500; // 长按触发时间（毫秒）
@@ -184,6 +184,16 @@ public class FloatWindowService extends Service {
     
     // IME 处理中标志（类级别），可在 cleanupProxyIme 中重置，防止死锁
     private volatile boolean isImeProcessing = false;
+    
+    // 按下样式预览自动隐藏（设置页调节按下样式时使用）
+    private Handler pressedPreviewHandler = new Handler(Looper.getMainLooper());
+    private Runnable pressedPreviewTimeout = new Runnable() {
+        @Override
+        public void run() {
+            restoreNormalBarStyles();
+            Log.d(TAG, "按下样式预览超时，已自动隐藏");
+        }
+    };
     
     // 动画相关
     private int animationDuration = 385; // 毫秒（展开/收起动画时长，可从设置调节）
@@ -379,6 +389,14 @@ public class FloatWindowService extends Service {
                     overlayAnimDuration = overlayAnim;
                     Log.d(TAG, "遮罩渐变时长已更新: " + overlayAnimDuration + "ms");
                 }
+            }
+            
+            // 按下样式预览（设置页调节按下样式时使用）
+            if (intent.getBooleanExtra("show_pressed_preview", false)) {
+                pressedPreviewHandler.removeCallbacks(pressedPreviewTimeout);
+                applyPressedBarStyles();
+                pressedPreviewHandler.postDelayed(pressedPreviewTimeout, 1000);
+                Log.d(TAG, "按下样式预览已触发，1秒无操作后自动隐藏");
             }
         }
         // 处理 AI 窗口大小更新请求
@@ -4631,7 +4649,7 @@ public class FloatWindowService extends Service {
             currentHeight = prefs.getInt("bar_height", currentHeight);
             currentCornerRadius = prefs.getInt("bar_corner", currentCornerRadius);
             // 关键修复：SettingsActivity 以 int(0~100) 保存，不能直接用 getFloat 读取
-            currentAlpha = prefs.getInt("bar_alpha", (int)(currentAlpha * 100)) / 100.0f;
+            currentAlpha = prefs.getInt("bar_alpha", 0) / 100.0f;
             barPositionX = prefs.getInt("bar_position_x", barPositionX);
             barPositionY = prefs.getInt("bar_position_y", barPositionY);
             longPressDuration = prefs.getInt("long_press_duration", longPressDuration);
