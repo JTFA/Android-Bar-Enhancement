@@ -252,16 +252,16 @@ public class SettingsActivity extends AppCompatActivity {
      */
     private void loadSettings() {
         // 加载 AI URL
-        String aiUrl = preferences.getString(KEY_AI_URL, "https://www.baidu.com");
+        String aiUrl = preferences.getString(KEY_AI_URL, "https://www.doubao.com");
         editAiUrl.setText(aiUrl);
         
         // 加载提示条宽度
-        int barWidth = preferences.getInt(KEY_BAR_WIDTH, 300);
+        int barWidth = preferences.getInt(KEY_BAR_WIDTH, 355);
         seekBarWidth.setProgress(barWidth);
         textWidth.setText("宽度: " + barWidth + "dp");
         
         // 加载提示条高度
-        int barHeight = preferences.getInt(KEY_BAR_HEIGHT, 60);
+        int barHeight = preferences.getInt(KEY_BAR_HEIGHT, 9);
         seekBarHeight.setProgress(barHeight);
         textHeight.setText("高度: " + barHeight + "dp");
         
@@ -271,19 +271,19 @@ public class SettingsActivity extends AppCompatActivity {
         textCorner.setText("圆角: " + barCorner + "dp");
         
         // 加载提示条透明度
-        int barAlpha = preferences.getInt(KEY_BAR_ALPHA, 80);
+        int barAlpha = preferences.getInt(KEY_BAR_ALPHA, 0);
         seekBarAlpha.setProgress(barAlpha);
         textAlpha.setText("透明度: " + String.format("%.2f", barAlpha / 100.0f));
         
         // 加载 AI 窗口宽度
-        int windowWidth = preferences.getInt(KEY_WINDOW_WIDTH, 350);
+        int windowWidth = preferences.getInt(KEY_WINDOW_WIDTH, 340);
         editWindowWidth.setText(String.valueOf(windowWidth));
         
         // 加载 AI 窗口高度
-        int windowHeight = preferences.getInt(KEY_WINDOW_HEIGHT, 600);
+        int windowHeight = preferences.getInt(KEY_WINDOW_HEIGHT, 450);
         editWindowHeight.setText(String.valueOf(windowHeight));
         
-        int barPosY = preferences.getInt(KEY_BAR_POSITION_Y, 20);
+        int barPosY = preferences.getInt(KEY_BAR_POSITION_Y, 391);
         seekBarPositionY.setProgress(barPosY);
         String posYText = barPosY >= 0 ? "位置 Y: " + barPosY + "dp (向上)" : "位置 Y: " + barPosY + "dp (向下)";
         textPositionY.setText(posYText);
@@ -293,36 +293,36 @@ public class SettingsActivity extends AppCompatActivity {
         seekLongPressDuration.setProgress(longPressDuration);
         textLongPressDuration.setText("长按触发时间: " + longPressDuration + "ms");
         
-        int windowPosY = preferences.getInt(KEY_WINDOW_POSITION_Y, 0);
+        int windowPosY = preferences.getInt(KEY_WINDOW_POSITION_Y, 231);
         seekWindowPositionY.setProgress(windowPosY);
         textWindowPositionY.setText("窗口位置 Y: " + windowPosY + " (居中)");
         
         // 加载边框设置
-        int borderWidth = preferences.getInt(KEY_BORDER_WIDTH, 2);
+        int borderWidth = preferences.getInt(KEY_BORDER_WIDTH, 1);
         seekBorderWidth.setProgress(borderWidth);
         textBorderWidth.setText("边框宽度: " + borderWidth + "dp");
         
         // 加载窗口圆角半径
-        int cornerRadius = preferences.getInt(KEY_CORNER_RADIUS, 16);
+        int cornerRadius = preferences.getInt(KEY_CORNER_RADIUS, 30);
         seekCornerRadius.setProgress(cornerRadius);
         textCornerRadius.setText("窗口圆角: " + cornerRadius + "dp");
         
         String borderColor = preferences.getString(KEY_BORDER_COLOR, "#4CAF50");
         editBorderColor.setText(borderColor);
         
-        int borderAlpha = preferences.getInt(KEY_BORDER_ALPHA, 100);
+        int borderAlpha = preferences.getInt(KEY_BORDER_ALPHA, 10);
         seekBorderAlpha.setProgress(borderAlpha);
         textBorderAlpha.setText("边框透明度: " + String.format("%.2f", borderAlpha / 100.0f));
         
         // 加载阴影设置
-        int shadowWidth = preferences.getInt(KEY_SHADOW_WIDTH, 20);
+        int shadowWidth = preferences.getInt(KEY_SHADOW_WIDTH, 0);
         seekShadowWidth.setProgress(shadowWidth);
         textShadowWidth.setText("阴影宽度: " + shadowWidth + "dp");
         
         String shadowColor = preferences.getString(KEY_SHADOW_COLOR, "#000000");
         editShadowColor.setText(shadowColor);
         
-        int shadowAlpha = preferences.getInt(KEY_SHADOW_ALPHA, 60); // 关键修复：默认值从 30 改为 60
+        int shadowAlpha = preferences.getInt(KEY_SHADOW_ALPHA, 0); // 关键修复：默认值从 30 改为 60
         seekShadowAlpha.setProgress(shadowAlpha);
         textShadowAlpha.setText("阴影透明度: " + String.format("%.2f", shadowAlpha / 100.0f));
         
@@ -335,11 +335,11 @@ public class SettingsActivity extends AppCompatActivity {
         switchCloseOnOutsideClick.setChecked(closeOnOutsideClick);
         
         // 加载侧边返回手势设置
-        boolean backPrioritizeWebview = preferences.getBoolean(KEY_BACK_PRIORITIZE_WEBVIEW, true);
+        boolean backPrioritizeWebview = preferences.getBoolean(KEY_BACK_PRIORITIZE_WEBVIEW, false);
         switchBackPrioritizeWebview.setChecked(backPrioritizeWebview);
         
         // 加载输入法避让设置
-        int keyboardOffset = preferences.getInt(KEY_KEYBOARD_OFFSET, 300);
+        int keyboardOffset = preferences.getInt(KEY_KEYBOARD_OFFSET, 397);
         seekKeyboardOffset.setProgress(keyboardOffset);
         textKeyboardOffset.setText("窗口上移距离: " + keyboardOffset + "px");
         
@@ -348,7 +348,7 @@ public class SettingsActivity extends AppCompatActivity {
         textKeyboardAnimDuration.setText("平移动画时长: " + keyboardAnimDuration + "ms");
         
         // 加载动画速度
-        int animDuration = preferences.getInt(KEY_ANIM_DURATION, 200);
+        int animDuration = preferences.getInt(KEY_ANIM_DURATION, 350);
         seekAnimDuration.setProgress(animDuration);
         textAnimDuration.setText("动画速度: " + animDuration + "ms");
         
@@ -356,32 +356,32 @@ public class SettingsActivity extends AppCompatActivity {
         boolean pressedEnabled = preferences.getBoolean(KEY_PRESSED_BAR_ENABLED, true);
         switchPressedBarEnabled.setChecked(pressedEnabled);
         
-        int pressedWidth = preferences.getInt(KEY_PRESSED_BAR_WIDTH, 320);
+        int pressedWidth = preferences.getInt(KEY_PRESSED_BAR_WIDTH, 420);
         seekPressedBarWidth.setProgress(pressedWidth);
         textPressedBarWidth.setText("按下时宽度: " + pressedWidth + "dp");
         
-        int pressedHeight = preferences.getInt(KEY_PRESSED_BAR_HEIGHT, 65);
+        int pressedHeight = preferences.getInt(KEY_PRESSED_BAR_HEIGHT, 20);
         seekPressedBarHeight.setProgress(pressedHeight);
         textPressedBarHeight.setText("按下时高度: " + pressedHeight + "dp");
         
-        int pressedCorner = preferences.getInt(KEY_PRESSED_BAR_CORNER, 35);
+        int pressedCorner = preferences.getInt(KEY_PRESSED_BAR_CORNER, 45);
         seekPressedBarCorner.setProgress(pressedCorner);
         textPressedBarCorner.setText("按下时圆角: " + pressedCorner + "dp");
         
-        int pressedAlpha = preferences.getInt(KEY_PRESSED_BAR_ALPHA, 60);
+        int pressedAlpha = preferences.getInt(KEY_PRESSED_BAR_ALPHA, 100);
         seekPressedBarAlpha.setProgress(pressedAlpha);
         textPressedBarAlpha.setText("按下时透明度: " + String.format("%.2f", pressedAlpha / 100.0f));
         
-        String pressedColor = preferences.getString(KEY_PRESSED_BAR_COLOR, "#333333");
+        String pressedColor = preferences.getString(KEY_PRESSED_BAR_COLOR, "#0099dd");
         editPressedBarColor.setText(pressedColor);
         
         // 加载羽化宽度
-        int pressedFeather = preferences.getInt(KEY_PRESSED_BAR_FEATHER, 15);
+        int pressedFeather = preferences.getInt(KEY_PRESSED_BAR_FEATHER, 10);
         seekPressedBarFeather.setProgress(pressedFeather);
         textPressedBarFeather.setText("边缘羽化宽度: " + pressedFeather + "dp");
         
         // 加载按下时位置Y
-        int pressedPosY = preferences.getInt(KEY_PRESSED_BAR_POSITION_Y, 20);
+        int pressedPosY = preferences.getInt(KEY_PRESSED_BAR_POSITION_Y, 17);
         seekPressedBarPositionY.setProgress(pressedPosY);
         String pressedPosYText = pressedPosY >= 0 ? "按下时位置Y: " + pressedPosY + "dp (向上)" : "按下时位置Y: " + pressedPosY + "dp (向下)";
         textPressedBarPositionY.setText(pressedPosYText);
@@ -409,7 +409,7 @@ public class SettingsActivity extends AppCompatActivity {
         // 保存 AI URL
         String aiUrl = editAiUrl.getText().toString().trim();
         if (TextUtils.isEmpty(aiUrl)) {
-            aiUrl = "https://www.baidu.com"; // 默认值
+            aiUrl = "https://www.doubao.com"; // 默认值
         }
         editor.putString(KEY_AI_URL, aiUrl);
         
