@@ -127,6 +127,7 @@ public class SettingsActivity extends AppCompatActivity {
     private String clickAppPackage = "";
     private String clickAppName = "";
     private String clickAppClass = "";
+    private boolean isAppPickerSelecting = false;  // 防止重复弹出/选择的标记
     
     // 输入法避让控件
     private SeekBar seekKeyboardOffset;
@@ -1202,11 +1203,17 @@ public class SettingsActivity extends AppCompatActivity {
             }
         }
         
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(R.string.select_app)
                 .setSingleChoiceItems(appNames, checkedItem, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
+                        // 防止重复触发（某些 Android 版本在 dismiss 时可能重入）
+                        if (isAppPickerSelecting) {
+                            return;
+                        }
+                        isAppPickerSelecting = true;
+                        
                         clickAppPackage = appPackages[which];
                         clickAppName = appNames[which];
                         clickAppClass = appClasses[which];
@@ -1218,6 +1225,14 @@ public class SettingsActivity extends AppCompatActivity {
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
+        
+        // 弹窗关闭时重置标记
+        dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface d) {
+                isAppPickerSelecting = false;
+            }
+        });
     }
     
     /**
