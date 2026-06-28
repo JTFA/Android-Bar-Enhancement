@@ -148,7 +148,9 @@ public class FloatWindowService extends Service {
     private GradientDrawable overlayBackground; // 遮罩背景 Drawable
     private boolean isOverlayAnimating = false; // 遮罩动画进行中标志
     private boolean showCloseButton = true; // 默认显示关闭按钮
-    
+    private boolean showRefreshButton = true; // 默认显示刷新按钮
+    private boolean showBackButton = true; // 默认显示后退按钮
+
     // 返回上一级按钮引用（用于在页面加载后更新状态）
     private ImageView backButtonRef;
     
@@ -415,6 +417,8 @@ public class FloatWindowService extends Service {
             String sColor = intent.getStringExtra("shadow_color");
             float sAlpha = intent.getFloatExtra("shadow_alpha", shadowAlpha);
             boolean showCloseBtn = intent.getBooleanExtra("show_close_button", true); // 新增：关闭按钮显示
+            boolean showRefreshBtn = intent.getBooleanExtra("show_refresh_button", true); // 显示刷新按钮
+            boolean showBackBtn = intent.getBooleanExtra("show_back_button", true); // 显示后退按钮
             boolean closeOnOutside = intent.getBooleanExtra("close_on_outside_click", true); // 点击窗口外关闭窗口
             boolean backPrioritize = intent.getBooleanExtra("back_prioritize_webview", true); // 侧边返回手势行为
             windowRadius = cRadius;
@@ -443,6 +447,8 @@ public class FloatWindowService extends Service {
             updateWindowPosition(winPosX, winPosY);
             updateWindowBorder(bWidth, cRadius, bColor, bAlpha, sWidth, sColor, sAlpha);
             updateShowCloseButton(showCloseBtn);
+            updateShowRefreshButton(showRefreshBtn);
+            updateShowBackButton(showBackBtn);
             closeOnOutsideClick = closeOnOutside;
             Log.d(TAG, "点击窗口外关闭窗口设置已更新: " + closeOnOutsideClick);
             backPrioritizeWebview = backPrioritize;
@@ -634,9 +640,16 @@ public class FloatWindowService extends Service {
         
         // 关键功能：实现自定义长按时间的触摸监听器
         final Handler longPressHandler = new Handler(Looper.getMainLooper());
+        
+        // 标记长按是否已触发，用于阻止 ACTION_UP 传播到 OnClickListener
+        final boolean[] longPressTriggered = {false};
+        
         final Runnable longPressRunnable = new Runnable() {
             @Override
             public void run() {
+                // 标记长按已触发，用于 ACTION_UP 中阻止点击事件
+                longPressTriggered[0] = true;
+                
                 // 长按触发前先淡出按下覆盖层（不触发窗口恢复）
                 restoreNormalBarStyles(false);
                 
@@ -670,6 +683,8 @@ public class FloatWindowService extends Service {
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
+                        // 重置长按标记
+                        longPressTriggered[0] = false;
                         // 手指按下时，记录坐标、应用按下样式并启动延迟任务
                         downX[0] = event.getX();
                         downY[0] = event.getY();
@@ -682,6 +697,11 @@ public class FloatWindowService extends Service {
                         longPressHandler.removeCallbacks(longPressRunnable);
                         restoreNormalBarStyles();
                         Log.d(TAG, "手指抬起，取消长按");
+                        // 如果长按已触发，消费此事件以防止 OnClickListener 也触发
+                        if (longPressTriggered[0]) {
+                            longPressTriggered[0] = false;
+                            return true;
+                        }
                         break;
                     case MotionEvent.ACTION_CANCEL:
                         // 事件取消时，移除长按任务并恢复样式
@@ -1039,6 +1059,42 @@ public class FloatWindowService extends Service {
     public void updateShowCloseButton(boolean show) {
         showCloseButton = show;
         Log.d(TAG, "关闭按钮显示设置已更新: " + showCloseButton);
+        
+        // 如果窗口已经展开，需要重新创建视图以应用新设置
+        if (isAiWindowExpanded && aiWebView != null) {
+            new Handler(Looper.getMainLooper()).post(new Runnable() {
+                @Override
+                public void run() {
+                    recreateAiWindowView();
+                }
+            });
+        }
+    }
+    
+    /**
+     * 更新刷新按钮显示设置
+     */
+    public void updateShowRefreshButton(boolean show) {
+        showRefreshButton = show;
+        Log.d(TAG, "刷新按钮显示设置已更新: " + showRefreshButton);
+        
+        // 如果窗口已经展开，需要重新创建视图以应用新设置
+        if (isAiWindowExpanded && aiWebView != null) {
+            new Handler(Looper.getMainLooper()).post(new Runnable() {
+                @Override
+                public void run() {
+                    recreateAiWindowView();
+                }
+            });
+        }
+    }
+    
+    /**
+     * 更新后退按钮显示设置
+     */
+    public void updateShowBackButton(boolean show) {
+        showBackButton = show;
+        Log.d(TAG, "后退按钮显示设置已更新: " + showBackButton);
         
         // 如果窗口已经展开，需要重新创建视图以应用新设置
         if (isAiWindowExpanded && aiWebView != null) {
@@ -1474,6 +1530,17 @@ public class FloatWindowService extends Service {
         
         contentContainer.addView(aiWebView);
         
+        // 复用 WebView 时恢复渲染状态（收起时 onPause 暂停了内部渲染管线）
+        if (!isNewWebView && aiWebView != null) {
+            // 先置为可见，确保硬件渲染表面正确初始化
+            // 后续在 expandToAiWindow 中会再设为 0 用于动画，此时 contentContainer
+            // 处于极小 scale 状态，用户看不到这个短暂的 alpha=1
+            aiWebView.setAlpha(1f);
+            aiWebView.onResume();
+            aiWebView.invalidate();
+            Log.d(TAG, "Reused WebView: onResume + invalidate called");
+        }
+        
         // 为新创建和复用的 WebView 均应用深色模式设置
         applyWebViewDarkMode(aiWebView);
         
@@ -1504,50 +1571,58 @@ public class FloatWindowService extends Service {
         proxyIme.setBackground(null);
         contentContainer.addView(proxyIme);
         
-        // 创建返回上一级按钮（在刷新按钮左侧）
-        final ImageView backButton = createBackButton();
-        backButtonRef = backButton;
-        FrameLayout.LayoutParams backBtnParams = new FrameLayout.LayoutParams(
-                dpToPx(32),
-                dpToPx(32)
-        );
-        backBtnParams.gravity = Gravity.TOP | Gravity.END;
-        // 右外边距 = 刷新按钮的右外边距(48) + 刷新按钮宽度(32) + 间距(8)
-        backBtnParams.setMargins(dpToPx(8), dpToPx(8), dpToPx(88), dpToPx(8));
-        backButton.setLayoutParams(backBtnParams);
-        contentContainer.addView(backButton);
+        // ===== 创建右上角按钮组（返回、刷新、关闭），根据设置控制显示 =====
+        // 从右到左依次添加，自动右对齐：只显示可见的按钮，右侧紧密排列
+        int buttonSize = dpToPx(32);
+        int gap = dpToPx(10);
+        int rightMargin = dpToPx(10); // 最右侧按钮的右边距
         
-        // 更新返回按钮状态（根据 WebView 能否返回）
-        updateBackButtonState(backButton);
-        
-        // 创建刷新按钮（在关闭按钮左侧）
-        ImageView refreshButton = createRefreshButton();
-        FrameLayout.LayoutParams refreshBtnParams = new FrameLayout.LayoutParams(
-                dpToPx(32),
-                dpToPx(32)
-        );
-        refreshBtnParams.gravity = Gravity.TOP | Gravity.END;
-        // 右外边距 = 关闭按钮的右外边距(8) + 关闭按钮宽度(32) + 间距(8)
-        refreshBtnParams.setMargins(dpToPx(8), dpToPx(8), dpToPx(48), dpToPx(8));
-        refreshButton.setLayoutParams(refreshBtnParams);
-        contentContainer.addView(refreshButton);
-        
-        // 创建关闭按钮（可选显示）
+        // 关闭按钮（最右侧）
         if (showCloseButton) {
             ImageView closeButton = createCloseButton();
             FrameLayout.LayoutParams closeBtnParams = new FrameLayout.LayoutParams(
-                    dpToPx(32),
-                    dpToPx(32)
+                    buttonSize,
+                    buttonSize
             );
             closeBtnParams.gravity = Gravity.TOP | Gravity.END;
-            // ✅ 关闭按钮在 padding 内部，只需小间距
-            closeBtnParams.setMargins(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8));
+            closeBtnParams.setMargins(dpToPx(10), dpToPx(10), rightMargin, dpToPx(10));
             closeButton.setLayoutParams(closeBtnParams);
             contentContainer.addView(closeButton);
+            rightMargin += buttonSize + gap;
+            Log.d(TAG, "关闭按钮已显示");
+        }
+        
+        // 创建刷新按钮（中间）
+        if (showRefreshButton) {
+            ImageView refreshButton = createRefreshButton();
+            FrameLayout.LayoutParams refreshBtnParams = new FrameLayout.LayoutParams(
+                    buttonSize,
+                    buttonSize
+            );
+            refreshBtnParams.gravity = Gravity.TOP | Gravity.END;
+            refreshBtnParams.setMargins(dpToPx(10), dpToPx(10), rightMargin, dpToPx(10));
+            refreshButton.setLayoutParams(refreshBtnParams);
+            contentContainer.addView(refreshButton);
+            rightMargin += buttonSize + gap;
+        }
+        
+        // 创建返回按钮（最左侧）
+        if (showBackButton) {
+            final ImageView backButton = createBackButton();
+            backButtonRef = backButton;
+            FrameLayout.LayoutParams backBtnParams = new FrameLayout.LayoutParams(
+                    buttonSize,
+                    buttonSize
+            );
+            backBtnParams.gravity = Gravity.TOP | Gravity.END;
+            backBtnParams.setMargins(dpToPx(10), dpToPx(10), rightMargin, dpToPx(10));
+            backButton.setLayoutParams(backBtnParams);
+            contentContainer.addView(backButton);
             
-            Log.d(TAG, "close button shown, border in foreground");
+            // 更新返回按钮状态（根据 WebView 能否返回）
+            updateBackButtonState(backButton);
         } else {
-            Log.d(TAG, "✅ 关闭按钮已隐藏");
+            backButtonRef = null;
         }
         
         Log.d(TAG, "✅ contentContainer 已设置 clipToOutline，WebView 有相同圆角背景");
@@ -3053,6 +3128,13 @@ public class FloatWindowService extends Service {
                     contentContainer.setTranslationX(0f);
                     contentContainer.setTranslationY(0f);
                     contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
+                    
+                    // 修复：强制 WebView 刷新渲染，解决偶现空白问题
+                    // 展开动画期间 alpha 从 0→1 过渡，部分 Android 版本中硬件层可能不刷新初始帧
+                    if (aiWebView != null) {
+                        aiWebView.setAlpha(1f);
+                        aiWebView.invalidate();
+                    }
                 }
             }
         });
@@ -3238,6 +3320,12 @@ public class FloatWindowService extends Service {
         }
         
         try {
+            // ===== 关键修复：收起前暂停 WebView 渲染，避免内部渲染管线挂起 =====
+            if (aiWebView != null) {
+                aiWebView.onPause();
+                Log.d(TAG, "WebView onPause called on collapse");
+            }
+            
             // ===== 关键修复：先移除旧视图，再立即缩小窗口，防止 surface 残留白色区域 =====
             barContainer.removeAllViews();
             
@@ -4685,6 +4773,12 @@ public class FloatWindowService extends Service {
             
             // 加载关闭按钮显示设置
             showCloseButton = prefs.getBoolean("show_close_button", showCloseButton);
+            
+            // 加载显示刷新按钮设置
+            showRefreshButton = prefs.getBoolean("show_refresh_button", showRefreshButton);
+            
+            // 加载显示后退按钮设置
+            showBackButton = prefs.getBoolean("show_back_button", showBackButton);
             
             // 加载输入法避让设置
             keyboardOffset = prefs.getInt("keyboard_offset", keyboardOffset);

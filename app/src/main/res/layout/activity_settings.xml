@@ -537,20 +537,50 @@
 <!--            android:progress="60"-->
 <!--            android:layout_marginBottom="24dp" />-->
 
-        <!-- 显示关闭按钮 -->
+        <!-- 右上角按钮组显示设置 -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="显示关闭按钮"
+            android:text="右上角按钮组"
             android:textSize="14sp"
+            android:textStyle="bold"
             android:textColor="#666666"
             android:layout_marginBottom="8dp" />
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="显示/隐藏窗口右上角的返回、刷新、关闭按钮"
+            android:textSize="12sp"
+            android:textColor="#999999"
+            android:layout_marginBottom="12dp" />
+
+        <!-- 显示关闭按钮 -->
         <Switch
             android:id="@+id/switch_show_close_button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="显示关闭按钮（默认开启）"
+            android:textSize="14sp"
+            android:padding="12dp"
+            android:layout_marginBottom="4dp" />
+
+        <!-- 显示刷新按钮 -->
+        <Switch
+            android:id="@+id/switch_show_refresh_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="显示刷新按钮（默认开启）"
+            android:textSize="14sp"
+            android:padding="12dp"
+            android:layout_marginBottom="4dp" />
+
+        <!-- 显示后退按钮 -->
+        <Switch
+            android:id="@+id/switch_show_back_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="显示后退按钮（默认开启）"
             android:textSize="14sp"
             android:padding="12dp"
             android:layout_marginBottom="16dp" />

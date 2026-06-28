@@ -46,6 +46,8 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_SHADOW_COLOR = "shadow_color";
     private static final String KEY_SHADOW_ALPHA = "shadow_alpha";
     private static final String KEY_SHOW_CLOSE_BUTTON = "show_close_button"; // 新增：关闭按钮显示设置
+    private static final String KEY_SHOW_REFRESH_BUTTON = "show_refresh_button"; // 显示刷新按钮
+    private static final String KEY_SHOW_BACK_BUTTON = "show_back_button"; // 显示后退按钮
     private static final String KEY_CLOSE_ON_OUTSIDE_CLICK = "close_on_outside_click"; // 点击窗口外关闭窗口
     private static final String KEY_BACK_PRIORITIZE_WEBVIEW = "back_prioritize_webview"; // 返回优先网页上一级
     
@@ -97,6 +99,8 @@ public class SettingsActivity extends AppCompatActivity {
 //    private EditText editShadowColor;
 //    private TextView textShadowWidth, textShadowAlpha;
     private Switch switchShowCloseButton; // 新增：关闭按钮显示开关
+    private Switch switchShowRefreshButton; // 显示刷新按钮开关
+    private Switch switchShowBackButton; // 显示后退按钮开关
     private Switch switchCloseOnOutsideClick; // 点击窗口外关闭窗口开关
     private Switch switchBackPrioritizeWebview; // 侧边返回手势行为
     
@@ -199,6 +203,12 @@ public class SettingsActivity extends AppCompatActivity {
         
         // 关闭按钮显示开关
         switchShowCloseButton = findViewById(R.id.switch_show_close_button);
+        
+        // 显示刷新按钮开关
+        switchShowRefreshButton = findViewById(R.id.switch_show_refresh_button);
+        
+        // 显示后退按钮开关
+        switchShowBackButton = findViewById(R.id.switch_show_back_button);
         
         // 点击窗口外关闭窗口开关
         switchCloseOnOutsideClick = findViewById(R.id.switch_close_on_outside_click);
@@ -326,6 +336,14 @@ public class SettingsActivity extends AppCompatActivity {
         // 加载关闭按钮显示设置
         boolean showCloseButton = preferences.getBoolean(KEY_SHOW_CLOSE_BUTTON, true);
         switchShowCloseButton.setChecked(showCloseButton);
+        
+        // 加载显示刷新按钮设置
+        boolean showRefreshButton = preferences.getBoolean(KEY_SHOW_REFRESH_BUTTON, true);
+        switchShowRefreshButton.setChecked(showRefreshButton);
+        
+        // 加载显示后退按钮设置
+        boolean showBackButton = preferences.getBoolean(KEY_SHOW_BACK_BUTTON, true);
+        switchShowBackButton.setChecked(showBackButton);
         
         // 加载点击窗口外关闭窗口设置
         boolean closeOnOutsideClick = preferences.getBoolean(KEY_CLOSE_ON_OUTSIDE_CLICK, true);
@@ -465,6 +483,12 @@ public class SettingsActivity extends AppCompatActivity {
         // 保存关闭按钮显示设置
         editor.putBoolean(KEY_SHOW_CLOSE_BUTTON, switchShowCloseButton.isChecked());
         
+        // 保存显示刷新按钮设置
+        editor.putBoolean(KEY_SHOW_REFRESH_BUTTON, switchShowRefreshButton.isChecked());
+        
+        // 保存显示后退按钮设置
+        editor.putBoolean(KEY_SHOW_BACK_BUTTON, switchShowBackButton.isChecked());
+        
         // 保存点击窗口外关闭窗口设置
         editor.putBoolean(KEY_CLOSE_ON_OUTSIDE_CLICK, switchCloseOnOutsideClick.isChecked());
         
@@ -561,6 +585,8 @@ public class SettingsActivity extends AppCompatActivity {
 //        sizeIntent.putExtra("shadow_color", shadowColor);
 //        sizeIntent.putExtra("shadow_alpha", seekShadowAlpha.getProgress() / 100.0f);
         sizeIntent.putExtra("show_close_button", switchShowCloseButton.isChecked()); // 新增：关闭按钮显示
+        sizeIntent.putExtra("show_refresh_button", switchShowRefreshButton.isChecked()); // 新增：显示刷新按钮
+        sizeIntent.putExtra("show_back_button", switchShowBackButton.isChecked()); // 新增：显示后退按钮
         sizeIntent.putExtra("close_on_outside_click", switchCloseOnOutsideClick.isChecked()); // 点击窗口外关闭窗口
         sizeIntent.putExtra("back_prioritize_webview", switchBackPrioritizeWebview.isChecked()); // 侧边返回手势行为
         sizeIntent.putExtra("overlay_color", editOverlayColor.getText().toString().trim());
@@ -993,6 +1019,8 @@ public class SettingsActivity extends AppCompatActivity {
 //        sizeIntent.putExtra("shadow_color", shadowColor);
 //        sizeIntent.putExtra("shadow_alpha", seekShadowAlpha.getProgress() / 100.0f);
         sizeIntent.putExtra("show_close_button", switchShowCloseButton.isChecked()); // 新增：关闭按钮显示
+        sizeIntent.putExtra("show_refresh_button", switchShowRefreshButton.isChecked()); // 新增：显示刷新按钮
+        sizeIntent.putExtra("show_back_button", switchShowBackButton.isChecked()); // 新增：显示后退按钮
         sizeIntent.putExtra("close_on_outside_click", switchCloseOnOutsideClick.isChecked()); // 点击窗口外关闭窗口
         sizeIntent.putExtra("back_prioritize_webview", switchBackPrioritizeWebview.isChecked()); // 侧边返回手势行为
         sizeIntent.putExtra("overlay_color", editOverlayColor.getText().toString().trim());
