@@ -90,6 +90,17 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_OVERLAY_ALPHA = "overlay_alpha";
     private static final String KEY_OVERLAY_ANIM_DURATION = "overlay_anim_duration";
     
+    // 快捷方式窗口设置
+    private static final String KEY_SHORTCUT_WINDOW_WIDTH = "shortcut_window_width";
+    private static final String KEY_SHORTCUT_WINDOW_HEIGHT = "shortcut_window_height";
+    private static final String KEY_SHORTCUT_WINDOW_POSITION_Y = "shortcut_window_position_y";
+    private static final String KEY_SHORTCUT_BORDER_WIDTH = "shortcut_border_width";
+    private static final String KEY_SHORTCUT_CORNER_RADIUS = "shortcut_corner_radius";
+    private static final String KEY_SHORTCUT_BORDER_COLOR = "shortcut_border_color";
+    private static final String KEY_SHORTCUT_BORDER_ALPHA = "shortcut_border_alpha";
+    private static final String KEY_SHORTCUT_BG_COLOR = "shortcut_bg_color";
+    private static final String KEY_SHORTCUT_ANIM_DURATION = "shortcut_anim_duration";
+    
     // AI URL 输入框
     private EditText editAiUrl;
     
@@ -161,6 +172,17 @@ public class SettingsActivity extends AppCompatActivity {
     private EditText editOverlayColor;
     private SeekBar seekOverlayAnimDuration;
     private TextView textOverlayAnimDuration;
+    
+    // 快捷方式窗口控件
+    private SeekBar seekShortcutWindowWidth, seekShortcutWindowHeight, seekShortcutWindowPositionY;
+    private TextView textShortcutWindowWidth, textShortcutWindowHeight, textShortcutWindowPositionY;
+    private SeekBar seekShortcutBorderWidth, seekShortcutCornerRadius, seekShortcutBorderAlpha;
+    private TextView textShortcutBorderWidth, textShortcutCornerRadius, textShortcutBorderAlpha;
+    private EditText editShortcutBorderColor;
+    private EditText editShortcutBgColor;
+    private SeekBar seekShortcutAnimDuration;
+    private TextView textShortcutAnimDuration;
+    private Button btnEditShortcuts;
     
     // 保存按钮
     private Button btnSave;
@@ -283,6 +305,25 @@ public class SettingsActivity extends AppCompatActivity {
         editOverlayColor = findViewById(R.id.edit_overlay_color);
         seekOverlayAnimDuration = findViewById(R.id.seek_overlay_anim_duration);
         textOverlayAnimDuration = findViewById(R.id.text_overlay_anim_duration);
+        
+        // 快捷方式窗口控件
+        seekShortcutWindowWidth = findViewById(R.id.seek_shortcut_window_width);
+        seekShortcutWindowHeight = findViewById(R.id.seek_shortcut_window_height);
+        seekShortcutWindowPositionY = findViewById(R.id.seek_shortcut_window_position_y);
+        textShortcutWindowWidth = findViewById(R.id.text_shortcut_window_width);
+        textShortcutWindowHeight = findViewById(R.id.text_shortcut_window_height);
+        textShortcutWindowPositionY = findViewById(R.id.text_shortcut_window_position_y);
+        seekShortcutBorderWidth = findViewById(R.id.seek_shortcut_border_width);
+        seekShortcutCornerRadius = findViewById(R.id.seek_shortcut_corner_radius);
+        seekShortcutBorderAlpha = findViewById(R.id.seek_shortcut_border_alpha);
+        textShortcutBorderWidth = findViewById(R.id.text_shortcut_border_width);
+        textShortcutCornerRadius = findViewById(R.id.text_shortcut_corner_radius);
+        textShortcutBorderAlpha = findViewById(R.id.text_shortcut_border_alpha);
+        editShortcutBorderColor = findViewById(R.id.edit_shortcut_border_color);
+        editShortcutBgColor = findViewById(R.id.edit_shortcut_bg_color);
+        seekShortcutAnimDuration = findViewById(R.id.seek_shortcut_anim_duration);
+        textShortcutAnimDuration = findViewById(R.id.text_shortcut_anim_duration);
+        btnEditShortcuts = findViewById(R.id.btn_edit_shortcuts);
         
         // 保存按钮
         btnSave = findViewById(R.id.btn_save_apply);
@@ -452,6 +493,41 @@ public class SettingsActivity extends AppCompatActivity {
         int overlayAnimDuration = preferences.getInt(KEY_OVERLAY_ANIM_DURATION, 100);
         seekOverlayAnimDuration.setProgress(overlayAnimDuration);
         textOverlayAnimDuration.setText("遮罩渐变时长: " + overlayAnimDuration + "ms");
+        
+        // 加载快捷方式窗口设置
+        int shortcutWinWidth = preferences.getInt(KEY_SHORTCUT_WINDOW_WIDTH, 350);
+        seekShortcutWindowWidth.setProgress(shortcutWinWidth);
+        textShortcutWindowWidth.setText("快捷窗口宽度: " + shortcutWinWidth + "dp");
+        
+        int shortcutWinHeight = preferences.getInt(KEY_SHORTCUT_WINDOW_HEIGHT, 350);
+        seekShortcutWindowHeight.setProgress(shortcutWinHeight);
+        textShortcutWindowHeight.setText("快捷窗口高度: " + shortcutWinHeight + "dp");
+        
+        int shortcutWinPosY = preferences.getInt(KEY_SHORTCUT_WINDOW_POSITION_Y, 231);
+        seekShortcutWindowPositionY.setProgress(shortcutWinPosY);
+        textShortcutWindowPositionY.setText("快捷窗口位置 Y: " + shortcutWinPosY + " (居中)");
+        
+        int shortcutBWidth = preferences.getInt(KEY_SHORTCUT_BORDER_WIDTH, 1);
+        seekShortcutBorderWidth.setProgress(shortcutBWidth);
+        textShortcutBorderWidth.setText("快捷边框宽度: " + shortcutBWidth + "dp");
+        
+        int shortcutCRadius = preferences.getInt(KEY_SHORTCUT_CORNER_RADIUS, 24);
+        seekShortcutCornerRadius.setProgress(shortcutCRadius);
+        textShortcutCornerRadius.setText("快捷窗口圆角: " + shortcutCRadius + "dp");
+        
+        String shortcutBColor = preferences.getString(KEY_SHORTCUT_BORDER_COLOR, "#000000");
+        editShortcutBorderColor.setText(shortcutBColor);
+        
+        int shortcutBAlpha = preferences.getInt(KEY_SHORTCUT_BORDER_ALPHA, 10);
+        seekShortcutBorderAlpha.setProgress(shortcutBAlpha);
+        textShortcutBorderAlpha.setText("快捷边框透明度: " + String.format("%.2f", shortcutBAlpha / 100.0f));
+        
+        String shortcutBgColor = preferences.getString(KEY_SHORTCUT_BG_COLOR, "#FFFFFF");
+        editShortcutBgColor.setText(shortcutBgColor);
+        
+        int shortcutAnim = preferences.getInt(KEY_SHORTCUT_ANIM_DURATION, 350);
+        seekShortcutAnimDuration.setProgress(shortcutAnim);
+        textShortcutAnimDuration.setText("快捷动画时长: " + shortcutAnim + "ms");
     }
     
     /**
@@ -574,6 +650,25 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putString(KEY_OVERLAY_COLOR, overlayColor);
         editor.putInt(KEY_OVERLAY_ANIM_DURATION, seekOverlayAnimDuration.getProgress());
         
+        // 保存快捷方式窗口设置
+        editor.putInt(KEY_SHORTCUT_WINDOW_WIDTH, seekShortcutWindowWidth.getProgress());
+        editor.putInt(KEY_SHORTCUT_WINDOW_HEIGHT, seekShortcutWindowHeight.getProgress());
+        editor.putInt(KEY_SHORTCUT_WINDOW_POSITION_Y, seekShortcutWindowPositionY.getProgress());
+        editor.putInt(KEY_SHORTCUT_BORDER_WIDTH, seekShortcutBorderWidth.getProgress());
+        editor.putInt(KEY_SHORTCUT_CORNER_RADIUS, seekShortcutCornerRadius.getProgress());
+        String scBorderColor = editShortcutBorderColor.getText().toString().trim();
+        if (TextUtils.isEmpty(scBorderColor) || !scBorderColor.startsWith("#")) {
+            scBorderColor = "#000000";
+        }
+        editor.putString(KEY_SHORTCUT_BORDER_COLOR, scBorderColor);
+        editor.putInt(KEY_SHORTCUT_BORDER_ALPHA, seekShortcutBorderAlpha.getProgress());
+        String scBgColor = editShortcutBgColor.getText().toString().trim();
+        if (TextUtils.isEmpty(scBgColor) || !scBgColor.startsWith("#")) {
+            scBgColor = "#FFFFFF";
+        }
+        editor.putString(KEY_SHORTCUT_BG_COLOR, scBgColor);
+        editor.putInt(KEY_SHORTCUT_ANIM_DURATION, seekShortcutAnimDuration.getProgress());
+        
         // 提交保存
         editor.apply();
         
@@ -674,6 +769,28 @@ public class SettingsActivity extends AppCompatActivity {
         urlIntent.setAction("UPDATE_AI_URL");
         urlIntent.putExtra("ai_url", aiUrl);
         startService(urlIntent);
+        
+        // 更新快捷方式窗口设置
+        Intent shortcutIntent = new Intent(this, FloatWindowService.class);
+        shortcutIntent.setAction("UPDATE_SHORTCUT_SETTINGS");
+        shortcutIntent.putExtra("shortcut_window_width", seekShortcutWindowWidth.getProgress());
+        shortcutIntent.putExtra("shortcut_window_height", seekShortcutWindowHeight.getProgress());
+        shortcutIntent.putExtra("shortcut_window_position_y", seekShortcutWindowPositionY.getProgress());
+        shortcutIntent.putExtra("shortcut_border_width", seekShortcutBorderWidth.getProgress());
+        shortcutIntent.putExtra("shortcut_corner_radius", seekShortcutCornerRadius.getProgress());
+        String scBorderColor = editShortcutBorderColor.getText().toString().trim();
+        if (TextUtils.isEmpty(scBorderColor) || !scBorderColor.startsWith("#")) {
+            scBorderColor = "#000000";
+        }
+        shortcutIntent.putExtra("shortcut_border_color", scBorderColor);
+        shortcutIntent.putExtra("shortcut_border_alpha", seekShortcutBorderAlpha.getProgress() / 100.0f);
+        String scBgColor = editShortcutBgColor.getText().toString().trim();
+        if (TextUtils.isEmpty(scBgColor) || !scBgColor.startsWith("#")) {
+            scBgColor = "#FFFFFF";
+        }
+        shortcutIntent.putExtra("shortcut_bg_color", scBgColor);
+        shortcutIntent.putExtra("shortcut_anim_duration", seekShortcutAnimDuration.getProgress());
+        startService(shortcutIntent);
     }
 
     /**
@@ -991,6 +1108,92 @@ public class SettingsActivity extends AppCompatActivity {
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
         
+        // 快捷方式窗口宽度 - 实时更新
+        seekShortcutWindowWidth.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textShortcutWindowWidth.setText("快捷窗口宽度: " + progress + "dp");
+                applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        
+        // 快捷方式窗口高度 - 实时更新
+        seekShortcutWindowHeight.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textShortcutWindowHeight.setText("快捷窗口高度: " + progress + "dp");
+                applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        
+        // 快捷方式窗口位置 Y - 实时更新
+        seekShortcutWindowPositionY.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textShortcutWindowPositionY.setText("快捷窗口位置 Y: " + progress + " (居中)");
+                applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        
+        // 快捷方式边框宽度 - 实时更新
+        seekShortcutBorderWidth.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textShortcutBorderWidth.setText("快捷边框宽度: " + progress + "dp");
+                applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        
+        // 快捷窗口圆角 - 实时更新
+        seekShortcutCornerRadius.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textShortcutCornerRadius.setText("快捷窗口圆角: " + progress + "dp");
+                applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        
+        // 快捷边框透明度 - 实时更新
+        seekShortcutBorderAlpha.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textShortcutBorderAlpha.setText("快捷边框透明度: " + String.format("%.2f", progress / 100.0f));
+                applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        
+        // 快捷方式动画时长 - 实时更新
+        seekShortcutAnimDuration.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textShortcutAnimDuration.setText("快捷动画时长: " + progress + "ms");
+                applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        
+        // 编辑快捷方式内容按钮
+        btnEditShortcuts.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(SettingsActivity.this, ShortcutEditActivity.class);
+                startActivity(intent);
+            }
+        });
+        
         // 保存并应用按钮
         btnSave.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -1118,6 +1321,28 @@ public class SettingsActivity extends AppCompatActivity {
         animIntent.putExtra("pressed_bar_feather_width", seekPressedBarFeather.getProgress());
         animIntent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
         startService(animIntent);
+        
+        // 更新快捷方式窗口设置
+        Intent shortcutIntent = new Intent(this, FloatWindowService.class);
+        shortcutIntent.setAction("UPDATE_SHORTCUT_SETTINGS");
+        shortcutIntent.putExtra("shortcut_window_width", seekShortcutWindowWidth.getProgress());
+        shortcutIntent.putExtra("shortcut_window_height", seekShortcutWindowHeight.getProgress());
+        shortcutIntent.putExtra("shortcut_window_position_y", seekShortcutWindowPositionY.getProgress());
+        shortcutIntent.putExtra("shortcut_border_width", seekShortcutBorderWidth.getProgress());
+        shortcutIntent.putExtra("shortcut_corner_radius", seekShortcutCornerRadius.getProgress());
+        String scBorderColor = editShortcutBorderColor.getText().toString().trim();
+        if (TextUtils.isEmpty(scBorderColor) || !scBorderColor.startsWith("#")) {
+            scBorderColor = "#000000";
+        }
+        shortcutIntent.putExtra("shortcut_border_color", scBorderColor);
+        shortcutIntent.putExtra("shortcut_border_alpha", seekShortcutBorderAlpha.getProgress() / 100.0f);
+        String scBgColor = editShortcutBgColor.getText().toString().trim();
+        if (TextUtils.isEmpty(scBgColor) || !scBgColor.startsWith("#")) {
+            scBgColor = "#FFFFFF";
+        }
+        shortcutIntent.putExtra("shortcut_bg_color", scBgColor);
+        shortcutIntent.putExtra("shortcut_anim_duration", seekShortcutAnimDuration.getProgress());
+        startService(shortcutIntent);
     }
     
     /**

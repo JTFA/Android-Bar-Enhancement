@@ -95,6 +95,12 @@
             android:taskAffinity=""
             android:launchMode="singleTask" />
 
+        <!-- 快捷方式编辑页面 -->
+        <activity
+            android:name=".ShortcutEditActivity"
+            android:exported="false"
+            android:label="编辑快捷方式" />
+
     </application>
 
 </manifest>

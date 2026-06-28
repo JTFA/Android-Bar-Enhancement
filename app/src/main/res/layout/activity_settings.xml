@@ -831,6 +831,214 @@
             android:background="#DDDDDD"
             android:layout_marginBottom="24dp" />
 
+        <!-- ===== 快捷方式窗口设置 ===== -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="快捷方式窗口"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="双击提示条打开快捷方式窗口，设置其外观样式"
+            android:textSize="12sp"
+            android:textColor="#999999"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 快捷窗口宽度 -->
+        <TextView
+            android:id="@+id/text_shortcut_window_width"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="快捷窗口宽度: 350dp"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <SeekBar
+            android:id="@+id/seek_shortcut_window_width"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:min="200"
+            android:max="600"
+            android:progress="350"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 快捷窗口高度 -->
+        <TextView
+            android:id="@+id/text_shortcut_window_height"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="快捷窗口高度: 350dp"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <SeekBar
+            android:id="@+id/seek_shortcut_window_height"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:min="200"
+            android:max="600"
+            android:progress="350"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 快捷窗口位置 Y -->
+        <TextView
+            android:id="@+id/text_shortcut_window_position_y"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="快捷窗口位置 Y: 0 (居中)"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <SeekBar
+            android:id="@+id/seek_shortcut_window_position_y"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:min="-500"
+            android:max="500"
+            android:progress="0"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 快捷窗口边框宽度 -->
+        <TextView
+            android:id="@+id/text_shortcut_border_width"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="边框宽度: 1dp"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <SeekBar
+            android:id="@+id/seek_shortcut_border_width"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="20"
+            android:progress="1"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 快捷窗口圆角 -->
+        <TextView
+            android:id="@+id/text_shortcut_corner_radius"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="窗口圆角: 24dp"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <SeekBar
+            android:id="@+id/seek_shortcut_corner_radius"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:min="0"
+            android:max="50"
+            android:progress="24"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 快捷窗口边框颜色 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="边框颜色 (RGB)"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/edit_shortcut_border_color"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="格式：#RRGGBB，默认 #000000"
+            android:inputType="text"
+            android:padding="12dp"
+            android:background="@android:drawable/edit_text"
+            android:textSize="14sp"
+            android:text="#000000"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 快捷窗口边框透明度 -->
+        <TextView
+            android:id="@+id/text_shortcut_border_alpha"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="边框透明度: 0.10"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <SeekBar
+            android:id="@+id/seek_shortcut_border_alpha"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progress="10"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 快捷窗口背景颜色 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="窗口背景颜色 (RGB)"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/edit_shortcut_bg_color"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="格式：#RRGGBB，默认 #FFFFFF"
+            android:inputType="text"
+            android:padding="12dp"
+            android:background="@android:drawable/edit_text"
+            android:textSize="14sp"
+            android:text="#FFFFFF"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 快捷窗口过渡动画时长 -->
+        <TextView
+            android:id="@+id/text_shortcut_anim_duration"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="过渡动画时长: 350ms"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <SeekBar
+            android:id="@+id/seek_shortcut_anim_duration"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:min="50"
+            android:max="800"
+            android:progress="350"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 编辑快捷方式按钮 -->
+        <Button
+            android:id="@+id/btn_edit_shortcuts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="编辑快捷方式内容"
+            android:textSize="14sp"
+            android:padding="12dp"
+            android:layout_marginBottom="24dp" />
+
+        <!-- 分隔线 -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#DDDDDD"
+            android:layout_marginBottom="24dp" />
+
         <!-- 展开/收起动画速度 -->
         <TextView
             android:layout_width="wrap_content"

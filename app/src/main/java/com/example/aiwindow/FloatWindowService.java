@@ -130,6 +130,27 @@ public class FloatWindowService extends Service {
     private int windowPositionX = 0; // 窗口 X 偏移
     private int windowPositionY = 225; // 窗口 Y 偏移
     
+    // ===== 快捷方式窗口相关 =====
+    private boolean isShortcutWindowExpanded = false;
+    private View shortcutWindowView;
+    
+    // 快捷方式窗口默认设置
+    private int shortcutWindowWidth = 350;  // dp
+    private int shortcutWindowHeight = 350; // dp
+    private int shortcutWindowPositionY = 231; // 居中位置
+    private int shortcutBorderWidth = 1; // dp
+    private int shortcutCornerRadius = 24; // dp
+    private String shortcutBorderColor = "#000000";
+    private float shortcutBorderAlpha = 0.1f;
+    private String shortcutBgColor = "#FFFFFF";
+    private int shortcutAnimDuration = 350; // ms
+    
+    // 双击检测相关
+    private static final int DOUBLE_TAP_TIMEOUT = 300; // ms
+    private long lastTapTime = 0;
+    private Handler tapHandler = new Handler(Looper.getMainLooper());
+    private Runnable singleTapRunnable;
+    
     // 边框和阴影设置
     private int borderWidth = 1; // dp
     private int cornerRadius = 30; // dp - 窗口圆角半径
@@ -478,6 +499,34 @@ public class FloatWindowService extends Service {
                     .apply();
             Log.d(TAG, "输入法设置已更新: offset=" + keyboardOffset + ", animDuration=" + keyboardAnimDuration);
         }
+        // 处理快捷方式窗口设置更新
+        else if (intent != null && "UPDATE_SHORTCUT_SETTINGS".equals(intent.getAction())) {
+            shortcutWindowWidth = intent.getIntExtra("shortcut_window_width", shortcutWindowWidth);
+            shortcutWindowHeight = intent.getIntExtra("shortcut_window_height", shortcutWindowHeight);
+            shortcutWindowPositionY = intent.getIntExtra("shortcut_window_position_y", shortcutWindowPositionY);
+            shortcutBorderWidth = intent.getIntExtra("shortcut_border_width", shortcutBorderWidth);
+            shortcutCornerRadius = intent.getIntExtra("shortcut_corner_radius", shortcutCornerRadius);
+            String sBorderColor = intent.getStringExtra("shortcut_border_color");
+            if (sBorderColor != null) shortcutBorderColor = sBorderColor;
+            shortcutBorderAlpha = intent.getFloatExtra("shortcut_border_alpha", shortcutBorderAlpha);
+            String sBgColor = intent.getStringExtra("shortcut_bg_color");
+            if (sBgColor != null) shortcutBgColor = sBgColor;
+            shortcutAnimDuration = intent.getIntExtra("shortcut_anim_duration", shortcutAnimDuration);
+            
+            Log.d(TAG, "快捷方式窗口设置已更新: 宽=" + shortcutWindowWidth + " 高=" + shortcutWindowHeight
+                    + " Y=" + shortcutWindowPositionY + " 边框=" + shortcutBorderWidth
+                    + " 圆角=" + shortcutCornerRadius + " 动画=" + shortcutAnimDuration);
+            
+            // 如果窗口已展开，需要重建
+            if (isShortcutWindowExpanded) {
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        collapseShortcutWindowInternal();
+                    }
+                });
+            }
+        }
         // 处理 AI URL 更新请求
         else if (intent != null && "UPDATE_AI_URL".equals(intent.getAction())) {
             String aiUrl = intent.getStringExtra("ai_url");
@@ -700,6 +749,19 @@ public class FloatWindowService extends Service {
         final float[] downY = {0};
         final int MOVE_THRESHOLD = dpToPx(10); // 移动阈值：10dp
         
+        // 双击检测用处理器
+        tapHandler = new Handler(Looper.getMainLooper());
+        singleTapRunnable = new Runnable() {
+            @Override
+            public void run() {
+                // 超时后执行单击（打开第三方应用），未被双击覆盖
+                if (!isShortcutWindowExpanded && !isAiWindowExpanded) {
+                    launchClickApp();
+                    Log.d(TAG, "单击触发：打开第三方应用");
+                }
+            }
+        };
+        
         bar.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
@@ -719,16 +781,32 @@ public class FloatWindowService extends Service {
                         longPressHandler.removeCallbacks(longPressRunnable);
                         restoreNormalBarStyles();
                         Log.d(TAG, "手指抬起，取消长按");
-                        // 如果长按已触发，消费此事件以防止 OnClickListener 也触发
+                        // 如果长按已触发，消费此事件
                         if (longPressTriggered[0]) {
                             longPressTriggered[0] = false;
+                            tapHandler.removeCallbacks(singleTapRunnable);
                             return true;
+                        }
+                        // 处理双击/单击
+                        // 取消之前的延迟单击
+                        tapHandler.removeCallbacks(singleTapRunnable);
+                        long now = System.currentTimeMillis();
+                        if (now - lastTapTime < DOUBLE_TAP_TIMEOUT) {
+                            // 两次快速点击 → 双击
+                            lastTapTime = 0;
+                            onBarDoubleClicked();
+                            Log.d(TAG, "双击触发：打开快捷方式窗口");
+                        } else {
+                            // 第一次点击，记录时间并等待双击超时
+                            lastTapTime = now;
+                            tapHandler.postDelayed(singleTapRunnable, DOUBLE_TAP_TIMEOUT);
                         }
                         break;
                     case MotionEvent.ACTION_CANCEL:
                         // 事件取消时，移除长按任务并恢复样式
                         longPressHandler.removeCallbacks(longPressRunnable);
                         restoreNormalBarStyles();
+                        tapHandler.removeCallbacks(singleTapRunnable);
                         Log.d(TAG, "事件取消，移除长按任务");
                         break;
                     case MotionEvent.ACTION_MOVE:
@@ -742,15 +820,7 @@ public class FloatWindowService extends Service {
                         }
                         break;
                 }
-                return false; // 关键修复：返回false以允许其他事件（如onClick）继续处理
-            }
-        });
-        
-        // 单击提示条：打开已选择的第三方应用
-        bar.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                launchClickApp();
+                return true; // 消费事件，防止事件穿透
             }
         });
         
@@ -968,7 +1038,9 @@ public class FloatWindowService extends Service {
             pressedOverlay.animate().alpha(0f).setDuration(150).withEndAction(new Runnable() {
                 @Override
                 public void run() {
-                    if (!isAiWindowExpanded) {
+                    Log.d(TAG, "restoreNormalBarStyles endAction fired, isAiExpanded=" + isAiWindowExpanded
+                            + " isShortcutExpanded=" + isShortcutWindowExpanded);
+                    if (!isAiWindowExpanded && !isShortcutWindowExpanded) {
                         applyStyleChanges();
                     }
                 }
@@ -1166,6 +1238,18 @@ public class FloatWindowService extends Service {
         
         // 展开 AI 对话窗口
         expandToAiWindow();
+    }
+    
+    /**
+     * 双击提示条回调：展开快捷方式窗口
+     */
+    private void onBarDoubleClicked() {
+        Log.d(TAG, "提示条被双击，准备打开快捷方式窗口");
+        
+        if (isAiWindowExpanded || isShortcutWindowExpanded) {
+            return;
+        }
+        expandToShortcutWindow();
     }
     
     /**
@@ -3185,6 +3269,544 @@ public class FloatWindowService extends Service {
     }
     
     /**
+     * 获取快捷方式列表
+     */
+    private java.util.ArrayList<ShortcutItem> loadShortcutList() {
+        try {
+            android.content.SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
+            String jsonStr = prefs.getString("shortcut_list", "");
+            if (android.text.TextUtils.isEmpty(jsonStr)) {
+                return ShortcutItem.getDefaultShortcuts();
+            }
+            java.util.ArrayList<ShortcutItem> list = new java.util.ArrayList<>();
+            try {
+                org.json.JSONArray jsonArray = new org.json.JSONArray(jsonStr);
+                for (int i = 0; i < jsonArray.length(); i++) {
+                    list.add(ShortcutItem.fromJson(jsonArray.getJSONObject(i)));
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "解析快捷方式列表失败", e);
+                return ShortcutItem.getDefaultShortcuts();
+            }
+            return list;
+        } catch (Exception e) {
+            Log.e(TAG, "加载快捷方式列表失败", e);
+            return ShortcutItem.getDefaultShortcuts();
+        }
+    }
+    
+    /**
+     * 双击提示条：展开快捷方式窗口
+     */
+    private void expandToShortcutWindow() {
+        if (isAiWindowExpanded || isShortcutWindowExpanded) {
+            return;
+        }
+        
+        Log.d(TAG, "展开快捷方式窗口: isAiExpanded=" + isAiWindowExpanded
+                + " isShortcutExpanded=" + isShortcutWindowExpanded);
+        
+        if (barContainer == null || windowManager == null) return;
+        
+        try {
+            DisplayMetrics realMetrics = new DisplayMetrics();
+            windowManager.getDefaultDisplay().getRealMetrics(realMetrics);
+            final int screenWidth = realMetrics.widthPixels;
+            final int screenHeight = realMetrics.heightPixels;
+            
+            // 保存展开前的位置用于动画
+            final int startX = barPositionX;
+            final int startY = dpToPx(barPositionY);
+            
+            // 设置全屏表面
+            barLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                    | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+            barLayoutParams.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+                    | WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED;
+            
+            int requiredWidth = Math.max(screenWidth, 4 * Math.abs(0) + dpToPx(shortcutWindowWidth));
+            int requiredHeight = Math.max(screenHeight, 4 * Math.abs(shortcutWindowPositionY) + dpToPx(shortcutWindowHeight));
+            
+            barLayoutParams.x = 0;
+            barLayoutParams.y = 0;
+            barLayoutParams.width = requiredWidth;
+            barLayoutParams.height = requiredHeight;
+            windowManager.updateViewLayout(barContainer, barLayoutParams);
+            
+            // 替换视图
+            barContainer.removeAllViews();
+            View shortcutView = createShortcutWindowView();
+            barContainer.addView(shortcutView);
+            
+            // 获取内容容器
+            FrameLayout rootLayout = (FrameLayout) shortcutView;
+            View contentContainer = rootLayout.getChildAt(0);
+            FrameLayout.LayoutParams contentLp = (FrameLayout.LayoutParams) contentContainer.getLayoutParams();
+            final int contentTargetWidth = dpToPx(shortcutWindowWidth);
+            final int contentTargetHeight = dpToPx(shortcutWindowHeight);
+            
+            // 初始设为目标尺寸，用 scale 缩放
+            contentLp.width = contentTargetWidth;
+            contentLp.height = contentTargetHeight;
+            contentContainer.setLayoutParams(contentLp);
+            
+            int effectiveStartWidth = (currentWidth == ViewGroup.LayoutParams.MATCH_PARENT || currentWidth <= 0) ? screenWidth : currentWidth;
+            final float initScaleX = (float) effectiveStartWidth / contentTargetWidth;
+            final float initScaleY = (float) dpToPx(currentHeight) / contentTargetHeight;
+            final float initTranslationX = startX - 2 * contentLp.leftMargin;
+            final float initTranslationY = startY - 2 * contentLp.topMargin;
+            
+            contentContainer.setPivotX(contentTargetWidth / 2f);
+            contentContainer.setPivotY(contentTargetHeight / 2f);
+            contentContainer.setScaleX(initScaleX);
+            contentContainer.setScaleY(initScaleY);
+            contentContainer.setTranslationX(initTranslationX);
+            contentContainer.setTranslationY(initTranslationY);
+            contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+            
+            // 设置初始圆角
+            ((GradientDrawable) contentContainer.getBackground()).setCornerRadius(dpToPx(currentCornerRadius));
+            if (contentContainer.getForeground() instanceof GradientDrawable) {
+                ((GradientDrawable) contentContainer.getForeground()).setCornerRadius(dpToPx(currentCornerRadius));
+            }
+            
+            isShortcutWindowExpanded = true;
+            
+            // 淡入背景遮罩
+            if (overlayView != null) {
+                final View ov = overlayView;
+                final float targetAlpha = overlayAlpha / 100.0f;
+                final long startTime = System.currentTimeMillis();
+                ov.setAlpha(0f);
+                Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+                    @Override
+                    public void doFrame(long frameTimeNanos) {
+                        long elapsed = System.currentTimeMillis() - startTime;
+                        float progress = Math.min((float) elapsed / overlayAnimDuration, 1.0f);
+                        ov.setAlpha(targetAlpha * easeOutCubic(progress));
+                        if (progress < 1.0f) {
+                            Choreographer.getInstance().postFrameCallback(this);
+                        }
+                    }
+                });
+            }
+            
+            // 执行展开动画（简化版）
+            performShortcutExpandAnimation(contentContainer,
+                    dpToPx(currentCornerRadius), dpToPx(shortcutCornerRadius));
+            
+        } catch (Exception e) {
+            Log.e(TAG, "展开快捷方式窗口失败", e);
+            isShortcutWindowExpanded = false;
+        }
+    }
+    
+    /**
+     * 快捷方式窗口展开动画
+     */
+    private void performShortcutExpandAnimation(final View contentContainer,
+                                                 final int startCornerPx, final int targetCornerPx) {
+        final float startScaleX = contentContainer.getScaleX();
+        final float startScaleY = contentContainer.getScaleY();
+        final float startTranslationX = contentContainer.getTranslationX();
+        final float startTranslationY = contentContainer.getTranslationY();
+        
+        final GradientDrawable contentBg = (GradientDrawable) contentContainer.getBackground();
+        final long adjustedStartTime = System.nanoTime();
+        
+        Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+            @Override
+            public void doFrame(long frameTimeNanos) {
+                float timeProgress = (float) (frameTimeNanos - adjustedStartTime) / 1000000f / shortcutAnimDuration;
+                float progress = Math.min(timeProgress, 1.0f);
+                float easedProgress = animInterpolator.getInterpolation(progress);
+                
+                float curScaleX = startScaleX + (1f - startScaleX) * easedProgress;
+                float curScaleY = startScaleY + (1f - startScaleY) * easedProgress;
+                float curTranslationX = startTranslationX * (1f - easedProgress);
+                float curTranslationY = startTranslationY * (1f - easedProgress);
+                
+                int currentCornerPx;
+                if (progress < 0.5f) {
+                    float cornerSubProgress = progress * 2f;
+                    currentCornerPx = Math.round(startCornerPx + (targetCornerPx - startCornerPx) * easeOutCubic(cornerSubProgress));
+                } else {
+                    currentCornerPx = targetCornerPx;
+                }
+                contentBg.setCornerRadius(currentCornerPx);
+                
+                contentContainer.setScaleX(curScaleX);
+                contentContainer.setScaleY(curScaleY);
+                contentContainer.setTranslationX(curTranslationX);
+                contentContainer.setTranslationY(curTranslationY);
+                
+                if (progress < 1.0f) {
+                    Choreographer.getInstance().postFrameCallback(this);
+                } else {
+                    contentContainer.setScaleX(1f);
+                    contentContainer.setScaleY(1f);
+                    contentContainer.setTranslationX(0f);
+                    contentContainer.setTranslationY(0f);
+                    // 请求重新布局以确保子视图（GridLayout 单元格）正确测量
+                    contentContainer.requestLayout();
+                }
+            }
+        });
+    }
+    
+    /**
+     * 创建快捷方式窗口视图
+     */
+    private View createShortcutWindowView() {
+        // rootLayout: 全屏透明
+        FrameLayout rootLayout = new FrameLayout(this);
+        rootLayout.setLayoutParams(new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        rootLayout.setBackgroundColor(Color.TRANSPARENT);
+        rootLayout.setClipChildren(false);
+        
+        // 点击外部关闭
+        rootLayout.setOnTouchListener(new View.OnTouchListener() {
+            private boolean mOutsideDown = false;
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()) {
+                    case MotionEvent.ACTION_DOWN: {
+                        View content = rootLayout.getChildAt(0);
+                        if (content != null) {
+                            android.graphics.Rect rect = new android.graphics.Rect();
+                            content.getHitRect(rect);
+                            mOutsideDown = !rect.contains((int) event.getX(), (int) event.getY());
+                        } else {
+                            mOutsideDown = true;
+                        }
+                        return mOutsideDown;
+                    }
+                    case MotionEvent.ACTION_UP: {
+                        if (mOutsideDown) {
+                            mOutsideDown = false;
+                            collapseToBottomBar();
+                            return true;
+                        }
+                        return false;
+                    }
+                    case MotionEvent.ACTION_CANCEL:
+                        mOutsideDown = false;
+                        return true;
+                    default:
+                        return mOutsideDown;
+                }
+            }
+        });
+        
+        // contentContainer: 居中显示快捷方式
+        FrameLayout contentContainer = new FrameLayout(this);
+        FrameLayout.LayoutParams containerParams = new FrameLayout.LayoutParams(
+                dpToPx(shortcutWindowWidth),
+                dpToPx(shortcutWindowHeight));
+        containerParams.gravity = Gravity.CENTER;
+        containerParams.leftMargin = 0;
+        containerParams.topMargin = shortcutWindowPositionY;
+        containerParams.rightMargin = 0;
+        containerParams.bottomMargin = -shortcutWindowPositionY;
+        contentContainer.setLayoutParams(containerParams);
+        
+        // 背景色
+        int bgColorInt;
+        try {
+            bgColorInt = Color.parseColor(shortcutBgColor);
+        } catch (Exception e) {
+            bgColorInt = Color.WHITE;
+        }
+        
+        GradientDrawable background = new GradientDrawable();
+        background.setShape(GradientDrawable.RECTANGLE);
+        background.setCornerRadius(dpToPx(shortcutCornerRadius));
+        background.setColor(bgColorInt);
+        contentContainer.setBackground(background);
+        contentContainer.setClipToOutline(true);
+        
+        // 边框
+        if (shortcutBorderWidth > 0) {
+            try {
+                int borderColorWithAlpha = parseColorWithAlpha(shortcutBorderColor, shortcutBorderAlpha);
+                GradientDrawable foregroundBorder = new GradientDrawable();
+                foregroundBorder.setShape(GradientDrawable.RECTANGLE);
+                foregroundBorder.setCornerRadius(dpToPx(shortcutCornerRadius));
+                foregroundBorder.setColor(Color.TRANSPARENT);
+                foregroundBorder.setStroke(dpToPx(shortcutBorderWidth), borderColorWithAlpha);
+                contentContainer.setForeground(foregroundBorder);
+            } catch (Exception e) {
+                Log.e(TAG, "set shortcut border failed", e);
+            }
+        }
+        
+        // 标题栏
+        TextView titleBar = new TextView(this);
+        FrameLayout.LayoutParams titleParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(40));
+        titleParams.gravity = Gravity.TOP;
+        titleBar.setLayoutParams(titleParams);
+        titleBar.setText("快捷方式");
+        titleBar.setTextSize(15);
+        titleBar.setGravity(Gravity.CENTER);
+        titleBar.setTextColor(0xFF666666);
+        titleBar.setPadding(0, dpToPx(8), 0, dpToPx(4));
+        contentContainer.addView(titleBar);
+        
+        // 关闭按钮
+        ImageView closeButton = new ImageView(this);
+        closeButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
+        closeButton.setColorFilter(Color.parseColor("#666666"));
+        closeButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        closeButton.setPadding(dpToPx(4), dpToPx(4), dpToPx(4), dpToPx(4));
+        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(dpToPx(28), dpToPx(28));
+        closeParams.gravity = Gravity.TOP | Gravity.END;
+        closeParams.setMargins(0, dpToPx(6), dpToPx(8), 0);
+        closeButton.setLayoutParams(closeParams);
+        closeButton.setOnClickListener(v -> collapseToBottomBar());
+        contentContainer.addView(closeButton);
+        
+        // 分隔线
+        View divider = new View(this);
+        FrameLayout.LayoutParams divParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, 1);
+        divParams.setMargins(dpToPx(16), dpToPx(40), dpToPx(16), 0);
+        divider.setLayoutParams(divParams);
+        divider.setBackgroundColor(0xFFEEEEEE);
+        contentContainer.addView(divider);
+        
+        // GridLayout 显示快捷方式
+        android.widget.GridLayout gridLayout = new android.widget.GridLayout(this);
+        gridLayout.setColumnCount(4);
+        gridLayout.setRowCount(android.widget.GridLayout.UNDEFINED);
+        gridLayout.setPadding(dpToPx(12), dpToPx(50), dpToPx(12), dpToPx(12));
+        FrameLayout.LayoutParams gridParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT);
+        gridLayout.setLayoutParams(gridParams);
+        
+        java.util.ArrayList<ShortcutItem> shortcuts = loadShortcutList();
+        for (final ShortcutItem item : shortcuts) {
+            View cell = createShortcutCell(item);
+            gridLayout.addView(cell);
+        }
+        contentContainer.addView(gridLayout);
+        
+        rootLayout.addView(contentContainer);
+        return rootLayout;
+    }
+    
+    /**
+     * 创建单个快捷方式按钮
+     */
+    private View createShortcutCell(final ShortcutItem item) {
+        LinearLayout cell = new LinearLayout(this);
+        cell.setOrientation(LinearLayout.VERTICAL);
+        cell.setGravity(Gravity.CENTER);
+        cell.setPadding(dpToPx(4), dpToPx(8), dpToPx(4), dpToPx(8));
+        
+        android.widget.GridLayout.LayoutParams cellParams = new android.widget.GridLayout.LayoutParams(
+                android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED),
+                android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED));
+        cellParams.width = android.widget.GridLayout.LayoutParams.WRAP_CONTENT;
+        cellParams.height = android.widget.GridLayout.LayoutParams.WRAP_CONTENT;
+        cell.setLayoutParams(cellParams);
+        
+        cell.setClickable(true);
+        cell.setFocusable(true);
+        
+        // Emoji 图标
+        TextView iconView = new TextView(this);
+        iconView.setText(item.getIcon() != null ? item.getIcon() : "⚡");
+        iconView.setTextSize(30);
+        iconView.setGravity(Gravity.CENTER);
+        iconView.setPadding(0, 0, 0, dpToPx(4));
+        cell.addView(iconView);
+        
+        // 名称
+        TextView nameView = new TextView(this);
+        nameView.setText(item.getName());
+        nameView.setTextSize(11);
+        nameView.setTextColor(0xFF666666);
+        nameView.setGravity(Gravity.CENTER);
+        nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        nameView.setMaxLines(1);
+        cell.addView(nameView);
+        
+        cell.setOnClickListener(v -> launchShortcutApp(item));
+        
+        return cell;
+    }
+    
+    /**
+     * 通过快捷方式打开应用
+     */
+    private void launchShortcutApp(ShortcutItem item) {
+        if (item == null || android.text.TextUtils.isEmpty(item.getPackageName())
+                || android.text.TextUtils.isEmpty(item.getClassName())) {
+            Log.d(TAG, "快捷方式包名或类名为空");
+            return;
+        }
+        
+        try {
+            Intent launchIntent = new Intent(Intent.ACTION_MAIN);
+            launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+            launchIntent.setClassName(item.getPackageName(), item.getClassName());
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            startActivity(launchIntent);
+            Log.d(TAG, "已打开快捷方式: " + item.getName());
+            
+            // 打开应用后收起快捷方式窗口
+            collapseToBottomBar();
+        } catch (Exception e) {
+            Log.e(TAG, "打开快捷方式失败: " + item.getName(), e);
+            Toast.makeText(this, "打开 " + item.getName() + " 失败", Toast.LENGTH_SHORT).show();
+        }
+    }
+    
+    /**
+     * 快捷方式窗口内部收起（带连贯缩回动画）
+     */
+    private void collapseShortcutWindowInternal() {
+        if (!isShortcutWindowExpanded) return;
+        
+        Log.d(TAG, "收起快捷方式窗口: " + android.util.Log.getStackTraceString(new Throwable()));
+        
+        // 动画期间在视图层拦截所有触摸
+        barContainer.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                return true;
+            }
+        });
+        
+        // 查找 contentContainer（rootLayout 下的第一个子view，即 createShortcutWindowView 中添加的 contentContainer）
+        View contentContainer = null;
+        if (barContainer.getChildCount() > 0) {
+            View rootView = barContainer.getChildAt(0);
+            if (rootView instanceof FrameLayout && ((FrameLayout) rootView).getChildCount() > 0) {
+                contentContainer = ((FrameLayout) rootView).getChildAt(0);
+            }
+        }
+        
+        final DisplayMetrics dm = new DisplayMetrics();
+        windowManager.getDefaultDisplay().getRealMetrics(dm);
+        final int screenW = dm.widthPixels;
+        
+        if (contentContainer != null) {
+            final View content = contentContainer;
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) content.getLayoutParams();
+            final int contentStartWidth = lp.width;
+            final int contentStartHeight = lp.height;
+            
+            // content 缩小的目标尺寸：匹配提示条区域
+            int effectiveTargetWidth = (currentWidth == ViewGroup.LayoutParams.MATCH_PARENT || currentWidth <= 0) ? screenW : currentWidth;
+            final int contentTargetW = Math.max(effectiveTargetWidth, 1);
+            final int contentTargetH = Math.max(dpToPx(currentHeight), 1);
+            
+            // 收起动画目标变换（逆向展开动画的变换）
+            final float endScaleX = (float) contentTargetW / contentStartWidth;
+            final float endScaleY = (float) contentTargetH / contentStartHeight;
+            final float endTranslationX = barPositionX - 2 * lp.leftMargin;
+            final float endTranslationY = dpToPx(barPositionY) - 2 * lp.topMargin;
+            
+            // 圆角插值：从快捷窗口圆角过渡到提示条圆角
+            final int startCornerPx = dpToPx(shortcutCornerRadius);
+            final int targetCornerPx = dpToPx(currentCornerRadius);
+            
+            Log.d(TAG, "收起快捷窗口动画 - scale: 1x1 -> " + endScaleX + "x" + endScaleY
+                    + " trans: 0,0 -> (" + endTranslationX + "," + endTranslationY + ")"
+                    + " corner: " + startCornerPx + "px -> " + targetCornerPx + "px");
+            
+            performSmoothCollapseAnimation(
+                content,
+                endScaleX, endScaleY,
+                endTranslationX, endTranslationY,
+                startCornerPx, targetCornerPx,
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        finishCollapseShortcutWindow();
+                    }
+                }
+            );
+        } else {
+            finishCollapseShortcutWindow();
+        }
+    }
+    
+    /**
+     * 快捷方式窗口收起完成：清理并恢复底部提示条
+     */
+    private void finishCollapseShortcutWindow() {
+        Log.d(TAG, "finishCollapseShortcutWindow");
+        try {
+            barContainer.removeAllViews();
+            
+            // 恢复为底部提示条
+            barLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                    | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                    | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+            barLayoutParams.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
+            if (currentWidth != ViewGroup.LayoutParams.MATCH_PARENT) {
+                barLayoutParams.width = Math.max(currentWidth, pressedBarWidth);
+            } else {
+                barLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
+            }
+            barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + Math.abs(dpToPx(pressedBarPositionY)));
+            barLayoutParams.x = barPositionX;
+            barLayoutParams.y = dpToPx(barPositionY);
+            windowManager.updateViewLayout(barContainer, barLayoutParams);
+            
+            barContainer.setBackground(null);
+            barContainer.setClipToOutline(false);
+            
+            // 重新创建底部提示条
+            bottomBar = createBottomBarView();
+            barContainer.addView(bottomBar);
+            pressedOverlay = createPressedOverlay();
+            barContainer.addView(pressedOverlay);
+            barContainer.setAlpha(1f);
+            
+            isShortcutWindowExpanded = false;
+            
+            // 隐藏背景遮罩
+            if (overlayView != null) {
+                final View ov = overlayView;
+                final float startAlpha = overlayAlpha / 100.0f;
+                final long startTime = System.currentTimeMillis();
+                ov.setAlpha(startAlpha);
+                Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+                    @Override
+                    public void doFrame(long frameTimeNanos) {
+                        long elapsed = System.currentTimeMillis() - startTime;
+                        float progress = Math.min((float) elapsed / overlayAnimDuration, 1.0f);
+                        ov.setAlpha(startAlpha * (1 - easeInCubic(progress)));
+                        if (progress < 1.0f) {
+                            Choreographer.getInstance().postFrameCallback(this);
+                        } else {
+                            ov.setAlpha(0f);
+                        }
+                    }
+                });
+            }
+            
+            barContainer.setOnTouchListener(null);
+            Log.d(TAG, "快捷方式窗口已收起");
+        } catch (Exception e) {
+            Log.e(TAG, "finishCollapseShortcutWindow 失败", e);
+            isShortcutWindowExpanded = false;
+        }
+    }
+    
+    /**
      * 执行展开动画（旧版本，保留以防需要）
      */
     private void performExpandAnimation() {
@@ -3230,7 +3852,13 @@ public class FloatWindowService extends Service {
      * 收起为底部提示条
      */
     private void collapseToBottomBar() {
-        if (!isAiWindowExpanded) {
+        if (!isAiWindowExpanded && !isShortcutWindowExpanded) {
+            return;
+        }
+        
+        // 如果快捷方式窗口展开，直接收起（简化处理）
+        if (isShortcutWindowExpanded) {
+            collapseShortcutWindowInternal();
             return;
         }
         
@@ -3360,6 +3988,7 @@ public class FloatWindowService extends Service {
         
         if (barContainer == null || windowManager == null) {
             isAiWindowExpanded = false;
+            isShortcutWindowExpanded = false;
             return;
         }
         
@@ -3409,6 +4038,7 @@ public class FloatWindowService extends Service {
             barContainer.setAlpha(1f);
             
             isAiWindowExpanded = false;
+            isShortcutWindowExpanded = false;
             isKeyboardVisible = false;
             isKeyboardAnimating = false;
             // 隐藏背景遮罩：渐隐动画（在窗口收起完成后执行，不影响主动画）
@@ -4859,6 +5489,17 @@ public class FloatWindowService extends Service {
             
             // 加载遮罩渐变时长
             overlayAnimDuration = prefs.getInt("overlay_anim_duration", overlayAnimDuration);
+            
+            // 加载快捷方式窗口设置
+            shortcutWindowWidth = prefs.getInt("shortcut_window_width", shortcutWindowWidth);
+            shortcutWindowHeight = prefs.getInt("shortcut_window_height", shortcutWindowHeight);
+            shortcutWindowPositionY = prefs.getInt("shortcut_window_position_y", shortcutWindowPositionY);
+            shortcutBorderWidth = prefs.getInt("shortcut_border_width", shortcutBorderWidth);
+            shortcutCornerRadius = prefs.getInt("shortcut_corner_radius", shortcutCornerRadius);
+            shortcutBorderColor = prefs.getString("shortcut_border_color", shortcutBorderColor);
+            shortcutBorderAlpha = prefs.getInt("shortcut_border_alpha", (int)(shortcutBorderAlpha * 100)) / 100.0f;
+            shortcutBgColor = prefs.getString("shortcut_bg_color", shortcutBgColor);
+            shortcutAnimDuration = prefs.getInt("shortcut_anim_duration", shortcutAnimDuration);
             
             Log.d(TAG, "设置已加载 - 提示条: 宽=" + currentWidth + ", 高=" + currentHeight + 
                   ", 圆角=" + currentCornerRadius + ", 透明度=" + currentAlpha +

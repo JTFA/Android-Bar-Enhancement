@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">小横条工具箱</string>
     <string name="click_bar_action">单击提示条操作</string>
@@ -8,4 +9,44 @@
     <string name="app_permission_message">需要读取已安装应用列表来让您选择要打开的应用。请点击确认后选择应用。</string>
     <string name="confirm">确认</string>
     <string name="cancel">取消</string>
+    
+    <!-- 快捷方式窗口设置 -->
+    <string name="shortcut_window_title">快捷方式窗口</string>
+    <string name="shortcut_window_desc">双击提示条打开快捷方式窗口</string>
+    <string name="shortcut_window_size">快捷方式窗口大小</string>
+    <string name="shortcut_window_width">快捷窗口宽度 (dp)</string>
+    <string name="shortcut_window_height">快捷窗口高度 (dp)</string>
+    <string name="shortcut_window_position_y">快捷窗口位置 Y</string>
+    <string name="shortcut_window_border">快捷窗口边框</string>
+    <string name="shortcut_window_border_width">边框宽度</string>
+    <string name="shortcut_window_border_color">边框颜色</string>
+    <string name="shortcut_window_border_alpha">边框透明度</string>
+    <string name="shortcut_window_corner">窗口圆角</string>
+    <string name="shortcut_window_background_color">窗口背景颜色</string>
+    <string name="shortcut_window_anim_duration">过渡动画时长</string>
+    
+    <!-- 快捷方式管理 -->
+    <string name="shortcut_manage_title">管理快捷方式</string>
+    <string name="shortcut_manage_desc">添加、编辑或删除快捷方式</string>
+    <string name="edit_shortcuts">编辑快捷方式</string>
+    <string name="add_shortcut">添加快捷方式</string>
+    <string name="edit_shortcut">编辑快捷方式</string>
+    <string name="delete_shortcut">删除</string>
+    <string name="shortcut_name">名称</string>
+    <string name="shortcut_icon">图标 (Emoji)</string>
+    <string name="shortcut_package">应用包名</string>
+    <string name="shortcut_class">Activity 类名</string>
+    <string name="shortcut_save">保存</string>
+    <string name="shortcut_name_hint">输入快捷方式名称</string>
+    <string name="shortcut_icon_hint">输入 Emoji 图标（如 🔍）</string>
+    <string name="shortcut_package_hint">输入应用包名</string>
+    <string name="shortcut_class_hint">输入 Activity 完整类名</string>
+    <string name="shortcut_delete_confirm">确定删除该快捷方式？</string>
+    <string name="shortcut_add_success">快捷方式已添加</string>
+    <string name="shortcut_edit_success">快捷方式已更新</string>
+    <string name="shortcut_delete_success">快捷方式已删除</string>
+    <string name="shortcut_no_items">暂无快捷方式，请添加</string>
+    
+    <!-- 双击提示条 -->
+    <string name="double_tap_hint">双击提示条可打开快捷方式窗口</string>
 </resources>
