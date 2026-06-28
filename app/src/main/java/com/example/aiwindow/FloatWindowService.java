@@ -3280,7 +3280,9 @@ public class FloatWindowService extends Service {
             android.content.SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
             String jsonStr = prefs.getString("shortcut_list", "");
             if (android.text.TextUtils.isEmpty(jsonStr)) {
-                return ShortcutItem.getDefaultShortcuts();
+                java.util.ArrayList<ShortcutItem> defaults = ShortcutItem.getDefaultShortcuts();
+                copyDefaultIconsToStorage(defaults);
+                return defaults;
             }
             java.util.ArrayList<ShortcutItem> list = new java.util.ArrayList<>();
             try {
@@ -3288,14 +3290,62 @@ public class FloatWindowService extends Service {
                 for (int i = 0; i < jsonArray.length(); i++) {
                     list.add(ShortcutItem.fromJson(jsonArray.getJSONObject(i)));
                 }
+                // 过滤掉禁用的快捷方式
+                java.util.ArrayList<ShortcutItem> enabledList = new java.util.ArrayList<>();
+                for (ShortcutItem si : list) {
+                    if (si.isEnabled()) {
+                        enabledList.add(si);
+                    }
+                }
+                return enabledList;
             } catch (Exception e) {
                 Log.e(TAG, "解析快捷方式列表失败", e);
-                return ShortcutItem.getDefaultShortcuts();
+                java.util.ArrayList<ShortcutItem> defaults = ShortcutItem.getDefaultShortcuts();
+                copyDefaultIconsToStorage(defaults);
+                return defaults;
             }
-            return list;
         } catch (Exception e) {
             Log.e(TAG, "加载快捷方式列表失败", e);
-            return ShortcutItem.getDefaultShortcuts();
+            java.util.ArrayList<ShortcutItem> defaults = ShortcutItem.getDefaultShortcuts();
+            copyDefaultIconsToStorage(defaults);
+            return defaults;
+        }
+    }
+
+    /**
+     * 首次运行时，将 res/drawable/ 中的默认图标复制到内部存储
+     */
+    private void copyDefaultIconsToStorage(java.util.ArrayList<ShortcutItem> list) {
+        java.io.File iconsDir = new java.io.File(getFilesDir(), "shortcut_icons");
+        if (!iconsDir.exists()) {
+            iconsDir.mkdirs();
+        }
+        for (ShortcutItem item : list) {
+            if (!"image".equals(item.getIconType())) continue;
+            if (!android.text.TextUtils.isEmpty(item.getIconPath())) continue;
+
+            int resId = getResources().getIdentifier(item.getId(), "drawable", getPackageName());
+            if (resId == 0) continue;
+
+            try {
+                java.io.File destFile = new java.io.File(iconsDir, item.getId() + ".png");
+                if (destFile.exists()) {
+                    item.setIconPath(destFile.getAbsolutePath());
+                    continue;
+                }
+                java.io.InputStream in = getResources().openRawResource(resId);
+                java.io.FileOutputStream out = new java.io.FileOutputStream(destFile);
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, bytesRead);
+                }
+                out.close();
+                in.close();
+                item.setIconPath(destFile.getAbsolutePath());
+            } catch (Exception e) {
+                Log.e(TAG, "复制默认图标失败: " + item.getId(), e);
+            }
         }
     }
     
@@ -3614,6 +3664,7 @@ public class FloatWindowService extends Service {
     
     /**
      * 创建单个快捷方式按钮
+     * 支持 Emoji 和图片两种图标类型，图片显示为圆角矩形
      */
     private View createShortcutCell(final ShortcutItem item) {
         LinearLayout cell = new LinearLayout(this);
@@ -3621,23 +3672,76 @@ public class FloatWindowService extends Service {
         cell.setGravity(Gravity.CENTER);
         cell.setPadding(dpToPx(4), dpToPx(8), dpToPx(4), dpToPx(8));
         
+        // 计算均匀分布的单元格宽度：窗口宽度减去 grid padding 后 / 4
+        int gridPadding = dpToPx(12) * 2;
+        int cellWidth = (dpToPx(shortcutWindowWidth) - gridPadding) / 4;
+        
         android.widget.GridLayout.LayoutParams cellParams = new android.widget.GridLayout.LayoutParams(
                 android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED),
                 android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED));
-        cellParams.width = android.widget.GridLayout.LayoutParams.WRAP_CONTENT;
+        cellParams.width = cellWidth;
         cellParams.height = android.widget.GridLayout.LayoutParams.WRAP_CONTENT;
         cell.setLayoutParams(cellParams);
         
         cell.setClickable(true);
         cell.setFocusable(true);
         
-        // Emoji 图标
-        TextView iconView = new TextView(this);
-        iconView.setText(item.getIcon() != null ? item.getIcon() : "⚡");
-        iconView.setTextSize(30);
-        iconView.setGravity(Gravity.CENTER);
-        iconView.setPadding(0, 0, 0, dpToPx(4));
-        cell.addView(iconView);
+        // 判断图标类型
+        if ("image".equals(item.getIconType())) {
+            // ===== 图片图标（圆角矩形） =====
+            FrameLayout iconContainer = new FrameLayout(this);
+            int iconSize = cellWidth - dpToPx(16);
+            FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(iconSize, iconSize);
+            iconParams.gravity = Gravity.CENTER;
+            iconContainer.setLayoutParams(iconParams);
+            
+            // 圆角矩形背景
+            GradientDrawable iconBg = new GradientDrawable();
+            iconBg.setShape(GradientDrawable.RECTANGLE);
+            iconBg.setCornerRadius(dpToPx(12));
+            
+            // 尝试加载自定义图片
+            android.graphics.Bitmap bitmap = loadShortcutIcon(item);
+            if (bitmap != null) {
+                // 有自定义图片 → 显示图片
+                ImageView imageView = new ImageView(this);
+                imageView.setLayoutParams(new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT));
+                imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                imageView.setImageBitmap(bitmap);
+                iconContainer.setBackground(iconBg);
+                iconContainer.setClipToOutline(true);
+                iconContainer.addView(imageView);
+            } else {
+                // 无自定义图片 → 显示纯色占位图
+                iconBg.setColor(getShortcutPlaceholderColor(item.getId()));
+                iconContainer.setBackground(iconBg);
+                iconContainer.setClipToOutline(true);
+                
+                // 在占位图上显示名称首字符
+                TextView placeholderText = new TextView(this);
+                placeholderText.setLayoutParams(new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT));
+                placeholderText.setGravity(Gravity.CENTER);
+                String firstChar = item.getName() != null && item.getName().length() > 0
+                        ? item.getName().substring(0, 1) : "?";
+                placeholderText.setText(firstChar);
+                placeholderText.setTextColor(0xFFFFFFFF);
+                placeholderText.setTextSize(22);
+                iconContainer.addView(placeholderText);
+            }
+            cell.addView(iconContainer);
+        } else {
+            // ===== Emoji 图标 =====
+            TextView iconView = new TextView(this);
+            iconView.setText(item.getIcon() != null ? item.getIcon() : "⚡");
+            iconView.setTextSize(30);
+            iconView.setGravity(Gravity.CENTER);
+            iconView.setPadding(0, 0, 0, dpToPx(4));
+            cell.addView(iconView);
+        }
         
         // 名称
         TextView nameView = new TextView(this);
@@ -3652,6 +3756,45 @@ public class FloatWindowService extends Service {
         cell.setOnClickListener(v -> launchShortcutApp(item));
         
         return cell;
+    }
+    
+    /**
+     * 加载快捷方式的自定义图片图标
+     * @return Bitmap，若无图片文件则返回 null
+     */
+    private android.graphics.Bitmap loadShortcutIcon(ShortcutItem item) {
+        if (item == null || item.getIconPath() == null || item.getIconPath().isEmpty()) {
+            return null;
+        }
+        try {
+            java.io.File file = new java.io.File(item.getIconPath());
+            if (file.exists()) {
+                return android.graphics.BitmapFactory.decodeFile(file.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "加载快捷方式图标失败: " + item.getName(), e);
+        }
+        return null;
+    }
+    
+    /**
+     * 根据快捷方式 ID 生成一致的占位颜色
+     */
+    private int getShortcutPlaceholderColor(String id) {
+        if (id == null) return 0xFF1677FF;
+        switch (id) {
+            case "alipay_scan": return 0xFF1677FF; // 蓝色
+            case "alipay_pay": return 0xFF1677FF;
+            case "wechat_scan": return 0xFF07C160; // 绿色
+            case "wechat_pay": return 0xFF07C160;
+            default: {
+                int hash = id.hashCode();
+                int r = (hash & 0xFF) % 200 + 55;
+                int g = ((hash >> 8) & 0xFF) % 200 + 55;
+                int b = ((hash >> 16) & 0xFF) % 200 + 55;
+                return 0xFF000000 | (r << 16) | (g << 8) | b;
+            }
+        }
     }
     
     /**

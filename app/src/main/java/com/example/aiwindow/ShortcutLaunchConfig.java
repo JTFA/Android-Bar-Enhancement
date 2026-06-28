@@ -65,8 +65,9 @@ public class ShortcutLaunchConfig {
                 c.launchMode = MODE_INTENT;
                 c.targetPackage = "com.tencent.mm";
                 c.targetClass = "com.tencent.mm.ui.LauncherUI";
-                c.extraKey = "";
-                c.extraValue = "";
+                c.extraKey = "LauncherUI.Shortcut.LaunchType";
+                c.extraValue = "launch_type_offline_wallet";
+                c.extraType = "string";
                 break;
         }
         return c;
@@ -172,7 +173,7 @@ public class ShortcutLaunchConfig {
                 break;
             case MODE_INTENT:
                 if (!TextUtils.isEmpty(targetPackage) && !TextUtils.isEmpty(targetClass)) {
-                    android.content.Intent intent = new android.content.Intent();
+                    android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_VIEW);
                     intent.setClassName(targetPackage, targetClass);
                     if (!TextUtils.isEmpty(extraKey)) {
                         if ("boolean".equals(extraType)) {
@@ -181,7 +182,7 @@ public class ShortcutLaunchConfig {
                             intent.putExtra(extraKey, extraValue);
                         }
                     }
-                    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP | android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
                     return intent;
                 }
                 break;

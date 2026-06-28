@@ -1,6 +1,10 @@
 package com.example.aiwindow;
 
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
@@ -9,31 +13,60 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+
+import android.content.ClipData;
+import android.view.DragEvent;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.util.ArrayList;
 
 /**
  * 快捷方式编辑 Activity
  * 用户可添加、编辑、删除快捷方式（名称、图标、包名、类名）
+ * 图标支持 emoji 和自定义图片两种类型
  */
 public class ShortcutEditActivity extends AppCompatActivity {
 
     private static final String PREFS_NAME = "ai_window_settings";
     private static final String KEY_SHORTCUT_LIST = "shortcut_list";
+    private static final String ICONS_DIR = "shortcut_icons";
 
     private LinearLayout listContainer;
     private ArrayList<ShortcutItem> shortcutList;
+
+    // 当前正在编辑的快捷方式 ID（用于图片选择回调）
+    private String editingShortcutId = null;
+    // 对话框内的控件引用（更新用）
+    private ImageView dialogImagePreview;
+    private EditText dialogIconPathInput;
+    private EditText dialogIconInput; // emoji 输入框
+    private TextView dialogTypeIndicator; // 图标类型指示
+    private boolean dialogIsImageMode = false;
+
+    // 长按拖动排序相关
+    private int draggingFromIndex = -1;
+
+    // 图片选择启动器
+    private final ActivityResultLauncher<String> imagePickerLauncher =
+            registerForActivityResult(new ActivityResultContracts.GetContent(), this::onImagePicked);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,7 +96,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
 
         // 说明
         TextView descView = new TextView(this);
-        descView.setText("添加、编辑或删除快捷方式。双击提示条弹出快捷方式窗口。");
+        descView.setText("添加、编辑或删除快捷方式。双击提示条弹出快捷方式窗口。\n图标支持 emoji 和自定义图片。");
         descView.setTextSize(13);
         descView.setTextColor(0xFF999999);
         descView.setPadding(0, 0, 0, dpToPx(20));
@@ -76,6 +109,45 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT));
         listContainer.setOrientation(LinearLayout.VERTICAL);
         rootLayout.addView(listContainer);
+
+        // 设置长按拖动排序监听（拖放重排）
+        listContainer.setOnDragListener((v, event) -> {
+            switch (event.getAction()) {
+                case DragEvent.ACTION_DRAG_STARTED:
+                    return true;
+                case DragEvent.ACTION_DRAG_ENDED: {
+                    for (int i = 0; i < listContainer.getChildCount(); i++) {
+                        listContainer.getChildAt(i).setAlpha(1f);
+                    }
+                    draggingFromIndex = -1;
+                    return true;
+                }
+                case DragEvent.ACTION_DROP: {
+                    int fromIdx = draggingFromIndex;
+                    if (fromIdx < 0 || fromIdx >= shortcutList.size()) return false;
+                    int toIdx = 0;
+                    float dropY = event.getY();
+                    for (int i = 0; i < listContainer.getChildCount(); i++) {
+                        View child = listContainer.getChildAt(i);
+                        if (dropY < child.getTop() + child.getHeight() / 2f) {
+                            toIdx = i;
+                            break;
+                        }
+                        toIdx = i + 1;
+                    }
+                    if (toIdx < 0) toIdx = 0;
+                    if (toIdx > shortcutList.size()) toIdx = shortcutList.size();
+                    if (fromIdx == toIdx) return true;
+                    int adjustedTo = (toIdx > fromIdx) ? toIdx - 1 : toIdx;
+                    ShortcutItem movedItem = shortcutList.remove(fromIdx);
+                    shortcutList.add(adjustedTo, movedItem);
+                    saveShortcuts();
+                    refreshList();
+                    return true;
+                }
+            }
+            return false;
+        });
 
         // 添加按钮
         Button addButton = new Button(this);
@@ -109,6 +181,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         String jsonStr = prefs.getString(KEY_SHORTCUT_LIST, "");
         if (TextUtils.isEmpty(jsonStr)) {
             shortcutList = ShortcutItem.getDefaultShortcuts();
+            copyDefaultIconsToStorage(shortcutList);
             saveShortcuts();
             return;
         }
@@ -119,6 +192,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
             }
         } catch (Exception e) {
             shortcutList = ShortcutItem.getDefaultShortcuts();
+            copyDefaultIconsToStorage(shortcutList);
         }
     }
 
@@ -132,6 +206,43 @@ public class ShortcutEditActivity extends AppCompatActivity {
             jsonArray.put(item.toJson());
         }
         prefs.edit().putString(KEY_SHORTCUT_LIST, jsonArray.toString()).apply();
+    }
+
+    /**
+     * 首次运行时，将 res/drawable/ 中的默认图标复制到内部存储
+     */
+    private void copyDefaultIconsToStorage(java.util.ArrayList<ShortcutItem> list) {
+        File iconsDir = new File(getFilesDir(), ICONS_DIR);
+        if (!iconsDir.exists()) {
+            iconsDir.mkdirs();
+        }
+        for (ShortcutItem item : list) {
+            if (!"image".equals(item.getIconType())) continue;
+            if (!TextUtils.isEmpty(item.getIconPath())) continue;
+
+            int resId = getResources().getIdentifier(item.getId(), "drawable", getPackageName());
+            if (resId == 0) continue;
+
+            try {
+                File destFile = new File(iconsDir, item.getId() + ".png");
+                if (destFile.exists()) {
+                    item.setIconPath(destFile.getAbsolutePath());
+                    continue;
+                }
+                InputStream in = getResources().openRawResource(resId);
+                FileOutputStream out = new FileOutputStream(destFile);
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, bytesRead);
+                }
+                out.close();
+                in.close();
+                item.setIconPath(destFile.getAbsolutePath());
+            } catch (Exception e) {
+                android.util.Log.e("ShortcutEdit", "复制默认图标失败: " + item.getId(), e);
+            }
+        }
     }
 
     /**
@@ -159,28 +270,62 @@ public class ShortcutEditActivity extends AppCompatActivity {
     }
 
     /**
-     * 创建快捷方式卡片视图
+     * 创建快捷方式卡片视图（含启用开关、长按拖动排序）
      */
-    private View createShortcutCard(ShortcutItem item, int index) {
+    private View createShortcutCard(final ShortcutItem item, final int index) {
         LinearLayout card = new LinearLayout(this);
         card.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
         card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12));
+        card.setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8));
         card.setBackgroundColor(0xFFF5F5F5);
         card.setGravity(android.view.Gravity.CENTER_VERTICAL);
 
         LinearLayout.LayoutParams marginParams = (LinearLayout.LayoutParams) card.getLayoutParams();
-        marginParams.setMargins(0, 0, 0, dpToPx(8));
+        marginParams.setMargins(0, 0, 0, dpToPx(6));
         card.setLayoutParams(marginParams);
 
-        // 图标
-        TextView iconView = new TextView(this);
-        iconView.setTextSize(28);
-        iconView.setText(item.getIcon() != null ? item.getIcon() : "⚡");
-        iconView.setPadding(0, 0, dpToPx(12), 0);
-        card.addView(iconView);
+        // 启用开关
+        Switch enableSwitch = new Switch(this);
+        enableSwitch.setChecked(item.isEnabled());
+        enableSwitch.setPadding(0, 0, dpToPx(8), 0);
+        enableSwitch.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        enableSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            item.setEnabled(isChecked);
+            saveShortcuts();
+        });
+        card.addView(enableSwitch);
+
+        // 图标（预览）
+        if ("image".equals(item.getIconType())) {
+            ImageView iconView = new ImageView(this);
+            LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dpToPx(36), dpToPx(36));
+            iconLp.setMargins(0, 0, dpToPx(10), 0);
+            iconView.setLayoutParams(iconLp);
+            iconView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            GradientDrawable roundBg = new GradientDrawable();
+            roundBg.setShape(GradientDrawable.RECTANGLE);
+            roundBg.setCornerRadius(dpToPx(8));
+            Bitmap bmp = loadIconBitmap(item.getIconPath());
+            if (bmp != null) {
+                iconView.setImageBitmap(bmp);
+                iconView.setBackground(roundBg);
+                iconView.setClipToOutline(true);
+            } else {
+                roundBg.setColor(getPlaceholderColor(item.getId()));
+                iconView.setBackground(roundBg);
+            }
+            card.addView(iconView);
+        } else {
+            TextView iconView = new TextView(this);
+            iconView.setText(item.getIcon() != null ? item.getIcon() : "⚡");
+            iconView.setTextSize(24);
+            iconView.setPadding(0, 0, dpToPx(10), 0);
+            card.addView(iconView);
+        }
 
         // 名称和详情
         LinearLayout infoLayout = new LinearLayout(this);
@@ -190,50 +335,83 @@ public class ShortcutEditActivity extends AppCompatActivity {
 
         TextView nameView = new TextView(this);
         nameView.setText(item.getName());
-        nameView.setTextSize(15);
+        nameView.setTextSize(14);
         nameView.setTextColor(0xFF333333);
+        nameView.setMaxLines(1);
+        nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         infoLayout.addView(nameView);
 
+        String typeHint = "image".equals(item.getIconType()) ? " [图片]" : " [Emoji]";
         TextView detailView = new TextView(this);
-        detailView.setText(item.getPackageName() + "\n" + item.getClassName());
+        detailView.setText(item.getPackageName() + "\n" + item.getClassName() + typeHint);
         detailView.setTextSize(11);
         detailView.setTextColor(0xFF999999);
+        detailView.setMaxLines(1);
+        detailView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         detailView.setPadding(0, dpToPx(2), 0, 0);
         infoLayout.addView(detailView);
 
         card.addView(infoLayout);
 
         // 编辑按钮
-        Button editBtn = new Button(this);
+        TextView editBtn = new TextView(this);
         editBtn.setText("编辑");
         editBtn.setTextSize(12);
         editBtn.setTextColor(0xFF2196F3);
-        editBtn.setBackgroundColor(0x00000000);
         editBtn.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+        editBtn.setClickable(true);
         editBtn.setOnClickListener(v -> showEditDialog(shortcutList.get(index), index));
         card.addView(editBtn);
 
-        // 删除按钮
-        Button delBtn = new Button(this);
-        delBtn.setText("删除");
-        delBtn.setTextSize(12);
-        delBtn.setTextColor(0xFFF44336);
-        delBtn.setBackgroundColor(0x00000000);
-        delBtn.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
-        delBtn.setOnClickListener(v -> {
-            new AlertDialog.Builder(this)
-                    .setTitle("确认删除")
-                    .setMessage("确定删除快捷方式 \"" + shortcutList.get(index).getName() + "\"？")
-                    .setPositiveButton("确定", (dialog, which) -> {
-                        shortcutList.remove(index);
-                        saveShortcuts();
-                        refreshList();
-                        Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show();
-                    })
-                    .setNegativeButton("取消", null)
-                    .show();
+        // 判断是否为4个默认快捷方式
+        final String[] defaultIds = {"alipay_scan", "alipay_pay", "wechat_scan", "wechat_pay"};
+        boolean isDefaultShortcut = false;
+        for (String did : defaultIds) {
+            if (did.equals(item.getId())) { isDefaultShortcut = true; break; }
+        }
+        if (isDefaultShortcut) {
+            // 默认项：显示"默认"按钮（恢复全部默认值），不显示"删除"按钮
+            TextView resetBtn = new TextView(this);
+            resetBtn.setText("默认");
+            resetBtn.setTextSize(12);
+            resetBtn.setTextColor(0xFF4CAF50);
+            resetBtn.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+            resetBtn.setClickable(true);
+            resetBtn.setOnClickListener(v -> resetShortcutToDefault(index));
+            card.addView(resetBtn);
+        } else {
+            // 用户自建项：只显示"删除"按钮
+            TextView delBtn = new TextView(this);
+            delBtn.setText("删除");
+            delBtn.setTextSize(12);
+            delBtn.setTextColor(0xFFF44336);
+            delBtn.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+            delBtn.setClickable(true);
+            delBtn.setOnClickListener(v -> {
+                new AlertDialog.Builder(this)
+                        .setTitle("确认删除")
+                        .setMessage("确定删除快捷方式 \"" + shortcutList.get(index).getName() + "\"？")
+                        .setPositiveButton("确定", (dialog, which) -> {
+                            shortcutList.remove(index);
+                            saveShortcuts();
+                            refreshList();
+                            Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show();
+                        })
+                        .setNegativeButton("取消", null)
+                        .show();
+            });
+            card.addView(delBtn);
+        }
+
+        // 长按拖动排序
+        final int currentIndex = index;
+        card.setOnLongClickListener(v -> {
+            draggingFromIndex = currentIndex;
+            ClipData data = ClipData.newPlainText("shortcut_index", String.valueOf(currentIndex));
+            v.startDrag(data, new View.DragShadowBuilder(v), v, 0);
+            v.setAlpha(0.5f);
+            return true;
         });
-        card.addView(delBtn);
 
         return card;
     }
@@ -267,20 +445,83 @@ public class ShortcutEditActivity extends AppCompatActivity {
         spacer1.setPadding(0, dpToPx(8), 0, 0);
         formLayout.addView(spacer1);
 
-        // 图标
+        // ===== 图标区域 =====
         TextView iconLabel = new TextView(this);
-        iconLabel.setText("图标 (Emoji)");
+        iconLabel.setText("图标");
         iconLabel.setTextSize(13);
         iconLabel.setTextColor(0xFF666666);
         iconLabel.setPadding(0, 0, 0, dpToPx(4));
         formLayout.addView(iconLabel);
 
-        EditText iconInput = new EditText(this);
-        iconInput.setHint("输入 Emoji 图标（如 🔍）");
-        iconInput.setText(existing != null ? existing.getIcon() : "⚡");
-        iconInput.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
-        iconInput.setBackgroundResource(android.R.drawable.edit_text);
-        formLayout.addView(iconInput);
+        final boolean existingIsImage = existing != null && "image".equals(existing.getIconType());
+
+        // 显示当前图标类型的提示
+        dialogTypeIndicator = new TextView(this);
+        dialogTypeIndicator.setText(existingIsImage ? "当前：图片图标" : "当前：Emoji 图标");
+        dialogTypeIndicator.setTextSize(12);
+        dialogTypeIndicator.setTextColor(0xFF999999);
+        dialogTypeIndicator.setPadding(0, 0, 0, dpToPx(6));
+        formLayout.addView(dialogTypeIndicator);
+
+        // Emoji 输入
+        dialogIconInput = new EditText(this);
+        dialogIconInput.setHint("输入 Emoji 图标（如 🔍），留空则使用图片");
+        dialogIconInput.setText(!existingIsImage && existing != null ? existing.getIcon() : "");
+        dialogIconInput.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+        dialogIconInput.setBackgroundResource(android.R.drawable.edit_text);
+        formLayout.addView(dialogIconInput);
+
+        // 选择图片按钮
+        LinearLayout imageRow = new LinearLayout(this);
+        imageRow.setOrientation(LinearLayout.HORIZONTAL);
+        imageRow.setPadding(0, dpToPx(6), 0, 0);
+
+        Button selectImageBtn = new Button(this);
+        selectImageBtn.setText("选择图片");
+        selectImageBtn.setTextSize(14);
+        selectImageBtn.setTextColor(0xFFFFFFFF);
+        selectImageBtn.setBackgroundColor(0xFF2196F3);
+        selectImageBtn.setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8));
+
+        // 图片预览
+        dialogImagePreview = new ImageView(this);
+        int previewSize = dpToPx(48);
+        LinearLayout.LayoutParams previewLp = new LinearLayout.LayoutParams(previewSize, previewSize);
+        previewLp.setMargins(dpToPx(12), 0, 0, 0);
+        dialogImagePreview.setLayoutParams(previewLp);
+        dialogImagePreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        GradientDrawable previewBg = new GradientDrawable();
+        previewBg.setShape(GradientDrawable.RECTANGLE);
+        previewBg.setCornerRadius(dpToPx(8));
+        previewBg.setColor(0xFFEEEEEE);
+        dialogImagePreview.setBackground(previewBg);
+        dialogImagePreview.setVisibility(View.GONE);
+
+        // 图片路径（隐藏的输入框，用于存储路径）
+        dialogIconPathInput = new EditText(this);
+        dialogIconPathInput.setVisibility(View.GONE);
+        String existingPath = (existingIsImage && existing != null && existing.getIconPath() != null)
+                ? existing.getIconPath() : "";
+        dialogIconPathInput.setText(existingPath);
+
+        // 如果有已有图片路径，加载预览
+        if (!TextUtils.isEmpty(existingPath)) {
+            Bitmap bmp = loadIconBitmap(existingPath);
+            if (bmp != null) {
+                dialogImagePreview.setImageBitmap(bmp);
+                dialogImagePreview.setVisibility(View.VISIBLE);
+            }
+        }
+
+        final String shortcutId = existing != null ? existing.getId() : "sc_" + System.currentTimeMillis();
+        selectImageBtn.setOnClickListener(v -> {
+            editingShortcutId = shortcutId;
+            imagePickerLauncher.launch("image/*");
+        });
+
+        imageRow.addView(selectImageBtn);
+        imageRow.addView(dialogImagePreview);
+        formLayout.addView(imageRow);
 
         // 间距
         TextView spacer2 = new TextView(this);
@@ -325,7 +566,6 @@ public class ShortcutEditActivity extends AppCompatActivity {
         formLayout.addView(clsInput);
 
         // ========== 分隔 + 启动方式配置 ==========
-        final String shortcutId = existing != null ? existing.getId() : "sc_" + System.currentTimeMillis();
         final ShortcutLaunchConfig launchConfig = ShortcutLaunchConfig.load(
                 getSharedPreferences(PREFS_NAME, MODE_PRIVATE), shortcutId);
 
@@ -428,6 +668,62 @@ public class ShortcutEditActivity extends AppCompatActivity {
 
         formLayout.addView(extraRow);
 
+        // "恢复默认"按钮（仅4个默认快捷方式）
+        if (existing != null) {
+            boolean isDefaultSc = false;
+            String[] defIds = {"alipay_scan", "alipay_pay", "wechat_scan", "wechat_pay"};
+            for (String did : defIds) {
+                if (did.equals(existing.getId())) { isDefaultSc = true; break; }
+            }
+            if (isDefaultSc) {
+                Button resetBtn = new Button(this);
+                resetBtn.setText("恢复默认图标");
+                resetBtn.setTextSize(14);
+                resetBtn.setTextColor(0xFFFFFFFF);
+                resetBtn.setBackgroundColor(0xFF4CAF50);
+                resetBtn.setPadding(dpToPx(12), dpToPx(10), dpToPx(12), dpToPx(10));
+                LinearLayout.LayoutParams resetLp = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                resetLp.setMargins(0, dpToPx(12), 0, 0);
+                resetBtn.setLayoutParams(resetLp);
+                resetBtn.setOnClickListener(v -> {
+                    int resId = getResources().getIdentifier(existing.getId(), "drawable", getPackageName());
+                    if (resId == 0) {
+                        Toast.makeText(this, "未找到默认图标资源", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    try {
+                        File iconsDir = new File(getFilesDir(), ICONS_DIR);
+                        if (!iconsDir.exists()) iconsDir.mkdirs();
+                        File destFile = new File(iconsDir, existing.getId() + ".png");
+                        InputStream in = getResources().openRawResource(resId);
+                        FileOutputStream out = new FileOutputStream(destFile);
+                        byte[] buffer = new byte[4096];
+                        int bytesRead;
+                        while ((bytesRead = in.read(buffer)) != -1) {
+                            out.write(buffer, 0, bytesRead);
+                        }
+                        out.close();
+                        in.close();
+
+                        String savedPath = destFile.getAbsolutePath();
+                        dialogIconPathInput.setText(savedPath);
+                        dialogIconInput.setText("");
+                        dialogTypeIndicator.setText("当前：图片图标");
+                        Bitmap bmp = loadIconBitmap(savedPath);
+                        if (bmp != null) {
+                            dialogImagePreview.setImageBitmap(bmp);
+                            dialogImagePreview.setVisibility(View.VISIBLE);
+                        }
+                        Toast.makeText(this, "已恢复默认图标", Toast.LENGTH_SHORT).show();
+                    } catch (Exception e) {
+                        android.util.Log.e("ShortcutEdit", "恢复默认图标失败", e);
+                    }
+                });
+                formLayout.addView(resetBtn);
+            }
+        }
+
         // 模式切换时更新可见性
         spinnerMode.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
@@ -445,14 +741,20 @@ public class ShortcutEditActivity extends AppCompatActivity {
         // 触发初始状态
         spinnerMode.setSelection(spinnerMode.getSelectedItemPosition());
 
+        // 创建可滑动的对话框内容
+        ScrollView dialogScrollView = new ScrollView(this);
+        dialogScrollView.setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        dialogScrollView.addView(formLayout);
+
         // 创建对话框
         boolean isNew = existing == null;
         new AlertDialog.Builder(this)
                 .setTitle(isNew ? "添加快捷方式" : "编辑快捷方式")
-                .setView(formLayout)
+                .setView(dialogScrollView)
                 .setPositiveButton("保存", (dialog, which) -> {
                     String name = nameInput.getText().toString().trim();
-                    String icon = iconInput.getText().toString().trim();
                     String pkg = pkgInput.getText().toString().trim();
                     String cls = clsInput.getText().toString().trim();
 
@@ -464,14 +766,33 @@ public class ShortcutEditActivity extends AppCompatActivity {
                         Toast.makeText(this, "请输入包名和类名", Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    if (TextUtils.isEmpty(icon)) {
+
+                    // 判断图标类型：如果用户输入了 emoji 则优先使用 emoji
+                    String emojiText = dialogIconInput.getText().toString().trim();
+                    String iconPath = dialogIconPathInput.getText().toString().trim();
+                    String iconType;
+                    String icon;
+
+                    if (!TextUtils.isEmpty(emojiText)) {
+                        // 用户输入了 emoji → 使用 emoji 类型
+                        iconType = "emoji";
+                        icon = emojiText;
+                        iconPath = "";
+                    } else if (!TextUtils.isEmpty(iconPath)) {
+                        // 用户选择了图片 → 使用图片类型
+                        iconType = "image";
+                        icon = "";
+                    } else {
+                        // 都没有 → 默认使用 emoji
+                        iconType = "emoji";
                         icon = "⚡";
+                        iconPath = "";
                     }
 
                     ShortcutItem targetItem;
                     if (isNew) {
                         // 添加
-                        targetItem = new ShortcutItem(shortcutId, name, icon, pkg, cls);
+                        targetItem = new ShortcutItem(shortcutId, name, icon, iconType, iconPath, pkg, cls);
                         shortcutList.add(targetItem);
                         Toast.makeText(this, "快捷方式已添加", Toast.LENGTH_SHORT).show();
                     } else {
@@ -479,6 +800,8 @@ public class ShortcutEditActivity extends AppCompatActivity {
                         targetItem = existing;
                         existing.setName(name);
                         existing.setIcon(icon);
+                        existing.setIconType(iconType);
+                        existing.setIconPath(iconPath);
                         existing.setPackageName(pkg);
                         existing.setClassName(cls);
                         Toast.makeText(this, "快捷方式已更新", Toast.LENGTH_SHORT).show();
@@ -500,6 +823,197 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 })
                 .setNegativeButton("取消", null)
                 .show();
+    }
+
+    /**
+     * 图片选择回调
+     */
+    private void onImagePicked(Uri uri) {
+        if (uri == null || editingShortcutId == null) return;
+
+        try {
+            // 创建图标存储目录
+            File iconsDir = new File(getFilesDir(), ICONS_DIR);
+            if (!iconsDir.exists()) {
+                iconsDir.mkdirs();
+            }
+
+            // 复制图片到内部存储
+            String fileName = editingShortcutId + ".png";
+            File destFile = new File(iconsDir, fileName);
+
+            InputStream inputStream = getContentResolver().openInputStream(uri);
+            if (inputStream != null) {
+                FileOutputStream outputStream = new FileOutputStream(destFile);
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+                outputStream.close();
+                inputStream.close();
+
+                // 更新对话框中的预览和路径
+                final String savedPath = destFile.getAbsolutePath();
+                dialogIconPathInput.setText(savedPath);
+
+                Bitmap bmp = loadIconBitmap(savedPath);
+                if (bmp != null) {
+                    dialogImagePreview.setImageBitmap(bmp);
+                    dialogImagePreview.setVisibility(View.VISIBLE);
+                }
+
+                // 清除 emoji 输入提示
+                dialogIconInput.setText("");
+                dialogTypeIndicator.setText("当前：图片图标");
+
+                Toast.makeText(this, "图标已选择", Toast.LENGTH_SHORT).show();
+            }
+        } catch (Exception e) {
+            android.util.Log.e("ShortcutEdit", "保存图标失败", e);
+            Toast.makeText(this, "选择图片失败", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * 从文件路径加载图片 Bitmap
+     */
+    private Bitmap loadIconBitmap(String path) {
+        if (TextUtils.isEmpty(path)) return null;
+        try {
+            File file = new File(path);
+            if (file.exists()) {
+                return BitmapFactory.decodeFile(file.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            android.util.Log.e("ShortcutEdit", "加载图标失败: " + path, e);
+        }
+        return null;
+    }
+
+    /**
+     * 根据 ID 生成占位颜色
+     */
+    private int getPlaceholderColor(String id) {
+        if (id == null) return 0xFF1677FF;
+        switch (id) {
+            case "alipay_scan": return 0xFF1677FF; // 蓝色
+            case "alipay_pay": return 0xFF1677FF;
+            case "wechat_scan": return 0xFF07C160; // 绿色
+            case "wechat_pay": return 0xFF07C160;
+            default: {
+                int hash = id.hashCode();
+                int r = (hash & 0xFF) % 200 + 55;
+                int g = ((hash >> 8) & 0xFF) % 200 + 55;
+                int b = ((hash >> 16) & 0xFF) % 200 + 55;
+                return 0xFF000000 | (r << 16) | (g << 8) | b;
+            }
+        }
+    }
+
+    /**
+     * 将默认快捷方式的图标重置为项目自带的默认图片
+     */
+    private void resetShortcutIcon(int index) {
+        if (index < 0 || index >= shortcutList.size()) return;
+        ShortcutItem item = shortcutList.get(index);
+        if (item == null) return;
+
+        int resId = getResources().getIdentifier(item.getId(), "drawable", getPackageName());
+        if (resId == 0) {
+            Toast.makeText(this, "未找到默认图标资源", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        try {
+            File iconsDir = new File(getFilesDir(), ICONS_DIR);
+            if (!iconsDir.exists()) iconsDir.mkdirs();
+
+            File destFile = new File(iconsDir, item.getId() + ".png");
+            InputStream in = getResources().openRawResource(resId);
+            FileOutputStream out = new FileOutputStream(destFile);
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            while ((bytesRead = in.read(buffer)) != -1) {
+                out.write(buffer, 0, bytesRead);
+            }
+            out.close();
+            in.close();
+
+            item.setIconType("image");
+            item.setIconPath(destFile.getAbsolutePath());
+            item.setIcon("");
+            saveShortcuts();
+            refreshList();
+            Toast.makeText(this, "已恢复默认图标", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            android.util.Log.e("ShortcutEdit", "恢复默认图标失败", e);
+            Toast.makeText(this, "恢复默认图标失败", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * 将指定索引的快捷方式恢复为全部默认值（名称、图标、包名、类名、启动配置）
+     */
+    private void resetShortcutToDefault(int index) {
+        if (index < 0 || index >= shortcutList.size()) return;
+        ShortcutItem item = shortcutList.get(index);
+        if (item == null) return;
+
+        java.util.ArrayList<ShortcutItem> defaults = ShortcutItem.getDefaultShortcuts();
+        ShortcutItem defaultItem = null;
+        for (ShortcutItem d : defaults) {
+            if (d.getId().equals(item.getId())) {
+                defaultItem = d;
+                break;
+            }
+        }
+        if (defaultItem == null) {
+            Toast.makeText(this, "未找到默认配置", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // 恢复所有字段
+        item.setName(defaultItem.getName());
+        item.setIcon(defaultItem.getIcon());
+        item.setIconType(defaultItem.getIconType());
+        item.setPackageName(defaultItem.getPackageName());
+        item.setClassName(defaultItem.getClassName());
+        item.setEnabled(true);
+
+        // 复制默认图标
+        int resId = getResources().getIdentifier(item.getId(), "drawable", getPackageName());
+        if (resId != 0) {
+            try {
+                File iconsDir = new File(getFilesDir(), ICONS_DIR);
+                if (!iconsDir.exists()) iconsDir.mkdirs();
+                File destFile = new File(iconsDir, item.getId() + ".png");
+                InputStream in = getResources().openRawResource(resId);
+                FileOutputStream out = new FileOutputStream(destFile);
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, bytesRead);
+                }
+                out.close();
+                in.close();
+                item.setIconPath(destFile.getAbsolutePath());
+            } catch (Exception e) {
+                android.util.Log.e("ShortcutEdit", "恢复默认图标失败", e);
+                item.setIconPath("");
+            }
+        } else {
+            item.setIconPath("");
+        }
+
+        // 删除已保存的启动配置，使 load() 返回最新 getDefault()
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+                .remove("shortcut_launch_" + item.getId())
+                .apply();
+
+        saveShortcuts();
+        refreshList();
+        Toast.makeText(this, "已恢复默认", Toast.LENGTH_SHORT).show();
     }
 
     private int dpToPx(int dp) {
