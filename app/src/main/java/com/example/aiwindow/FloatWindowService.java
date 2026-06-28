@@ -3667,6 +3667,21 @@ public class FloatWindowService extends Service {
             
             // 打开应用后收起快捷方式窗口
             collapseToBottomBar();
+        } catch (android.content.ActivityNotFoundException e) {
+            // URL Scheme 无法处理时，降级为打开应用主界面
+            Log.w(TAG, "URL Scheme 打开失败，尝试打开应用主界面: " + item.getName(), e);
+            try {
+                Intent fallbackIntent = new Intent(Intent.ACTION_MAIN);
+                fallbackIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+                fallbackIntent.setPackage(item.getPackageName());
+                fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(fallbackIntent);
+                Log.d(TAG, "已打开应用主界面: " + item.getName());
+                collapseToBottomBar();
+            } catch (Exception e2) {
+                Log.e(TAG, "打开快捷方式失败: " + item.getName(), e2);
+                Toast.makeText(this, "打开 " + item.getName() + " 失败", Toast.LENGTH_SHORT).show();
+            }
         } catch (Exception e) {
             Log.e(TAG, "打开快捷方式失败: " + item.getName(), e);
             Toast.makeText(this, "打开 " + item.getName() + " 失败", Toast.LENGTH_SHORT).show();
@@ -3678,31 +3693,12 @@ public class FloatWindowService extends Service {
      * 部分内部 Activity 非导出（android:exported=false），需使用 URL Scheme 替代显式组件名
      */
     private Intent createShortcutLaunchIntent(ShortcutItem item) {
-        String cls = item.getClassName();
-        
-        // 支付宝扫一扫
-        if ("com.alipay.mobile.scan.aidl.ScanMainActivity".equals(cls)) {
-            return new Intent(Intent.ACTION_VIEW,
-                    Uri.parse("alipayqr://platformapi/startapp?saId=10000007"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        }
-        // 支付宝付款码
-        if ("com.alipay.mobile.payee.ui.PayeeActivity".equals(cls)) {
-            return new Intent(Intent.ACTION_VIEW,
-                    Uri.parse("alipayqr://platformapi/startapp?saId=20000056"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        }
-        // 微信扫一扫
-        if ("com.tencent.mm.plugin.scanner.ui.BaseScanUI".equals(cls)) {
-            return new Intent(Intent.ACTION_VIEW,
-                    Uri.parse("weixin://scan/qrcode"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        }
-        // 微信付款码
-        if ("com.tencent.mm.plugin.wallet.pay.ui.WalletPayUI".equals(cls)) {
-            return new Intent(Intent.ACTION_VIEW,
-                    Uri.parse("weixin://wallet/pay"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        // 从配置加载启动方式
+        android.content.SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
+        ShortcutLaunchConfig config = ShortcutLaunchConfig.load(prefs, item.getId());
+        Intent configIntent = config.buildLaunchIntent();
+        if (configIntent != null) {
+            return configIntent;
         }
         
         // 对于导出的普通 Activity，使用显式组件名启动

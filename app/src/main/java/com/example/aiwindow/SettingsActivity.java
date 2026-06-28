@@ -1489,7 +1489,7 @@ public class SettingsActivity extends AppCompatActivity {
         intent.putExtra("click_app_class", clickAppClass);
         startService(intent);
     }
-
+    
     @Override
     protected void onResume() {
         super.onResume();
