@@ -3184,6 +3184,7 @@ public class FloatWindowService extends Service {
                 + " corner: " + startCornerPx + "px -> " + targetCornerPx + "px");
         
         final GradientDrawable contentBg = (GradientDrawable) contentContainer.getBackground();
+        final android.graphics.drawable.Drawable foreground = contentContainer.getForeground();
         
         // 立即记录开始时间，避免首帧被跳过
         final long adjustedStartTime = System.nanoTime();
@@ -3235,6 +3236,9 @@ public class FloatWindowService extends Service {
                     currentCornerPx = targetCornerPx;
                 }
                 contentBg.setCornerRadius(currentCornerPx);
+                if (foreground instanceof GradientDrawable) {
+                    ((GradientDrawable) foreground).setCornerRadius(currentCornerPx);
+                }
                 
                 // 应用变换（只改 View 属性，不触发 updateViewLayout）
                 contentContainer.setScaleX(curScaleX);
@@ -3417,6 +3421,7 @@ public class FloatWindowService extends Service {
         final float startTranslationY = contentContainer.getTranslationY();
         
         final GradientDrawable contentBg = (GradientDrawable) contentContainer.getBackground();
+        final android.graphics.drawable.Drawable foreground = contentContainer.getForeground();
         final long adjustedStartTime = System.nanoTime();
         
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
@@ -3439,6 +3444,9 @@ public class FloatWindowService extends Service {
                     currentCornerPx = targetCornerPx;
                 }
                 contentBg.setCornerRadius(currentCornerPx);
+                if (foreground instanceof GradientDrawable) {
+                    ((GradientDrawable) foreground).setCornerRadius(currentCornerPx);
+                }
                 
                 contentContainer.setScaleX(curScaleX);
                 contentContainer.setScaleY(curScaleY);
@@ -5113,6 +5121,7 @@ public class FloatWindowService extends Service {
         contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         
         final GradientDrawable contentBg = (GradientDrawable) contentContainer.getBackground();
+        final android.graphics.drawable.Drawable foreground = contentContainer.getForeground();
         
         // 立即记录开始时间，避免首帧被跳过
         final long adjustedStartTime = System.nanoTime();
@@ -5162,6 +5171,9 @@ public class FloatWindowService extends Service {
                         currentCornerPx = Math.round(startCornerPx + (targetCornerPx - startCornerPx) * easedCornerProgress);
                     }
                     contentBg.setCornerRadius(currentCornerPx);
+                    if (foreground instanceof GradientDrawable) {
+                        ((GradientDrawable) foreground).setCornerRadius(currentCornerPx);
+                    }
                     contentContainer.invalidateOutline();
                     
                     // 应用变换（只改 View 属性，不触发 updateViewLayout）
