@@ -3374,6 +3374,9 @@ public class FloatWindowService extends Service {
             
             isShortcutWindowExpanded = true;
             
+            // 提前启动代理 Activity，展开过程中即可响应返回手势
+            startWindowHostActivity();
+            
             // 淡入背景遮罩
             if (overlayView != null) {
                 final View ov = overlayView;
@@ -3544,41 +3547,41 @@ public class FloatWindowService extends Service {
             }
         }
         
-        // 标题栏
-        TextView titleBar = new TextView(this);
-        FrameLayout.LayoutParams titleParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(40));
-        titleParams.gravity = Gravity.TOP;
-        titleBar.setLayoutParams(titleParams);
-        titleBar.setText("快捷方式");
-        titleBar.setTextSize(15);
-        titleBar.setGravity(Gravity.CENTER);
-        titleBar.setTextColor(0xFF666666);
-        titleBar.setPadding(0, dpToPx(8), 0, dpToPx(4));
-        contentContainer.addView(titleBar);
+//        // 标题栏
+//        TextView titleBar = new TextView(this);
+//        FrameLayout.LayoutParams titleParams = new FrameLayout.LayoutParams(
+//                FrameLayout.LayoutParams.MATCH_PARENT,
+//                dpToPx(40));
+//        titleParams.gravity = Gravity.TOP;
+//        titleBar.setLayoutParams(titleParams);
+//        titleBar.setText("快捷方式");
+//        titleBar.setTextSize(15);
+//        titleBar.setGravity(Gravity.CENTER);
+//        titleBar.setTextColor(0xFF666666);
+//        titleBar.setPadding(0, dpToPx(8), 0, dpToPx(4));
+//        contentContainer.addView(titleBar);
         
-        // 关闭按钮
-        ImageView closeButton = new ImageView(this);
-        closeButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
-        closeButton.setColorFilter(Color.parseColor("#666666"));
-        closeButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        closeButton.setPadding(dpToPx(4), dpToPx(4), dpToPx(4), dpToPx(4));
-        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(dpToPx(28), dpToPx(28));
-        closeParams.gravity = Gravity.TOP | Gravity.END;
-        closeParams.setMargins(0, dpToPx(6), dpToPx(8), 0);
-        closeButton.setLayoutParams(closeParams);
-        closeButton.setOnClickListener(v -> collapseToBottomBar());
-        contentContainer.addView(closeButton);
-        
-        // 分隔线
-        View divider = new View(this);
-        FrameLayout.LayoutParams divParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, 1);
-        divParams.setMargins(dpToPx(16), dpToPx(40), dpToPx(16), 0);
-        divider.setLayoutParams(divParams);
-        divider.setBackgroundColor(0xFFEEEEEE);
-        contentContainer.addView(divider);
+//        // 关闭按钮
+//        ImageView closeButton = new ImageView(this);
+//        closeButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
+//        closeButton.setColorFilter(Color.parseColor("#666666"));
+//        closeButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+//        closeButton.setPadding(dpToPx(4), dpToPx(4), dpToPx(4), dpToPx(4));
+//        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(dpToPx(28), dpToPx(28));
+//        closeParams.gravity = Gravity.TOP | Gravity.END;
+//        closeParams.setMargins(0, dpToPx(6), dpToPx(8), 0);
+//        closeButton.setLayoutParams(closeParams);
+//        closeButton.setOnClickListener(v -> collapseToBottomBar());
+//        contentContainer.addView(closeButton);
+//
+//        // 分隔线
+//        View divider = new View(this);
+//        FrameLayout.LayoutParams divParams = new FrameLayout.LayoutParams(
+//                FrameLayout.LayoutParams.MATCH_PARENT, 1);
+//        divParams.setMargins(dpToPx(16), dpToPx(40), dpToPx(16), 0);
+//        divider.setLayoutParams(divParams);
+//        divider.setBackgroundColor(0xFFEEEEEE);
+//        contentContainer.addView(divider);
         
         // GridLayout 显示快捷方式
         android.widget.GridLayout gridLayout = new android.widget.GridLayout(this);
@@ -3646,6 +3649,10 @@ public class FloatWindowService extends Service {
     /**
      * 通过快捷方式打开应用
      */
+    /**
+     * 通过快捷方式打开应用
+     * 对于非导出的内部 Activity（如支付宝/微信的扫一扫、付款码），使用 URL Scheme 启动
+     */
     private void launchShortcutApp(ShortcutItem item) {
         if (item == null || android.text.TextUtils.isEmpty(item.getPackageName())
                 || android.text.TextUtils.isEmpty(item.getClassName())) {
@@ -3654,10 +3661,7 @@ public class FloatWindowService extends Service {
         }
         
         try {
-            Intent launchIntent = new Intent(Intent.ACTION_MAIN);
-            launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-            launchIntent.setClassName(item.getPackageName(), item.getClassName());
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            Intent launchIntent = createShortcutLaunchIntent(item);
             startActivity(launchIntent);
             Log.d(TAG, "已打开快捷方式: " + item.getName());
             
@@ -3667,6 +3671,45 @@ public class FloatWindowService extends Service {
             Log.e(TAG, "打开快捷方式失败: " + item.getName(), e);
             Toast.makeText(this, "打开 " + item.getName() + " 失败", Toast.LENGTH_SHORT).show();
         }
+    }
+    
+    /**
+     * 根据快捷方式创建适当的 Intent
+     * 部分内部 Activity 非导出（android:exported=false），需使用 URL Scheme 替代显式组件名
+     */
+    private Intent createShortcutLaunchIntent(ShortcutItem item) {
+        String cls = item.getClassName();
+        
+        // 支付宝扫一扫
+        if ("com.alipay.mobile.scan.aidl.ScanMainActivity".equals(cls)) {
+            return new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("alipayqr://platformapi/startapp?saId=10000007"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        }
+        // 支付宝付款码
+        if ("com.alipay.mobile.payee.ui.PayeeActivity".equals(cls)) {
+            return new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("alipayqr://platformapi/startapp?saId=20000056"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        }
+        // 微信扫一扫
+        if ("com.tencent.mm.plugin.scanner.ui.BaseScanUI".equals(cls)) {
+            return new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("weixin://scan/qrcode"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        }
+        // 微信付款码
+        if ("com.tencent.mm.plugin.wallet.pay.ui.WalletPayUI".equals(cls)) {
+            return new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("weixin://wallet/pay"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        }
+        
+        // 对于导出的普通 Activity，使用显式组件名启动
+        Intent intent = new Intent();
+        intent.setClassName(item.getPackageName(), item.getClassName());
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        return intent;
     }
     
     /**
@@ -3799,6 +3842,9 @@ public class FloatWindowService extends Service {
             }
             
             barContainer.setOnTouchListener(null);
+            
+            // 关闭代理 Activity
+            finishWindowHostActivity();
             Log.d(TAG, "快捷方式窗口已收起");
         } catch (Exception e) {
             Log.e(TAG, "finishCollapseShortcutWindow 失败", e);
