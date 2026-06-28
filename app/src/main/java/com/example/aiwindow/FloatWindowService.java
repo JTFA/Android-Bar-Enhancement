@@ -157,6 +157,7 @@ public class FloatWindowService extends Service {
     // 单击提示条打开第三方应用
     private String clickAppPackage = "";
     private String clickAppName = "";
+    private String clickAppClass = "";
     
     // 点击窗口外关闭窗口设置
     private boolean closeOnOutsideClick = true; // 默认开启
@@ -462,6 +463,7 @@ public class FloatWindowService extends Service {
             if (intent.hasExtra("click_app_package")) {
                 clickAppPackage = intent.getStringExtra("click_app_package");
                 clickAppName = intent.getStringExtra("click_app_name");
+                clickAppClass = intent.getStringExtra("click_app_class");
                 Log.d(TAG, "单击打开应用已更新: " + clickAppName + " (" + clickAppPackage + ")");
             }
         }
@@ -486,6 +488,7 @@ public class FloatWindowService extends Service {
             if (intent.hasExtra("click_app_package")) {
                 clickAppPackage = intent.getStringExtra("click_app_package");
                 clickAppName = intent.getStringExtra("click_app_name");
+                clickAppClass = intent.getStringExtra("click_app_class");
                 Log.d(TAG, "单击打开应用设置已更新: " + clickAppName + " (" + clickAppPackage + ")");
             }
         }
@@ -1169,20 +1172,19 @@ public class FloatWindowService extends Service {
      * 单击提示条：打开已选择的第三方应用
      */
     private void launchClickApp() {
-        if (TextUtils.isEmpty(clickAppPackage)) {
+        if (TextUtils.isEmpty(clickAppPackage) || TextUtils.isEmpty(clickAppClass)) {
             Log.d(TAG, "未选择要打开的应用");
             return;
         }
         
         try {
-            Intent launchIntent = getPackageManager().getLaunchIntentForPackage(clickAppPackage);
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-                startActivity(launchIntent);
-                Log.d(TAG, "已打开应用: " + clickAppName);
-            } else {
-                Log.e(TAG, "无法获取启动 Intent，包名: " + clickAppPackage);
-            }
+            // 使用显式 ComponentName 创建 Intent，跳过系统解析过程，避免 Android 12+ "30天" 确认弹窗
+            Intent launchIntent = new Intent(Intent.ACTION_MAIN);
+            launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+            launchIntent.setClassName(clickAppPackage, clickAppClass);
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            startActivity(launchIntent);
+            Log.d(TAG, "已打开应用: " + clickAppName);
         } catch (Exception e) {
             Log.e(TAG, "打开应用失败: " + clickAppName, e);
         }
@@ -4835,6 +4837,7 @@ public class FloatWindowService extends Service {
             // 加载单击提示条打开的应用设置
             clickAppPackage = prefs.getString("click_app_package", "");
             clickAppName = prefs.getString("click_app_name", "");
+            clickAppClass = prefs.getString("click_app_class", "");
             
             // 加载动画速度
             animationDuration = prefs.getInt("anim_duration", animationDuration);

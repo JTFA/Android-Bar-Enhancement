@@ -65,6 +65,7 @@ public class SettingsActivity extends AppCompatActivity {
     // 单击提示条打开第三方应用
     private static final String KEY_CLICK_APP_PACKAGE = "click_app_package";
     private static final String KEY_CLICK_APP_NAME = "click_app_name";
+    private static final String KEY_CLICK_APP_CLASS = "click_app_class";
     private static final String KEY_APP_SELECTOR_SHOWN = "app_selector_first_time_shown";
     
     // 输入法避让设置
@@ -125,6 +126,7 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView textViewSelectedApp;
     private String clickAppPackage = "";
     private String clickAppName = "";
+    private String clickAppClass = "";
     
     // 输入法避让控件
     private SeekBar seekKeyboardOffset;
@@ -382,6 +384,7 @@ public class SettingsActivity extends AppCompatActivity {
         // 加载单击提示条打开的应用设置
         clickAppPackage = preferences.getString(KEY_CLICK_APP_PACKAGE, "");
         clickAppName = preferences.getString(KEY_CLICK_APP_NAME, "");
+        clickAppClass = preferences.getString(KEY_CLICK_APP_CLASS, "");
         if (!TextUtils.isEmpty(clickAppName)) {
             textViewSelectedApp.setText(clickAppName);
         } else {
@@ -533,6 +536,7 @@ public class SettingsActivity extends AppCompatActivity {
         // 保存单击提示条打开的应用设置
         editor.putString(KEY_CLICK_APP_PACKAGE, clickAppPackage);
         editor.putString(KEY_CLICK_APP_NAME, clickAppName);
+        editor.putString(KEY_CLICK_APP_CLASS, clickAppClass);
         
         // 保存输入法避让设置
         editor.putInt(KEY_KEYBOARD_OFFSET, seekKeyboardOffset.getProgress());
@@ -632,6 +636,7 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("overlay_alpha", seekOverlayAlpha.getProgress());
         sizeIntent.putExtra("click_app_package", clickAppPackage);
         sizeIntent.putExtra("click_app_name", clickAppName);
+        sizeIntent.putExtra("click_app_class", clickAppClass);
         startService(sizeIntent);
         
         // 更新输入法避让设置
@@ -1082,6 +1087,7 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("overlay_alpha", seekOverlayAlpha.getProgress());
         sizeIntent.putExtra("click_app_package", clickAppPackage);
         sizeIntent.putExtra("click_app_name", clickAppName);
+        sizeIntent.putExtra("click_app_class", clickAppClass);
         startService(sizeIntent);
         
         // 更新输入法避让设置
@@ -1178,9 +1184,11 @@ public class SettingsActivity extends AppCompatActivity {
         // 准备列表数据
         final String[] appNames = new String[apps.size()];
         final String[] appPackages = new String[apps.size()];
+        final String[] appClasses = new String[apps.size()];
         for (int i = 0; i < apps.size(); i++) {
             appNames[i] = apps.get(i).loadLabel(pm).toString();
             appPackages[i] = apps.get(i).activityInfo.packageName;
+            appClasses[i] = apps.get(i).activityInfo.name;
         }
         
         // 找到当前选中项
@@ -1201,6 +1209,7 @@ public class SettingsActivity extends AppCompatActivity {
                     public void onClick(DialogInterface dialog, int which) {
                         clickAppPackage = appPackages[which];
                         clickAppName = appNames[which];
+                        clickAppClass = appClasses[which];
                         textViewSelectedApp.setText(clickAppName);
                         // 保存并通知服务
                         saveClickAppSetting();
@@ -1219,6 +1228,7 @@ public class SettingsActivity extends AppCompatActivity {
         preferences.edit()
                 .putString(KEY_CLICK_APP_PACKAGE, clickAppPackage)
                 .putString(KEY_CLICK_APP_NAME, clickAppName)
+                .putString(KEY_CLICK_APP_CLASS, clickAppClass)
                 .apply();
         
         // 通知服务更新
@@ -1226,6 +1236,7 @@ public class SettingsActivity extends AppCompatActivity {
         intent.setAction("UPDATE_CLICK_APP");
         intent.putExtra("click_app_package", clickAppPackage);
         intent.putExtra("click_app_name", clickAppName);
+        intent.putExtra("click_app_class", clickAppClass);
         startService(intent);
     }
 
