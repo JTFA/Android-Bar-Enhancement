@@ -1165,6 +1165,12 @@ public class SettingsActivity extends AppCompatActivity {
      * 显示已安装应用列表供用户选择
      */
     private void showAppPicker() {
+        // 防止重复弹出
+        if (isAppPickerSelecting) {
+            return;
+        }
+        isAppPickerSelecting = true;
+        
         // 查询所有可启动的应用
         PackageManager pm = getPackageManager();
         Intent mainIntent = new Intent(Intent.ACTION_MAIN);
@@ -1192,27 +1198,28 @@ public class SettingsActivity extends AppCompatActivity {
             appClasses[i] = apps.get(i).activityInfo.name;
         }
         
-        // 找到当前选中项
+        // 找到当前选中项（使用本地变量复制，避免竞态条件）
+        final String currentPkg = clickAppPackage;
         int checkedItem = -1;
-        if (!TextUtils.isEmpty(clickAppPackage)) {
+        if (!TextUtils.isEmpty(currentPkg)) {
             for (int i = 0; i < appPackages.length; i++) {
-                if (appPackages[i].equals(clickAppPackage)) {
+                if (appPackages[i].equals(currentPkg)) {
                     checkedItem = i;
                     break;
                 }
             }
         }
         
-        AlertDialog dialog = new AlertDialog.Builder(this)
+        // 先创建对话框（不 show），注册好所有回调再显示
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle(R.string.select_app)
                 .setSingleChoiceItems(appNames, checkedItem, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         // 防止重复触发（某些 Android 版本在 dismiss 时可能重入）
-                        if (isAppPickerSelecting) {
+                        if (!isAppPickerSelecting) {
                             return;
                         }
-                        isAppPickerSelecting = true;
                         
                         clickAppPackage = appPackages[which];
                         clickAppName = appNames[which];
@@ -1223,28 +1230,31 @@ public class SettingsActivity extends AppCompatActivity {
                         dialog.dismiss();
                     }
                 })
-                .setNegativeButton(R.string.cancel, null)
-                .show();
+                .setNegativeButton(R.string.cancel, null);
         
-        // 弹窗关闭时重置标记
+        AlertDialog dialog = builder.create();
+        
+        // 弹窗关闭时重置标记（在 show 之前注册，确保不会被遗漏）
         dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
             @Override
             public void onDismiss(DialogInterface d) {
                 isAppPickerSelecting = false;
             }
         });
+        
+        dialog.show();
     }
     
     /**
      * 保存单击打开应用设置并通知服务
      */
     private void saveClickAppSetting() {
-        // 保存到 SharedPreferences
+        // 保存到 SharedPreferences（使用 commit 而非 apply，确保同步写入）
         preferences.edit()
                 .putString(KEY_CLICK_APP_PACKAGE, clickAppPackage)
                 .putString(KEY_CLICK_APP_NAME, clickAppName)
                 .putString(KEY_CLICK_APP_CLASS, clickAppClass)
-                .apply();
+                .commit();
         
         // 通知服务更新
         Intent intent = new Intent(this, FloatWindowService.class);
