@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">小横条工具箱</string>
+    <string name="click_bar_action">单击提示条操作</string>
+    <string name="click_bar_action_desc">设置单击提示条时要打开的应用</string>
+    <string name="select_app">选择要打开的应用</string>
+    <string name="not_selected">未选择</string>
+    <string name="app_permission_title">读取应用列表</string>
+    <string name="app_permission_message">需要读取已安装应用列表来让您选择要打开的应用。请点击确认后选择应用。</string>
+    <string name="confirm">确认</string>
+    <string name="cancel">取消</string>
 </resources>

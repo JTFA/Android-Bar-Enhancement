@@ -2,6 +2,9 @@ package com.example.aiwindow;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.DialogInterface;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -11,12 +14,20 @@ import android.text.TextWatcher;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+
+import java.text.Collator;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * 设置页面 - AI 悬浮窗配置
@@ -50,6 +61,11 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_SHOW_BACK_BUTTON = "show_back_button"; // 显示后退按钮
     private static final String KEY_CLOSE_ON_OUTSIDE_CLICK = "close_on_outside_click"; // 点击窗口外关闭窗口
     private static final String KEY_BACK_PRIORITIZE_WEBVIEW = "back_prioritize_webview"; // 返回优先网页上一级
+    
+    // 单击提示条打开第三方应用
+    private static final String KEY_CLICK_APP_PACKAGE = "click_app_package";
+    private static final String KEY_CLICK_APP_NAME = "click_app_name";
+    private static final String KEY_APP_SELECTOR_SHOWN = "app_selector_first_time_shown";
     
     // 输入法避让设置
     private static final String KEY_KEYBOARD_OFFSET = "keyboard_offset";
@@ -103,6 +119,12 @@ public class SettingsActivity extends AppCompatActivity {
     private Switch switchShowBackButton; // 显示后退按钮开关
     private Switch switchCloseOnOutsideClick; // 点击窗口外关闭窗口开关
     private Switch switchBackPrioritizeWebview; // 侧边返回手势行为
+    
+    // 单击提示条打开第三方应用
+    private LinearLayout layoutSelectApp;
+    private TextView textViewSelectedApp;
+    private String clickAppPackage = "";
+    private String clickAppName = "";
     
     // 输入法避让控件
     private SeekBar seekKeyboardOffset;
@@ -215,6 +237,10 @@ public class SettingsActivity extends AppCompatActivity {
         
         // 侧边返回手势行为开关
         switchBackPrioritizeWebview = findViewById(R.id.switch_back_prioritize_webview);
+        
+        // 单击提示条打开第三方应用
+        layoutSelectApp = findViewById(R.id.layout_select_app);
+        textViewSelectedApp = findViewById(R.id.text_selected_app);
         
         // 输入法避让控件
         seekKeyboardOffset = findViewById(R.id.seek_keyboard_offset);
@@ -352,6 +378,15 @@ public class SettingsActivity extends AppCompatActivity {
         // 加载侧边返回手势设置
         boolean backPrioritizeWebview = preferences.getBoolean(KEY_BACK_PRIORITIZE_WEBVIEW, false);
         switchBackPrioritizeWebview.setChecked(backPrioritizeWebview);
+        
+        // 加载单击提示条打开的应用设置
+        clickAppPackage = preferences.getString(KEY_CLICK_APP_PACKAGE, "");
+        clickAppName = preferences.getString(KEY_CLICK_APP_NAME, "");
+        if (!TextUtils.isEmpty(clickAppName)) {
+            textViewSelectedApp.setText(clickAppName);
+        } else {
+            textViewSelectedApp.setText(R.string.not_selected);
+        }
         
         // 加载输入法避让设置
         int keyboardOffset = preferences.getInt(KEY_KEYBOARD_OFFSET, 397);
@@ -495,6 +530,10 @@ public class SettingsActivity extends AppCompatActivity {
         // 保存侧边返回手势设置
         editor.putBoolean(KEY_BACK_PRIORITIZE_WEBVIEW, switchBackPrioritizeWebview.isChecked());
         
+        // 保存单击提示条打开的应用设置
+        editor.putString(KEY_CLICK_APP_PACKAGE, clickAppPackage);
+        editor.putString(KEY_CLICK_APP_NAME, clickAppName);
+        
         // 保存输入法避让设置
         editor.putInt(KEY_KEYBOARD_OFFSET, seekKeyboardOffset.getProgress());
         editor.putInt(KEY_KEYBOARD_ANIM_DURATION, seekKeyboardAnimDuration.getProgress());
@@ -591,6 +630,8 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("back_prioritize_webview", switchBackPrioritizeWebview.isChecked()); // 侧边返回手势行为
         sizeIntent.putExtra("overlay_color", editOverlayColor.getText().toString().trim());
         sizeIntent.putExtra("overlay_alpha", seekOverlayAlpha.getProgress());
+        sizeIntent.putExtra("click_app_package", clickAppPackage);
+        sizeIntent.putExtra("click_app_name", clickAppName);
         startService(sizeIntent);
         
         // 更新输入法避让设置
@@ -951,6 +992,20 @@ public class SettingsActivity extends AppCompatActivity {
                 saveSettings();
             }
         });
+        
+        // 选择要打开的应用
+        layoutSelectApp.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // 首次打开时弹出权限说明
+                boolean firstTimeShown = preferences.getBoolean(KEY_APP_SELECTOR_SHOWN, false);
+                if (!firstTimeShown) {
+                    showPermissionExplanation();
+                } else {
+                    showAppPicker();
+                }
+            }
+        });
     }
     
     /**
@@ -1025,6 +1080,8 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("back_prioritize_webview", switchBackPrioritizeWebview.isChecked()); // 侧边返回手势行为
         sizeIntent.putExtra("overlay_color", editOverlayColor.getText().toString().trim());
         sizeIntent.putExtra("overlay_alpha", seekOverlayAlpha.getProgress());
+        sizeIntent.putExtra("click_app_package", clickAppPackage);
+        sizeIntent.putExtra("click_app_name", clickAppName);
         startService(sizeIntent);
         
         // 更新输入法避让设置
@@ -1074,6 +1131,101 @@ public class SettingsActivity extends AppCompatActivity {
         Intent intent = new Intent(this, FloatWindowService.class);
         intent.setAction("UPDATE_STYLE");
         intent.putExtra("show_pressed_preview", true);
+        startService(intent);
+    }
+    
+    /**
+     * 显示应用读取权限说明（首次打开时调用）
+     */
+    private void showPermissionExplanation() {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.app_permission_title)
+                .setMessage(R.string.app_permission_message)
+                .setPositiveButton(R.string.confirm, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        // 标记已显示过权限说明
+                        preferences.edit().putBoolean(KEY_APP_SELECTOR_SHOWN, true).apply();
+                        // 打开应用选择器
+                        showAppPicker();
+                    }
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+    
+    /**
+     * 显示已安装应用列表供用户选择
+     */
+    private void showAppPicker() {
+        // 查询所有可启动的应用
+        PackageManager pm = getPackageManager();
+        Intent mainIntent = new Intent(Intent.ACTION_MAIN);
+        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+        List<ResolveInfo> apps = pm.queryIntentActivities(mainIntent, 0);
+        
+        // 按应用名排序（使用中文排序器，中文按拼音首字母排列）
+        final Collator collator = Collator.getInstance(java.util.Locale.CHINESE);
+        Collections.sort(apps, new Comparator<ResolveInfo>() {
+            @Override
+            public int compare(ResolveInfo a, ResolveInfo b) {
+                String labelA = a.loadLabel(pm).toString();
+                String labelB = b.loadLabel(pm).toString();
+                return collator.compare(labelA, labelB);
+            }
+        });
+        
+        // 准备列表数据
+        final String[] appNames = new String[apps.size()];
+        final String[] appPackages = new String[apps.size()];
+        for (int i = 0; i < apps.size(); i++) {
+            appNames[i] = apps.get(i).loadLabel(pm).toString();
+            appPackages[i] = apps.get(i).activityInfo.packageName;
+        }
+        
+        // 找到当前选中项
+        int checkedItem = -1;
+        if (!TextUtils.isEmpty(clickAppPackage)) {
+            for (int i = 0; i < appPackages.length; i++) {
+                if (appPackages[i].equals(clickAppPackage)) {
+                    checkedItem = i;
+                    break;
+                }
+            }
+        }
+        
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.select_app)
+                .setSingleChoiceItems(appNames, checkedItem, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        clickAppPackage = appPackages[which];
+                        clickAppName = appNames[which];
+                        textViewSelectedApp.setText(clickAppName);
+                        // 保存并通知服务
+                        saveClickAppSetting();
+                        dialog.dismiss();
+                    }
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+    
+    /**
+     * 保存单击打开应用设置并通知服务
+     */
+    private void saveClickAppSetting() {
+        // 保存到 SharedPreferences
+        preferences.edit()
+                .putString(KEY_CLICK_APP_PACKAGE, clickAppPackage)
+                .putString(KEY_CLICK_APP_NAME, clickAppName)
+                .apply();
+        
+        // 通知服务更新
+        Intent intent = new Intent(this, FloatWindowService.class);
+        intent.setAction("UPDATE_CLICK_APP");
+        intent.putExtra("click_app_package", clickAppPackage);
+        intent.putExtra("click_app_name", clickAppName);
         startService(intent);
     }
 

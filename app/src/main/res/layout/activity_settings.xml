@@ -628,6 +628,63 @@
             android:background="#DDDDDD"
             android:layout_marginBottom="24dp" />
 
+        <!-- ===== 单击提示条操作设置 ===== -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/click_bar_action"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/click_bar_action_desc"
+            android:textSize="12sp"
+            android:textColor="#999999"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 已选应用显示区域（可点击） -->
+        <LinearLayout
+            android:id="@+id/layout_select_app"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@android:drawable/edit_text"
+            android:padding="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginBottom="24dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/select_app"
+                android:textSize="14sp"
+                android:textColor="#666666" />
+
+            <TextView
+                android:id="@+id/text_selected_app"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/not_selected"
+                android:textSize="14sp"
+                android:textColor="#333333"
+                android:gravity="end" />
+
+        </LinearLayout>
+
+        <!-- 分隔线 -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#DDDDDD"
+            android:layout_marginBottom="24dp" />
+
         <!-- 输入法避让设置 -->
         <TextView
             android:layout_width="wrap_content"

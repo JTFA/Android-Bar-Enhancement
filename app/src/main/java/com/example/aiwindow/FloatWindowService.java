@@ -154,6 +154,10 @@ public class FloatWindowService extends Service {
     // 返回上一级按钮引用（用于在页面加载后更新状态）
     private ImageView backButtonRef;
     
+    // 单击提示条打开第三方应用
+    private String clickAppPackage = "";
+    private String clickAppName = "";
+    
     // 点击窗口外关闭窗口设置
     private boolean closeOnOutsideClick = true; // 默认开启
     
@@ -453,6 +457,13 @@ public class FloatWindowService extends Service {
             Log.d(TAG, "点击窗口外关闭窗口设置已更新: " + closeOnOutsideClick);
             backPrioritizeWebview = backPrioritize;
             Log.d(TAG, "侧边返回手势设置已更新: " + backPrioritizeWebview);
+            
+            // 单击提示条打开的应用设置
+            if (intent.hasExtra("click_app_package")) {
+                clickAppPackage = intent.getStringExtra("click_app_package");
+                clickAppName = intent.getStringExtra("click_app_name");
+                Log.d(TAG, "单击打开应用已更新: " + clickAppName + " (" + clickAppPackage + ")");
+            }
         }
         // 处理输入法避让设置更新
         else if (intent != null && "UPDATE_KEYBOARD_SETTINGS".equals(intent.getAction())) {
@@ -469,6 +480,14 @@ public class FloatWindowService extends Service {
         else if (intent != null && "UPDATE_AI_URL".equals(intent.getAction())) {
             String aiUrl = intent.getStringExtra("ai_url");
             updateAiUrl(aiUrl);
+        }
+        // 处理单击打开应用设置更新
+        else if (intent != null && "UPDATE_CLICK_APP".equals(intent.getAction())) {
+            if (intent.hasExtra("click_app_package")) {
+                clickAppPackage = intent.getStringExtra("click_app_package");
+                clickAppName = intent.getStringExtra("click_app_name");
+                Log.d(TAG, "单击打开应用设置已更新: " + clickAppName + " (" + clickAppPackage + ")");
+            }
         }
         return START_STICKY; // 服务被杀死后自动重启
     }
@@ -724,11 +743,11 @@ public class FloatWindowService extends Service {
             }
         });
         
-        // 可选：添加点击反馈
+        // 单击提示条：打开已选择的第三方应用
         bar.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Toast.makeText(FloatWindowService.this, "提示条被点击", Toast.LENGTH_SHORT).show();
+                launchClickApp();
             }
         });
         
@@ -1144,6 +1163,29 @@ public class FloatWindowService extends Service {
         
         // 展开 AI 对话窗口
         expandToAiWindow();
+    }
+    
+    /**
+     * 单击提示条：打开已选择的第三方应用
+     */
+    private void launchClickApp() {
+        if (TextUtils.isEmpty(clickAppPackage)) {
+            Log.d(TAG, "未选择要打开的应用");
+            return;
+        }
+        
+        try {
+            Intent launchIntent = getPackageManager().getLaunchIntentForPackage(clickAppPackage);
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+                startActivity(launchIntent);
+                Log.d(TAG, "已打开应用: " + clickAppName);
+            } else {
+                Log.e(TAG, "无法获取启动 Intent，包名: " + clickAppPackage);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "打开应用失败: " + clickAppName, e);
+        }
     }
     
     /**
@@ -4789,6 +4831,10 @@ public class FloatWindowService extends Service {
             
             // 加载侧边返回手势设置
             backPrioritizeWebview = prefs.getBoolean("back_prioritize_webview", true);
+            
+            // 加载单击提示条打开的应用设置
+            clickAppPackage = prefs.getString("click_app_package", "");
+            clickAppName = prefs.getString("click_app_name", "");
             
             // 加载动画速度
             animationDuration = prefs.getInt("anim_duration", animationDuration);
