@@ -3394,12 +3394,12 @@ public class FloatWindowService extends Service {
             View shortcutView = createShortcutWindowView();
             barContainer.addView(shortcutView);
             
-            // 获取内容容器
+            // 获取内容容器（createShortcutWindowView 已设置实际高度）
             FrameLayout rootLayout = (FrameLayout) shortcutView;
             View contentContainer = rootLayout.getChildAt(0);
             FrameLayout.LayoutParams contentLp = (FrameLayout.LayoutParams) contentContainer.getLayoutParams();
-            final int contentTargetWidth = dpToPx(shortcutWindowWidth);
-            final int contentTargetHeight = dpToPx(shortcutWindowHeight);
+            final int contentTargetWidth = contentLp.width;
+            final int contentTargetHeight = contentLp.height;
             
             // 初始设为目标尺寸，用 scale 缩放
             contentLp.width = contentTargetWidth;
@@ -3519,6 +3519,7 @@ public class FloatWindowService extends Service {
     
     /**
      * 创建快捷方式窗口视图
+     * 高度优先以图标行数所占高度为准，超过最大高度时限制高度并启用滑动
      */
     private View createShortcutWindowView() {
         // rootLayout: 全屏透明
@@ -3563,11 +3564,32 @@ public class FloatWindowService extends Service {
             }
         });
         
-        // contentContainer: 居中显示快捷方式
+        // 先创建 GridLayout 并添加快捷方式，以便测量实际需要的高度
+        android.widget.GridLayout gridLayout = new android.widget.GridLayout(this);
+        gridLayout.setColumnCount(4);
+        gridLayout.setRowCount(android.widget.GridLayout.UNDEFINED);
+        gridLayout.setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12));
+        
+        java.util.ArrayList<ShortcutItem> shortcuts = loadShortcutList();
+        for (final ShortcutItem item : shortcuts) {
+            View cell = createShortcutCell(item);
+            gridLayout.addView(cell);
+        }
+        
+        // 测量 GridLayout 的自然高度
+        int gridWidthMeasure = dpToPx(shortcutWindowWidth);
+        gridLayout.measure(
+                View.MeasureSpec.makeMeasureSpec(gridWidthMeasure, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int contentHeight = gridLayout.getMeasuredHeight();
+        int maxHeight = dpToPx(shortcutWindowHeight);
+        int actualHeight = Math.min(contentHeight, maxHeight);
+        
+        // contentContainer: 居中显示快捷方式，高度取实际计算值
         FrameLayout contentContainer = new FrameLayout(this);
         FrameLayout.LayoutParams containerParams = new FrameLayout.LayoutParams(
                 dpToPx(shortcutWindowWidth),
-                dpToPx(shortcutWindowHeight));
+                actualHeight);
         containerParams.gravity = Gravity.CENTER;
         containerParams.leftMargin = 0;
         containerParams.topMargin = shortcutWindowPositionY;
@@ -3605,58 +3627,26 @@ public class FloatWindowService extends Service {
             }
         }
         
-//        // 标题栏
-//        TextView titleBar = new TextView(this);
-//        FrameLayout.LayoutParams titleParams = new FrameLayout.LayoutParams(
-//                FrameLayout.LayoutParams.MATCH_PARENT,
-//                dpToPx(40));
-//        titleParams.gravity = Gravity.TOP;
-//        titleBar.setLayoutParams(titleParams);
-//        titleBar.setText("快捷方式");
-//        titleBar.setTextSize(15);
-//        titleBar.setGravity(Gravity.CENTER);
-//        titleBar.setTextColor(0xFF666666);
-//        titleBar.setPadding(0, dpToPx(8), 0, dpToPx(4));
-//        contentContainer.addView(titleBar);
-        
-//        // 关闭按钮
-//        ImageView closeButton = new ImageView(this);
-//        closeButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
-//        closeButton.setColorFilter(Color.parseColor("#666666"));
-//        closeButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-//        closeButton.setPadding(dpToPx(4), dpToPx(4), dpToPx(4), dpToPx(4));
-//        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(dpToPx(28), dpToPx(28));
-//        closeParams.gravity = Gravity.TOP | Gravity.END;
-//        closeParams.setMargins(0, dpToPx(6), dpToPx(8), 0);
-//        closeButton.setLayoutParams(closeParams);
-//        closeButton.setOnClickListener(v -> collapseToBottomBar());
-//        contentContainer.addView(closeButton);
-//
-//        // 分隔线
-//        View divider = new View(this);
-//        FrameLayout.LayoutParams divParams = new FrameLayout.LayoutParams(
-//                FrameLayout.LayoutParams.MATCH_PARENT, 1);
-//        divParams.setMargins(dpToPx(16), dpToPx(40), dpToPx(16), 0);
-//        divider.setLayoutParams(divParams);
-//        divider.setBackgroundColor(0xFFEEEEEE);
-//        contentContainer.addView(divider);
-        
-        // GridLayout 显示快捷方式
-        android.widget.GridLayout gridLayout = new android.widget.GridLayout(this);
-        gridLayout.setColumnCount(4);
-        gridLayout.setRowCount(android.widget.GridLayout.UNDEFINED);
-        gridLayout.setPadding(dpToPx(12), dpToPx(50), dpToPx(12), dpToPx(12));
+        // GridLayout 高度改为 WRAP_CONTENT，使其自然扩展
         FrameLayout.LayoutParams gridParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT);
+                FrameLayout.LayoutParams.WRAP_CONTENT);
         gridLayout.setLayoutParams(gridParams);
         
-        java.util.ArrayList<ShortcutItem> shortcuts = loadShortcutList();
-        for (final ShortcutItem item : shortcuts) {
-            View cell = createShortcutCell(item);
-            gridLayout.addView(cell);
+        // 当内容超过最大高度时，包裹在 ScrollView 中实现滑动
+        if (contentHeight > maxHeight) {
+            android.widget.ScrollView scrollView = new android.widget.ScrollView(this);
+            scrollView.setLayoutParams(new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT));
+            scrollView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+            scrollView.setVerticalScrollBarEnabled(false);
+            scrollView.setClipToOutline(true);
+            scrollView.addView(gridLayout);
+            contentContainer.addView(scrollView);
+        } else {
+            contentContainer.addView(gridLayout);
         }
-        contentContainer.addView(gridLayout);
         
         rootLayout.addView(contentContainer);
         return rootLayout;

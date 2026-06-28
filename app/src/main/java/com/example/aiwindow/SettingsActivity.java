@@ -501,7 +501,7 @@ public class SettingsActivity extends AppCompatActivity {
         
         int shortcutWinHeight = preferences.getInt(KEY_SHORTCUT_WINDOW_HEIGHT, 350);
         seekShortcutWindowHeight.setProgress(shortcutWinHeight);
-        textShortcutWindowHeight.setText("快捷窗口高度: " + shortcutWinHeight + "dp");
+        textShortcutWindowHeight.setText("快捷窗口最大高度: " + shortcutWinHeight + "dp");
         
         int shortcutWinPosY = preferences.getInt(KEY_SHORTCUT_WINDOW_POSITION_Y, 231);
         seekShortcutWindowPositionY.setProgress(shortcutWinPosY);
@@ -1123,7 +1123,7 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutWindowHeight.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                textShortcutWindowHeight.setText("快捷窗口高度: " + progress + "dp");
+                textShortcutWindowHeight.setText("快捷窗口最大高度: " + progress + "dp");
                 applyCurrentSettings();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}

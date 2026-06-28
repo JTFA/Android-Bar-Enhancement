@@ -873,7 +873,7 @@
             android:id="@+id/text_shortcut_window_height"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="快捷窗口高度: 350dp"
+            android:text="快捷窗口最大高度: 350dp"
             android:textSize="14sp"
             android:textColor="#666666"
             android:layout_marginBottom="8dp" />

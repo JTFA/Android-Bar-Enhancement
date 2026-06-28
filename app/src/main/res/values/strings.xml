@@ -15,7 +15,7 @@
     <string name="shortcut_window_desc">双击提示条打开快捷方式窗口</string>
     <string name="shortcut_window_size">快捷方式窗口大小</string>
     <string name="shortcut_window_width">快捷窗口宽度 (dp)</string>
-    <string name="shortcut_window_height">快捷窗口高度 (dp)</string>
+    <string name="shortcut_window_height">快捷窗口最大高度 (dp)</string>
     <string name="shortcut_window_position_y">快捷窗口位置 Y</string>
     <string name="shortcut_window_border">快捷窗口边框</string>
     <string name="shortcut_window_border_width">边框宽度</string>
