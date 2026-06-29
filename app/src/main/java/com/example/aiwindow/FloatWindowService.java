@@ -3477,7 +3477,7 @@ public class FloatWindowService extends Service {
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             @Override
             public void doFrame(long frameTimeNanos) {
-                float timeProgress = (float) (frameTimeNanos - adjustedStartTime) / 1000000f / shortcutAnimDuration;
+                float timeProgress = (float) (frameTimeNanos - adjustedStartTime) / 1000000f / animationDuration;
                 float progress = Math.min(timeProgress, 1.0f);
                 float easedProgress = animInterpolator.getInterpolation(progress);
                 
