@@ -1326,102 +1326,135 @@ public class FloatWindowService extends Service {
                 windowManager.updateViewLayout(barContainer, barLayoutParams);
                 Log.d(TAG, "[EXPAND_DEBUG] barContainer 全屏: w=" + requiredWidth + " h=" + requiredHeight);
                 
-                // ===== 现在替换视图内容 =====
-                barContainer.removeAllViews();
-                View aiWindowView = createAiWindowView();
-                barContainer.addView(aiWindowView);
-                
-                // 获取 contentContainer 并设为目标（全屏）尺寸，通过 scale 实现视觉缩小
-                View contentContainer = ((FrameLayout) ((FrameLayout) aiWindowView).getChildAt(1));
-                FrameLayout.LayoutParams contentLp = (FrameLayout.LayoutParams) contentContainer.getLayoutParams();
-                final int contentTargetWidth = contentLp.width;
-                final int contentTargetHeight = contentLp.height;
-                
-                int effectiveStartWidth = (startWidth == ViewGroup.LayoutParams.MATCH_PARENT || startWidth <= 0) ? screenWidth : startWidth;
-                final int contentStartWidth = effectiveStartWidth;
-                final int contentStartHeight = startHeight;
-                // content 立即设为目标尺寸，通过初始 scale 呈现提示条大小的视觉效果
-                contentLp.width = contentTargetWidth;
-                contentLp.height = contentTargetHeight;
-                contentContainer.setLayoutParams(contentLp);
-                
-                // ===== 设置初始 transform（scaleX/scaleY/translationY）使 content 视觉上位于提示条位置 =====
-                final float initScaleX = (float) contentStartWidth / contentTargetWidth;
-                final float initScaleY = (float) contentStartHeight / contentTargetHeight;
-                // translationY：在 CENTER 坐标系下将 content 中心移到 bar 中心
-                final float initTranslationX = startX - 2 * contentLp.leftMargin;
-                final float initTranslationY = startY - 2 * contentLp.topMargin;
-                
-                contentContainer.setPivotX(contentTargetWidth / 2f);
-                contentContainer.setPivotY(contentTargetHeight / 2f);
-                contentContainer.setScaleX(initScaleX);
-                contentContainer.setScaleY(initScaleY);
-                contentContainer.setTranslationX(initTranslationX);
-                contentContainer.setTranslationY(initTranslationY);
-                contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-                
-                // ===== 设置初始圆角为提示条的圆角，动画中过渡到 AI 窗口圆角 =====
-                ((GradientDrawable) contentContainer.getBackground()).setCornerRadius(dpToPx(currentCornerRadius));
-                if (contentContainer.getForeground() instanceof GradientDrawable) {
-                    ((GradientDrawable) contentContainer.getForeground()).setCornerRadius(dpToPx(currentCornerRadius));
-                }
-                
-                // 记录基础 margins（用于键盘避让动画）
-                baseLeftMargin = contentLp.leftMargin;
-                baseTopMargin = contentLp.topMargin;
-                baseRightMargin = contentLp.rightMargin;
-                baseBottomMargin = contentLp.bottomMargin;
-                
-                isAiWindowExpanded = true;
-                
-                // 提前启动代理 Activity，动画过程中即可响应返回手势
-                startWindowHostActivity();
-                
-                isKeyboardVisible = false;
-                
-                // WebView 透明度初始为 0，展开动画中渐入
-                if (aiWebView != null) {
-                    aiWebView.setAlpha(0f);
-                }
-                
-                // 圆角插值参数（从提示条圆角过渡到 AI 窗口圆角）
-                final int startCornerRadiusPx = dpToPx(currentCornerRadius);
-                final int targetCornerRadiusPx = dpToPx(windowRadius);
-                
-                // 背景遮罩先渐入完成，再执行窗口展开动画（避免两者并行导致帧率下降）
-                if (overlayView != null) {
-                    final View ov = overlayView;
-                    final float targetAlpha = overlayAlpha / 100.0f;
-                    final long startTime = System.currentTimeMillis();
-                    ov.setAlpha(0f);
-                    isOverlayAnimating = true;
-                    Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
-                        @Override
-                        public void doFrame(long frameTimeNanos) {
-                            if (!isOverlayAnimating) return;
-                            long elapsed = System.currentTimeMillis() - startTime;
-                            float progress = Math.min((float) elapsed / overlayAnimDuration, 1.0f);
-                            float eased = easeOutCubic(progress);
-                            ov.setAlpha(targetAlpha * eased);
-                            if (progress < 1.0f) {
-                                Choreographer.getInstance().postFrameCallback(this);
-                            } else {
-                                // 遮罩渐变完成，执行窗口展开动画
-                                isOverlayAnimating = false;
-                                performSmoothExpandAnimation(
-                                    contentContainer,
-                                    startCornerRadiusPx, targetCornerRadiusPx
-                                );
-                            }
+                // ===== 关键修复：嵌套 OnGlobalLayoutListener 确保两层布局都完成 =====
+                // 第一层：等待 barContainer 完成全屏布局
+                // 第二层：等待 contentContainer 完成布局后再设置 translation 和启动动画
+                // 避免：1) barContainer 仍处于旧尺寸时就添加视图
+                //      2) contentContainer 的自然位置未确定时就计算视觉位置
+                barContainer.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                    @Override
+                    public void onGlobalLayout() {
+                        // 校验：必须等 barContainer 达到全屏尺寸，防止被 collapse 残留的 layout 事件提前触发
+                        if (barContainer.getWidth() < screenWidth || barContainer.getHeight() < screenHeight) {
+                            Log.d(TAG, "[EXPAND_DEBUG] barContainer 尚未达到全屏尺寸(w=" + barContainer.getWidth() + " h=" + barContainer.getHeight() + ")，等待...");
+                            return;
                         }
-                    });
-                } else {
-                    // 没有背景遮罩，直接执行展开动画
-                    performSmoothExpandAnimation(
-                        contentContainer,
-                        startCornerRadiusPx, targetCornerRadiusPx
-                    );
-                }
+                        barContainer.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                        Log.d(TAG, "[EXPAND_DEBUG] barContainer 全屏布局完成，添加视图");
+                        
+                        try {
+                            // ===== 替换视图内容 =====
+                            barContainer.removeAllViews();
+                            View aiWindowView = createAiWindowView();
+                            barContainer.addView(aiWindowView);
+                            
+                            // 获取 contentContainer 并设为目标尺寸
+                            View contentContainer = ((FrameLayout) ((FrameLayout) aiWindowView).getChildAt(1));
+                            FrameLayout.LayoutParams contentLp = (FrameLayout.LayoutParams) contentContainer.getLayoutParams();
+                            final int contentTargetWidth = contentLp.width;
+                            final int contentTargetHeight = contentLp.height;
+                            
+                            int effectiveStartWidth = (startWidth == ViewGroup.LayoutParams.MATCH_PARENT || startWidth <= 0) ? screenWidth : startWidth;
+                            final int contentStartWidth = effectiveStartWidth;
+                            // content 立即设为目标尺寸，通过初始 scale 呈现提示条大小的视觉效果
+                            contentLp.width = contentTargetWidth;
+                            contentLp.height = contentTargetHeight;
+                            contentContainer.setLayoutParams(contentLp);
+                            
+                            // ===== 先设置 scale 和 pivot（不依赖布局位置），待 content 布局完成后再设 translation =====
+                            final float initScaleX = (float) contentStartWidth / contentTargetWidth;
+                            final float initScaleY = (float) dpToPx(currentHeight) / contentTargetHeight;
+                            final float initTranslationX = startX - 2 * contentLp.leftMargin;
+                            final float initTranslationY = startY - 2 * contentLp.topMargin;
+                            Log.d(TAG, "[EXPAND_DEBUG] initTrans: (" + initTranslationX + "," + initTranslationY + ")"
+                                    + " start=(" + startX + "," + startY + ")"
+                                    + " margin=(" + contentLp.leftMargin + "," + contentLp.topMargin + ")"
+                                    + " contentSize=" + contentTargetWidth + "x" + contentTargetHeight
+                                    + " initScale=" + initScaleX + "x" + initScaleY);
+                            
+                            contentContainer.setPivotX(contentTargetWidth / 2f);
+                            contentContainer.setPivotY(contentTargetHeight / 2f);
+                            contentContainer.setScaleX(initScaleX);
+                            contentContainer.setScaleY(initScaleY);
+                            contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                            
+                            // ===== 设置初始圆角 =====
+                            ((GradientDrawable) contentContainer.getBackground()).setCornerRadius(dpToPx(currentCornerRadius));
+                            if (contentContainer.getForeground() instanceof GradientDrawable) {
+                                ((GradientDrawable) contentContainer.getForeground()).setCornerRadius(dpToPx(currentCornerRadius));
+                            }
+                            
+                            // 记录基础 margins
+                            baseLeftMargin = contentLp.leftMargin;
+                            baseTopMargin = contentLp.topMargin;
+                            baseRightMargin = contentLp.rightMargin;
+                            baseBottomMargin = contentLp.bottomMargin;
+                            
+                            isAiWindowExpanded = true;
+                            startWindowHostActivity();
+                            isKeyboardVisible = false;
+                            if (aiWebView != null) {
+                                aiWebView.setAlpha(0f);
+                            }
+                            
+                            // ===== 第二层 listener：等待 contentContainer 布局完成后设置 translation =====
+                            final View cc = contentContainer;
+                            
+                            cc.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                                @Override
+                                public void onGlobalLayout() {
+                                    cc.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                                    Log.d(TAG, "[EXPAND_DEBUG] contentContainer 布局完成，设置 translation 并启动动画"
+                                            + " contentTop=" + cc.getTop() + " contentLeft=" + cc.getLeft());
+                                    
+                                    // 布局完成后设置 translation（此时自然位置已确定）
+                                    cc.setTranslationX(initTranslationX);
+                                    cc.setTranslationY(initTranslationY);
+                                    
+                                    final int startCornerRadiusPx = dpToPx(currentCornerRadius);
+                                    final int targetCornerRadiusPx = dpToPx(windowRadius);
+                                    
+                                    // 背景遮罩先渐入完成，再执行窗口展开动画
+                                    if (overlayView != null) {
+                                        final View ov = overlayView;
+                                        final float targetAlpha = overlayAlpha / 100.0f;
+                                        final long startTime = System.currentTimeMillis();
+                                        ov.setAlpha(0f);
+                                        isOverlayAnimating = true;
+                                        Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+                                            @Override
+                                            public void doFrame(long frameTimeNanos) {
+                                                if (!isOverlayAnimating) return;
+                                                long elapsed = System.currentTimeMillis() - startTime;
+                                                float progress = Math.min((float) elapsed / overlayAnimDuration, 1.0f);
+                                                float eased = easeOutCubic(progress);
+                                                ov.setAlpha(targetAlpha * eased);
+                                                if (progress < 1.0f) {
+                                                    Choreographer.getInstance().postFrameCallback(this);
+                                                } else {
+                                                    isOverlayAnimating = false;
+                                                    performSmoothExpandAnimation(
+                                                        cc,
+                                                        startCornerRadiusPx, targetCornerRadiusPx
+                                                    );
+                                                }
+                                            }
+                                        });
+                                    } else {
+                                        performSmoothExpandAnimation(
+                                            cc,
+                                            startCornerRadiusPx, targetCornerRadiusPx
+                                        );
+                                    }
+                                }
+                            });
+                        } catch (Exception e) {
+                            Log.e(TAG, "[EXPAND_DEBUG] 布局回调内展开失败", e);
+                            isOverlayAnimating = false;
+                            e.printStackTrace();
+                        }
+                    }
+                });
                 
             } catch (Exception e) {
                 Log.e(TAG, "expand failed", e);
@@ -3388,71 +3421,92 @@ public class FloatWindowService extends Service {
             barLayoutParams.width = requiredWidth;
             barLayoutParams.height = requiredHeight;
             windowManager.updateViewLayout(barContainer, barLayoutParams);
+            Log.d(TAG, "[SHORTCUT_EXPAND_DEBUG] barContainer 全屏: w=" + requiredWidth + " h=" + requiredHeight);
             
-            // 替换视图
-            barContainer.removeAllViews();
-            View shortcutView = createShortcutWindowView();
-            barContainer.addView(shortcutView);
-            
-            // 获取内容容器（createShortcutWindowView 已设置实际高度）
-            FrameLayout rootLayout = (FrameLayout) shortcutView;
-            View contentContainer = rootLayout.getChildAt(0);
-            FrameLayout.LayoutParams contentLp = (FrameLayout.LayoutParams) contentContainer.getLayoutParams();
-            final int contentTargetWidth = contentLp.width;
-            final int contentTargetHeight = contentLp.height;
-            
-            // 初始设为目标尺寸，用 scale 缩放
-            contentLp.width = contentTargetWidth;
-            contentLp.height = contentTargetHeight;
-            contentContainer.setLayoutParams(contentLp);
-            
-            int effectiveStartWidth = (currentWidth == ViewGroup.LayoutParams.MATCH_PARENT || currentWidth <= 0) ? screenWidth : currentWidth;
-            final float initScaleX = (float) effectiveStartWidth / contentTargetWidth;
-            final float initScaleY = (float) dpToPx(currentHeight) / contentTargetHeight;
-            final float initTranslationX = startX - 2 * contentLp.leftMargin;
-            final float initTranslationY = startY - 2 * contentLp.topMargin;
-            
-            contentContainer.setPivotX(contentTargetWidth / 2f);
-            contentContainer.setPivotY(contentTargetHeight / 2f);
-            contentContainer.setScaleX(initScaleX);
-            contentContainer.setScaleY(initScaleY);
-            contentContainer.setTranslationX(initTranslationX);
-            contentContainer.setTranslationY(initTranslationY);
-            contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-            
-            // 设置初始圆角
-            ((GradientDrawable) contentContainer.getBackground()).setCornerRadius(dpToPx(currentCornerRadius));
-            if (contentContainer.getForeground() instanceof GradientDrawable) {
-                ((GradientDrawable) contentContainer.getForeground()).setCornerRadius(dpToPx(currentCornerRadius));
-            }
-            
-            isShortcutWindowExpanded = true;
-            
-            // 提前启动代理 Activity，展开过程中即可响应返回手势
-            startWindowHostActivity();
-            
-            // 淡入背景遮罩
-            if (overlayView != null) {
-                final View ov = overlayView;
-                final float targetAlpha = overlayAlpha / 100.0f;
-                final long startTime = System.currentTimeMillis();
-                ov.setAlpha(0f);
-                Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
-                    @Override
-                    public void doFrame(long frameTimeNanos) {
-                        long elapsed = System.currentTimeMillis() - startTime;
-                        float progress = Math.min((float) elapsed / overlayAnimDuration, 1.0f);
-                        ov.setAlpha(targetAlpha * easeOutCubic(progress));
-                        if (progress < 1.0f) {
-                            Choreographer.getInstance().postFrameCallback(this);
+            // ===== 关键修复：等待 barContainer 布局完成后再设置变换和启动动画 =====
+            barContainer.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                @Override
+                public void onGlobalLayout() {
+                    barContainer.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                    Log.d(TAG, "[SHORTCUT_EXPAND_DEBUG] barContainer 布局完成，开始设置变换");
+                    
+                    try {
+                        // 替换视图
+                        barContainer.removeAllViews();
+                        View shortcutView = createShortcutWindowView();
+                        barContainer.addView(shortcutView);
+                        
+                        // 获取内容容器（createShortcutWindowView 已设置实际高度）
+                        FrameLayout rootLayout = (FrameLayout) shortcutView;
+                        View contentContainer = rootLayout.getChildAt(0);
+                        FrameLayout.LayoutParams contentLp = (FrameLayout.LayoutParams) contentContainer.getLayoutParams();
+                        final int contentTargetWidth = contentLp.width;
+                        final int contentTargetHeight = contentLp.height;
+                        
+                        // 初始设为目标尺寸，用 scale 缩放
+                        contentLp.width = contentTargetWidth;
+                        contentLp.height = contentTargetHeight;
+                        contentContainer.setLayoutParams(contentLp);
+                        
+                        int effectiveStartWidth = (currentWidth == ViewGroup.LayoutParams.MATCH_PARENT || currentWidth <= 0) ? screenWidth : currentWidth;
+                        final float initScaleX = (float) effectiveStartWidth / contentTargetWidth;
+                        final float initScaleY = (float) dpToPx(currentHeight) / contentTargetHeight;
+                        final float initTranslationX = startX - 2 * contentLp.leftMargin;
+                        final float initTranslationY = startY - 2 * contentLp.topMargin;
+                        Log.d(TAG, "[SHORTCUT_EXPAND_DEBUG] initTrans: (" + initTranslationX + "," + initTranslationY + ")"
+                                + " start=(" + startX + "," + startY + ")"
+                                + " margin=(" + contentLp.leftMargin + "," + contentLp.topMargin + ")"
+                                + " contentSize=" + contentTargetWidth + "x" + contentTargetHeight
+                                + " initScale=" + initScaleX + "x" + initScaleY);
+                        
+                        contentContainer.setPivotX(contentTargetWidth / 2f);
+                        contentContainer.setPivotY(contentTargetHeight / 2f);
+                        contentContainer.setScaleX(initScaleX);
+                        contentContainer.setScaleY(initScaleY);
+                        contentContainer.setTranslationX(initTranslationX);
+                        contentContainer.setTranslationY(initTranslationY);
+                        contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                        
+                        // 设置初始圆角
+                        ((GradientDrawable) contentContainer.getBackground()).setCornerRadius(dpToPx(currentCornerRadius));
+                        if (contentContainer.getForeground() instanceof GradientDrawable) {
+                            ((GradientDrawable) contentContainer.getForeground()).setCornerRadius(dpToPx(currentCornerRadius));
                         }
+                        
+                        isShortcutWindowExpanded = true;
+                        
+                        // 提前启动代理 Activity，展开过程中即可响应返回手势
+                        startWindowHostActivity();
+                        
+                        // 淡入背景遮罩
+                        if (overlayView != null) {
+                            final View ov = overlayView;
+                            final float targetAlpha = overlayAlpha / 100.0f;
+                            final long startTime = System.currentTimeMillis();
+                            ov.setAlpha(0f);
+                            Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+                                @Override
+                                public void doFrame(long frameTimeNanos) {
+                                    long elapsed = System.currentTimeMillis() - startTime;
+                                    float progress = Math.min((float) elapsed / overlayAnimDuration, 1.0f);
+                                    ov.setAlpha(targetAlpha * easeOutCubic(progress));
+                                    if (progress < 1.0f) {
+                                        Choreographer.getInstance().postFrameCallback(this);
+                                    }
+                                }
+                            });
+                        }
+                        
+                        // 执行展开动画（简化版）
+                        performShortcutExpandAnimation(contentContainer,
+                                dpToPx(currentCornerRadius), dpToPx(shortcutCornerRadius));
+                        
+                    } catch (Exception e) {
+                        Log.e(TAG, "[SHORTCUT_EXPAND_DEBUG] 布局回调内展开失败", e);
+                        isShortcutWindowExpanded = false;
                     }
-                });
-            }
-            
-            // 执行展开动画（简化版）
-            performShortcutExpandAnimation(contentContainer,
-                    dpToPx(currentCornerRadius), dpToPx(shortcutCornerRadius));
+                }
+            });
             
         } catch (Exception e) {
             Log.e(TAG, "展开快捷方式窗口失败", e);
