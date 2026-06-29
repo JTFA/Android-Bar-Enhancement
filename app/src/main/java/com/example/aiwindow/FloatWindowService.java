@@ -3585,6 +3585,10 @@ public class FloatWindowService extends Service {
         int maxHeight = dpToPx(shortcutWindowHeight);
         int actualHeight = Math.min(contentHeight, maxHeight);
         
+        // 计算调整后的Y位置，使窗口下边缘不随内容行数变化
+        // 当内容高度小于最大高度时，增大topMargin将窗口上移以保持下边缘固定
+        int adjustedTopMargin = shortcutWindowPositionY + (maxHeight - actualHeight) / 4;
+        
         // contentContainer: 居中显示快捷方式，高度取实际计算值
         FrameLayout contentContainer = new FrameLayout(this);
         FrameLayout.LayoutParams containerParams = new FrameLayout.LayoutParams(
@@ -3592,9 +3596,9 @@ public class FloatWindowService extends Service {
                 actualHeight);
         containerParams.gravity = Gravity.CENTER;
         containerParams.leftMargin = 0;
-        containerParams.topMargin = shortcutWindowPositionY;
+        containerParams.topMargin = adjustedTopMargin;
         containerParams.rightMargin = 0;
-        containerParams.bottomMargin = -shortcutWindowPositionY;
+        containerParams.bottomMargin = -adjustedTopMargin;
         contentContainer.setLayoutParams(containerParams);
         
         // 背景色
