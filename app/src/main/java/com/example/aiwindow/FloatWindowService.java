@@ -1361,7 +1361,8 @@ public class FloatWindowService extends Service {
                             contentLp.height = contentTargetHeight;
                             contentContainer.setLayoutParams(contentLp);
                             
-                            // ===== 先设置 scale 和 pivot（不依赖布局位置），待 content 布局完成后再设 translation =====
+                            // ===== 同时设置 scale, pivot 和 translation，避免先 setScale 后 setTranslation 的帧间隙 =====
+                            // 注意：setTranslationX/Y 在布局前设置是安全的，Android 会在布局完成后自动叠加到最终位置
                             final float initScaleX = (float) contentStartWidth / contentTargetWidth;
                             final float initScaleY = (float) dpToPx(currentHeight) / contentTargetHeight;
                             final float initTranslationX = startX - 2 * contentLp.leftMargin;
@@ -1376,7 +1377,13 @@ public class FloatWindowService extends Service {
                             contentContainer.setPivotY(contentTargetHeight / 2f);
                             contentContainer.setScaleX(initScaleX);
                             contentContainer.setScaleY(initScaleY);
+                            contentContainer.setTranslationX(initTranslationX);
+                            contentContainer.setTranslationY(initTranslationY);
                             contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                            Log.d(TAG, "[EXPAND_TRACE] scale/translation 已设置 at " + System.currentTimeMillis()
+                                    + " scale=" + initScaleX + "x" + initScaleY
+                                    + " trans=(" + initTranslationX + "," + initTranslationY + ")");
+                            animationSetTime = System.currentTimeMillis();
                             
                             // ===== 设置初始圆角 =====
                             ((GradientDrawable) contentContainer.getBackground()).setCornerRadius(dpToPx(currentCornerRadius));
@@ -1404,12 +1411,13 @@ public class FloatWindowService extends Service {
                                 @Override
                                 public void onGlobalLayout() {
                                     cc.getViewTreeObserver().removeOnGlobalLayoutListener(this);
-                                    Log.d(TAG, "[EXPAND_DEBUG] contentContainer 布局完成，设置 translation 并启动动画"
-                                            + " contentTop=" + cc.getTop() + " contentLeft=" + cc.getLeft());
+                                    Log.d(TAG, "[EXPAND_DEBUG] contentContainer 布局完成，启动动画"
+                                            + " contentTop=" + cc.getTop() + " contentLeft=" + cc.getLeft()
+                                            + " getX=" + cc.getX() + " getY=" + cc.getY()
+                                            + " scale=" + cc.getScaleX() + "x" + cc.getScaleY()
+                                            + " trans=(" + cc.getTranslationX() + "," + cc.getTranslationY() + ")");
                                     
-                                    // 布局完成后设置 translation（此时自然位置已确定）
-                                    cc.setTranslationX(initTranslationX);
-                                    cc.setTranslationY(initTranslationY);
+                                    // translation 已在首次 layout 完成后设置，此处不再重复设置
                                     
                                     final int startCornerRadiusPx = dpToPx(currentCornerRadius);
                                     final int targetCornerRadiusPx = dpToPx(windowRadius);
@@ -3199,6 +3207,8 @@ public class FloatWindowService extends Service {
      * 展开动画：通过 contentContainer 的 scaleX/scaleY/translationY 变换实现
      * barContainer 保持全屏，避免 updateViewLayout 逐帧重排导致的掉帧
      */
+    private long animationSetTime = 0; // 记录 scale/translation 设置的时间点，用于日志
+    
     private void performSmoothExpandAnimation(
             final View contentContainer,
             final int startCornerPx, final int targetCornerPx) {
@@ -3213,8 +3223,9 @@ public class FloatWindowService extends Service {
         
         Log.d(TAG, "展开动画 - scale: " + startScaleX + "x" + startScaleY
                 + " -> 1x1"
-                + " translationY: " + startTranslationY + " -> 0"
-                + " corner: " + startCornerPx + "px -> " + targetCornerPx + "px");
+                + " translation: (" + startTranslationX + "," + startTranslationY + ") -> 0"
+                + " corner: " + startCornerPx + "px -> " + targetCornerPx + "px"
+                + " delaySinceSet=" + (System.currentTimeMillis() - animationSetTime) + "ms");
         
         final GradientDrawable contentBg = (GradientDrawable) contentContainer.getBackground();
         final android.graphics.drawable.Drawable foreground = contentContainer.getForeground();
@@ -3466,6 +3477,10 @@ public class FloatWindowService extends Service {
                         contentContainer.setTranslationX(initTranslationX);
                         contentContainer.setTranslationY(initTranslationY);
                         contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                        Log.d(TAG, "[SHORTCUT_EXPAND_TRACE] scale/translation 已设置 at " + System.currentTimeMillis()
+                                + " scale=" + initScaleX + "x" + initScaleY
+                                + " trans=(" + initTranslationX + "," + initTranslationY + ")");
+                        animationSetTime = System.currentTimeMillis();
                         
                         // 设置初始圆角
                         ((GradientDrawable) contentContainer.getBackground()).setCornerRadius(dpToPx(currentCornerRadius));
@@ -3478,28 +3493,46 @@ public class FloatWindowService extends Service {
                         // 提前启动代理 Activity，展开过程中即可响应返回手势
                         startWindowHostActivity();
                         
-                        // 淡入背景遮罩
-                        if (overlayView != null) {
-                            final View ov = overlayView;
-                            final float targetAlpha = overlayAlpha / 100.0f;
-                            final long startTime = System.currentTimeMillis();
-                            ov.setAlpha(0f);
-                            Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
-                                @Override
-                                public void doFrame(long frameTimeNanos) {
-                                    long elapsed = System.currentTimeMillis() - startTime;
-                                    float progress = Math.min((float) elapsed / overlayAnimDuration, 1.0f);
-                                    ov.setAlpha(targetAlpha * easeOutCubic(progress));
-                                    if (progress < 1.0f) {
-                                        Choreographer.getInstance().postFrameCallback(this);
-                                    }
-                                }
-                            });
-                        }
+                        // ===== 嵌套 listener：等待 contentContainer 布局完成后启动动画 =====
+                        // 避免在 contentContainer 尚未完成布局时就启动动画，
+                        // 导致首帧出现在错误位置
+                        final View cc = contentContainer;
+                        final int scStartCornerPx = dpToPx(currentCornerRadius);
+                        final int scTargetCornerPx = dpToPx(shortcutCornerRadius);
                         
-                        // 执行展开动画（简化版）
-                        performShortcutExpandAnimation(contentContainer,
-                                dpToPx(currentCornerRadius), dpToPx(shortcutCornerRadius));
+                        cc.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                            @Override
+                            public void onGlobalLayout() {
+                                cc.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                                Log.d(TAG, "[SHORTCUT_EXPAND_DEBUG] contentContainer 布局完成，启动动画"
+                                        + " contentWidth=" + cc.getWidth() + " contentHeight=" + cc.getHeight()
+                                        + " getX=" + cc.getX() + " getY=" + cc.getY()
+                                        + " scale=" + cc.getScaleX() + "x" + cc.getScaleY()
+                                        + " trans=(" + cc.getTranslationX() + "," + cc.getTranslationY() + ")");
+                                
+                                // 淡入背景遮罩
+                                if (overlayView != null) {
+                                    final View ov = overlayView;
+                                    final float targetAlpha = overlayAlpha / 100.0f;
+                                    final long startTime = System.currentTimeMillis();
+                                    ov.setAlpha(0f);
+                                    Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+                                        @Override
+                                        public void doFrame(long frameTimeNanos) {
+                                            long elapsed = System.currentTimeMillis() - startTime;
+                                            float progress = Math.min((float) elapsed / overlayAnimDuration, 1.0f);
+                                            ov.setAlpha(targetAlpha * easeOutCubic(progress));
+                                            if (progress < 1.0f) {
+                                                Choreographer.getInstance().postFrameCallback(this);
+                                            }
+                                        }
+                                    });
+                                }
+                                
+                                // 执行展开动画（简化版）
+                                performShortcutExpandAnimation(cc, scStartCornerPx, scTargetCornerPx);
+                            }
+                        });
                         
                     } catch (Exception e) {
                         Log.e(TAG, "[SHORTCUT_EXPAND_DEBUG] 布局回调内展开失败", e);
@@ -3528,9 +3561,18 @@ public class FloatWindowService extends Service {
         final android.graphics.drawable.Drawable foreground = contentContainer.getForeground();
         final long adjustedStartTime = System.nanoTime();
         
+        Log.d(TAG, "[SHORTCUT_EXPAND_DEBUG] 展开动画开始 - scale: " + startScaleX + "x" + startScaleY
+                + " -> 1x1"
+                + " trans=(" + startTranslationX + "," + startTranslationY + ") -> 0"
+                + " corner: " + startCornerPx + "px -> " + targetCornerPx + "px"
+                + " delaySinceSet=" + (System.currentTimeMillis() - animationSetTime) + "ms");
+        
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+            private int frameCount = 0;
+            
             @Override
             public void doFrame(long frameTimeNanos) {
+                frameCount++;
                 float timeProgress = (float) (frameTimeNanos - adjustedStartTime) / 1000000f / animationDuration;
                 float progress = Math.min(timeProgress, 1.0f);
                 float easedProgress = animInterpolator.getInterpolation(progress);
@@ -3556,6 +3598,10 @@ public class FloatWindowService extends Service {
                 contentContainer.setScaleY(curScaleY);
                 contentContainer.setTranslationX(curTranslationX);
                 contentContainer.setTranslationY(curTranslationY);
+                
+                Log.d(TAG, "[SHORTCUT_EXPAND_TRACE] 第" + frameCount + "帧: tp=" + timeProgress + " p=" + progress + " ez=" + easedProgress
+                        + " scale=" + curScaleX + "x" + curScaleY
+                        + " trans=(" + curTranslationX + "," + curTranslationY + ")");
                 
                 if (progress < 1.0f) {
                     Choreographer.getInstance().postFrameCallback(this);
