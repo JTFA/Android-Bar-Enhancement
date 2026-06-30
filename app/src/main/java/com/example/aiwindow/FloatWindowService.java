@@ -1361,6 +1361,7 @@ public class FloatWindowService extends Service {
                             FrameLayout.LayoutParams contentLp = (FrameLayout.LayoutParams) contentContainer.getLayoutParams();
                             final int contentTargetWidth = contentLp.width;
                             final int contentTargetHeight = contentLp.height;
+                            contentContainer.setAlpha(0f);
                             
                             int effectiveStartWidth = (startWidth == ViewGroup.LayoutParams.MATCH_PARENT || startWidth <= 0) ? screenWidth : startWidth;
                             final int contentStartWidth = effectiveStartWidth;
@@ -1405,21 +1406,22 @@ public class FloatWindowService extends Service {
                             if (aiWebView != null) {
                                 aiWebView.setAlpha(0f);
                             }
-                            
-                            // ===== 第二层 listener：等待 contentContainer 布局完成后设置 translation =====
+
+                            // ===== View.post()：等待 contentContainer 布局完全完成后设置属性并启动动画 =====
+                            // 使用 View.post() 而非 OnGlobalLayoutListener，兼容性更强，避免不同 Android 版本布局回调时序差异
                             final View cc = contentContainer;
 
-                            cc.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                            cc.post(new Runnable() {
                                 @Override
-                                public void onGlobalLayout() {
-                                    cc.getViewTreeObserver().removeOnGlobalLayoutListener(this);
-                                    Log.d(TAG, "[EXPAND_DEBUG] contentContainer 布局完成，启动动画"
+                                public void run() {
+                                    Log.d(TAG, "[EXPAND_DEBUG] cc.post 执行，设置属性并启动动画"
                                             + " contentTop=" + cc.getTop() + " contentLeft=" + cc.getLeft()
                                             + " getX=" + cc.getX() + " getY=" + cc.getY()
                                             + " scale=" + cc.getScaleX() + "x" + cc.getScaleY()
                                             + " trans=(" + cc.getTranslationX() + "," + cc.getTranslationY() + ")");
 
-                                   // layout 完成后设置全部属性（pivot/scale/translation/layer），确保首帧位置正确
+                                    // layout 完成后设置全部属性（pivot/scale/translation/layer），确保首帧位置正确
+                                    cc.setAlpha(0f);
                                     cc.setPivotX(contentTargetWidth / 2f);
                                     cc.setPivotY(contentTargetHeight / 2f);
                                     cc.setScaleX(initScaleX);
@@ -1439,7 +1441,7 @@ public class FloatWindowService extends Service {
                                         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
                                             @Override
                                             public void doFrame(long frameTimeNanos) {
-//                                                cc.setAlpha(0);
+                                                cc.setAlpha(1f);
                                                 if (!isOverlayAnimating) return;
                                                 long elapsed = System.currentTimeMillis() - startTime;
                                                 float progress = Math.min((float) elapsed / overlayAnimDuration, 1.0f);
@@ -1454,12 +1456,6 @@ public class FloatWindowService extends Service {
                                             }
                                         });
                                     }
-//                                    } else {
-//                                        performSmoothExpandAnimation(
-//                                            cc,
-//                                            startCornerRadiusPx, targetCornerRadiusPx
-//                                        );
-//                                    }
                                 }
                             });
                         } catch (Exception e) {
@@ -3463,17 +3459,15 @@ public class FloatWindowService extends Service {
                         // 提前启动代理 Activity，展开过程中即可响应返回手势
                         startWindowHostActivity();
                         
-                        // ===== 嵌套 listener：等待 contentContainer 布局完成后启动动画 =====
-                        // 避免在 contentContainer 尚未完成布局时就启动动画，
-                        // 导致首帧出现在错误位置
+                        // ===== View.post()：等待 contentContainer 布局完全完成后设置属性并启动动画 =====
+                        // 使用 View.post() 而非 OnGlobalLayoutListener，兼容性更强
                         final View cc = contentContainer;
 
                         
-                        cc.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                        cc.post(new Runnable() {
                             @Override
-                            public void onGlobalLayout() {
-                                cc.getViewTreeObserver().removeOnGlobalLayoutListener(this);
-                                Log.d(TAG, "[SHORTCUT_EXPAND_DEBUG] contentContainer 布局完成，启动动画"
+                            public void run() {
+                                Log.d(TAG, "[SHORTCUT_EXPAND_DEBUG] cc.post 执行，设置属性并启动动画"
                                         + " contentWidth=" + cc.getWidth() + " contentHeight=" + cc.getHeight()
                                         + " getX=" + cc.getX() + " getY=" + cc.getY()
                                         + " scale=" + cc.getScaleX() + "x" + cc.getScaleY()
