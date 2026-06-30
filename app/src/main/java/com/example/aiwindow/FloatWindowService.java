@@ -3523,32 +3523,44 @@ public class FloatWindowService extends Service {
                                 // 立即隐藏内容，等 overlay 背景遮罩渐入完成后再通过动画渐显
                                 cc.setAlpha(0);
                                 
-                                // 淡入背景遮罩
+                                // 背景遮罩先渐入完成，再执行窗口展开动画
                                 if (overlayView != null) {
                                     final View ov = overlayView;
                                     final float targetAlpha = overlayAlpha / 100.0f;
                                     final long startTime = System.currentTimeMillis();
                                     ov.setAlpha(0f);
+                                    isOverlayAnimating = true;
                                     Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
                                         @Override
                                         public void doFrame(long frameTimeNanos) {
+                                            if (!isOverlayAnimating) return;
                                             long elapsed = System.currentTimeMillis() - startTime;
                                             float progress = Math.min((float) elapsed / overlayAnimDuration, 1.0f);
-                                            ov.setAlpha(targetAlpha * easeOutCubic(progress));
+                                            float eased = easeOutCubic(progress);
+                                            ov.setAlpha(targetAlpha * eased);
                                             if (progress < 1.0f) {
                                                 Choreographer.getInstance().postFrameCallback(this);
+                                            } else {
+                                                isOverlayAnimating = false;
+                                                performShortcutExpandAnimation(
+                                                        cc,
+                                                        scStartCornerPx, scTargetCornerPx
+                                                );
                                             }
                                         }
                                     });
+                                } else {
+                                    performShortcutExpandAnimation(
+                                            cc,
+                                            scStartCornerPx, scTargetCornerPx
+                                    );
                                 }
-                                
-                                // 执行展开动画（简化版）
-                                performShortcutExpandAnimation(cc, scStartCornerPx, scTargetCornerPx);
                             }
                         });
                         
                     } catch (Exception e) {
                         Log.e(TAG, "[SHORTCUT_EXPAND_DEBUG] 布局回调内展开失败", e);
+                        isOverlayAnimating = false;
                         isShortcutWindowExpanded = false;
                     }
                 }
