@@ -58,7 +58,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.Toast;
-
+import android.view.animation.OvershootInterpolator;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -234,6 +234,11 @@ public class FloatWindowService extends Service {
     // Material Design FastOutSlowIn 标准缓动，先快后慢，末尾平滑自然
     private final PathInterpolator animInterpolator = new PathInterpolator(0.4f, 0.0f, 0.2f, 1.0f);
     
+    // 展开动画插值器：在 FastOutSlowIn 基础上末尾有微小超调（~2.5%），自然连贯不抽搐
+    // 第二控制点 y=1.035 使贝塞尔曲线在末尾轻微越过 1.0 后回落，模拟物理弹簧阻尼
+//    private final PathInterpolator expandInterpolator = new PathInterpolator(0.4f, 0.2f, 0.2f, 1.0f);
+    private final OvershootInterpolator expandInterpolator = new OvershootInterpolator(0.5f);
+
     /**
      * 检测系统是否处于深色模式
      */
@@ -3233,7 +3238,8 @@ public class FloatWindowService extends Service {
                 // 纯时间进度
                 float timeProgress = (float) (frameTimeNanos - adjustedStartTime) / 1000000f / animationDuration;
                 float progress = Math.min(timeProgress, 1.0f);
-                float easedProgress = animInterpolator.getInterpolation(progress);
+                // 统一连贯的贝塞尔曲线缓动，末尾自然带微小超调
+                float easedProgress = expandInterpolator.getInterpolation(progress);
                 
                 // 插值 scaleX/scaleY/translationX/translationY
                 float curScaleX = startScaleX + (1f - startScaleX) * easedProgress;
@@ -3587,9 +3593,11 @@ public class FloatWindowService extends Service {
             @Override
             public void doFrame(long frameTimeNanos) {
                 frameCount++;
+                // 纯时间进度
                 float timeProgress = (float) (frameTimeNanos - adjustedStartTime) / 1000000f / animationDuration;
                 float progress = Math.min(timeProgress, 1.0f);
-                float easedProgress = animInterpolator.getInterpolation(progress);
+                // 统一连贯的贝塞尔曲线缓动，末尾自然带微小超调
+                float easedProgress = expandInterpolator.getInterpolation(progress);
                 
                 float curScaleX = startScaleX + (1f - startScaleX) * easedProgress;
                 float curScaleY = startScaleY + (1f - startScaleY) * easedProgress;
