@@ -1427,8 +1427,7 @@ public class FloatWindowService extends Service {
 
                                     // translation 已在首次 layout 完成后设置，此处不再重复设置
 
-                                    final int startCornerRadiusPx = dpToPx(currentCornerRadius);
-                                    final int targetCornerRadiusPx = dpToPx(windowRadius);
+
                                     cc.setAlpha(0);
 //                                     背景遮罩先渐入完成，再执行窗口展开动画
                                     if (overlayView != null) {
@@ -1451,10 +1450,7 @@ public class FloatWindowService extends Service {
                                                     Choreographer.getInstance().postFrameCallback(this);
                                                 } else {
                                                     isOverlayAnimating = false;
-                                                    performSmoothExpandAnimation(
-                                                            cc,
-                                                            startCornerRadiusPx, targetCornerRadiusPx
-                                                    );
+                                                    performSmoothExpandAnimation(cc);
                                                 }
                                             }
                                         });
@@ -3199,8 +3195,7 @@ public class FloatWindowService extends Service {
     private long animationSetTime = 0; // 记录 scale/translation 设置的时间点，用于日志
     
     private void performSmoothExpandAnimation(
-            final View contentContainer,
-            final int startCornerPx, final int targetCornerPx) {
+            final View contentContainer) {
         if (barContainer == null || barLayoutParams == null) {
             return;
         }
@@ -3211,14 +3206,7 @@ public class FloatWindowService extends Service {
         final float startTranslationX = contentContainer.getTranslationX();
         final float startTranslationY = contentContainer.getTranslationY();
         
-        Log.d(TAG, "展开动画 - scale: " + startScaleX + "x" + startScaleY
-                + " -> 1x1"
-                + " translation: (" + startTranslationX + "," + startTranslationY + ") -> 0"
-                + " corner: " + startCornerPx + "px -> " + targetCornerPx + "px"
-                + " delaySinceSet=" + (System.currentTimeMillis() - animationSetTime) + "ms");
-        
-        final GradientDrawable contentBg = (GradientDrawable) contentContainer.getBackground();
-        final android.graphics.drawable.Drawable foreground = contentContainer.getForeground();
+
         
         // 立即记录开始时间，避免首帧被跳过
         final long adjustedStartTime = System.nanoTime();
@@ -3271,21 +3259,7 @@ public class FloatWindowService extends Service {
                     }
                 }
                 
-                // 圆角动画：前一半从提示条圆角过渡到窗口圆角，后一半保持
-                // 注意：不调用 invalidateOutline()，因为 outline 会跟随 View 的
-                // scale/translation 自动变换，无需每帧更新，减少硬件层重绘开销
-                int currentCornerPx;
-                if (progress < 0.5f) {
-                    float cornerSubProgress = progress * 2f;
-                    float easedCornerProgress = easeOutCubic(cornerSubProgress);
-                    currentCornerPx = Math.round(startCornerPx + (targetCornerPx - startCornerPx) * easedCornerProgress);
-                } else {
-                    currentCornerPx = targetCornerPx;
-                }
-                contentBg.setCornerRadius(currentCornerPx);
-                if (foreground instanceof GradientDrawable) {
-                    ((GradientDrawable) foreground).setCornerRadius(currentCornerPx);
-                }
+
                 
                 // 应用变换（只改 View 属性，不触发 updateViewLayout）
                 contentContainer.setScaleX(curScaleX);
@@ -3295,8 +3269,7 @@ public class FloatWindowService extends Service {
                 
                 Log.d(TAG, "[EXPAND_TRACE] 第" + frameCount + "帧: tp=" + timeProgress + " p=" + progress + " ez=" + easedProgress
                         + " scale=" + curScaleX + "x" + curScaleY
-                        + " trans=(" + curTranslationX + "," + curTranslationY + ")"
-                        + " corner=" + currentCornerPx);
+                        + " trans=(" + curTranslationX + "," + curTranslationY + ")");
                 
                 if (progress < 1.0f) {
                     Choreographer.getInstance().postFrameCallback(this);
@@ -3500,8 +3473,7 @@ public class FloatWindowService extends Service {
                         // 避免在 contentContainer 尚未完成布局时就启动动画，
                         // 导致首帧出现在错误位置
                         final View cc = contentContainer;
-                        final int scStartCornerPx = dpToPx(currentCornerRadius);
-                        final int scTargetCornerPx = dpToPx(shortcutCornerRadius);
+
                         
                         cc.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
                             @Override
@@ -3535,18 +3507,12 @@ public class FloatWindowService extends Service {
                                                 Choreographer.getInstance().postFrameCallback(this);
                                             } else {
                                                 isOverlayAnimating = false;
-                                                performShortcutExpandAnimation(
-                                                        cc,
-                                                        scStartCornerPx, scTargetCornerPx
-                                                );
+                                                performShortcutExpandAnimation(cc);
                                             }
                                         }
                                     });
                                 } else {
-                                    performShortcutExpandAnimation(
-                                            cc,
-                                            scStartCornerPx, scTargetCornerPx
-                                    );
+                                    performShortcutExpandAnimation(cc);
                                 }
                             }
                         });
@@ -3568,21 +3534,17 @@ public class FloatWindowService extends Service {
     /**
      * 快捷方式窗口展开动画
      */
-    private void performShortcutExpandAnimation(final View contentContainer,
-                                                 final int startCornerPx, final int targetCornerPx) {
+    private void performShortcutExpandAnimation(final View contentContainer) {
         final float startScaleX = contentContainer.getScaleX();
         final float startScaleY = contentContainer.getScaleY();
         final float startTranslationX = contentContainer.getTranslationX();
         final float startTranslationY = contentContainer.getTranslationY();
         
-        final GradientDrawable contentBg = (GradientDrawable) contentContainer.getBackground();
-        final android.graphics.drawable.Drawable foreground = contentContainer.getForeground();
         final long adjustedStartTime = System.nanoTime();
         
         Log.d(TAG, "[SHORTCUT_EXPAND_DEBUG] 展开动画开始 - scale: " + startScaleX + "x" + startScaleY
                 + " -> 1x1"
                 + " trans=(" + startTranslationX + "," + startTranslationY + ") -> 0"
-                + " corner: " + startCornerPx + "px -> " + targetCornerPx + "px"
                 + " delaySinceSet=" + (System.currentTimeMillis() - animationSetTime) + "ms");
         
         contentContainer.setAlpha(0f);
@@ -3618,17 +3580,7 @@ public class FloatWindowService extends Service {
                     contentContainer.setAlpha(1f);
                 }
                 
-                int currentCornerPx;
-                if (progress < 0.5f) {
-                    float cornerSubProgress = progress * 2f;
-                    currentCornerPx = Math.round(startCornerPx + (targetCornerPx - startCornerPx) * easeOutCubic(cornerSubProgress));
-                } else {
-                    currentCornerPx = targetCornerPx;
-                }
-                contentBg.setCornerRadius(currentCornerPx);
-                if (foreground instanceof GradientDrawable) {
-                    ((GradientDrawable) foreground).setCornerRadius(currentCornerPx);
-                }
+
                 
                 contentContainer.setScaleX(curScaleX);
                 contentContainer.setScaleY(curScaleY);
