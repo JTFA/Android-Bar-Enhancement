@@ -3596,8 +3596,8 @@ public class FloatWindowService extends Service {
                 // contentContainer 透明度：基于 scaleY 绝对值的渐入策略
                 // 使用绝对值而非 progress% 使行为与动画速度和窗口类型无关
                 // 当 scaleY < 0.20 时透明，0.20~0.40 渐入，>= 0.40 全可见
-                final float scaleYThreshold = 0.14f;
-                final float scaleYFadeEnd = 0.15f;
+                final float scaleYThreshold = 0.12f;
+                final float scaleYFadeEnd = 0.13f;
                 if (curScaleY < scaleYThreshold) {
                     contentContainer.setAlpha(0f);
                 } else if (curScaleY < scaleYFadeEnd) {
