@@ -3254,10 +3254,22 @@ public class FloatWindowService extends Service {
                 float progress = Math.min(timeProgress, 1.0f);
                 float easedProgress = animInterpolator.getInterpolation(progress);
                 
-                // contentContainer 透明度：缓动进度 < 15% 时保持透明，15%~30% 渐入，之后完全可见
-                // 这个阈值对应 frameCount≈10 的实测最佳效果：scale 达到 ~15% 后才可见，消除从薄条扫过的视觉
-                if (easedProgress < 0.05f) {
+                // 插值 scaleX/scaleY/translationX/translationY
+                float curScaleX = startScaleX + (1f - startScaleX) * easedProgress;
+                float curScaleY = startScaleY + (1f - startScaleY) * easedProgress;
+                float curTranslationX = startTranslationX * (1f - easedProgress);
+                float curTranslationY = startTranslationY * (1f - easedProgress);
+                
+                // contentContainer 透明度：基于 scaleY 绝对值的渐入策略
+                // 使用绝对值而非 progress% 使行为与动画速度和窗口类型无关
+                // 当 scaleY < 0.20 时透明，0.20~0.40 渐入，>= 0.40 全可见
+                final float scaleYThreshold = 0.13f;
+                final float scaleYFadeEnd = 0.14f;
+                if (curScaleY < scaleYThreshold) {
                     contentContainer.setAlpha(0f);
+                } else if (curScaleY < scaleYFadeEnd) {
+                    float fadeIn = (curScaleY - scaleYThreshold) / (scaleYFadeEnd - scaleYThreshold);
+                    contentContainer.setAlpha(easeOutCubic(fadeIn));
                 } else {
                     contentContainer.setAlpha(1f);
                 }
@@ -3271,12 +3283,6 @@ public class FloatWindowService extends Service {
                         aiWebView.setAlpha(easeOutCubic(alphaProgress));
                     }
                 }
-                
-                // 插值 scaleX/scaleY/translationX/translationY
-                float curScaleX = startScaleX + (1f - startScaleX) * easedProgress;
-                float curScaleY = startScaleY + (1f - startScaleY) * easedProgress;
-                float curTranslationX = startTranslationX * (1f - easedProgress);
-                float curTranslationY = startTranslationY * (1f - easedProgress);
                 
                 // 圆角动画：前一半从提示条圆角过渡到窗口圆角，后一半保持
                 // 注意：不调用 invalidateOutline()，因为 outline 会跟随 View 的
@@ -3604,17 +3610,24 @@ public class FloatWindowService extends Service {
                 float progress = Math.min(timeProgress, 1.0f);
                 float easedProgress = animInterpolator.getInterpolation(progress);
                 
-                // contentContainer 透明度：缓动进度 < 15% 时保持透明，15%~30% 渐入，之后完全可见
-                if (easedProgress < 0.2f) {
-                    contentContainer.setAlpha(0f);
-                } else {
-                    contentContainer.setAlpha(1f);
-                }
-                
                 float curScaleX = startScaleX + (1f - startScaleX) * easedProgress;
                 float curScaleY = startScaleY + (1f - startScaleY) * easedProgress;
                 float curTranslationX = startTranslationX * (1f - easedProgress);
                 float curTranslationY = startTranslationY * (1f - easedProgress);
+                
+                // contentContainer 透明度：基于 scaleY 绝对值的渐入策略
+                // 使用绝对值而非 progress% 使行为与动画速度和窗口类型无关
+                // 当 scaleY < 0.20 时透明，0.20~0.40 渐入，>= 0.40 全可见
+                final float scaleYThreshold = 0.15f;
+                final float scaleYFadeEnd = 0.16f;
+                if (curScaleY < scaleYThreshold) {
+                    contentContainer.setAlpha(0f);
+                } else if (curScaleY < scaleYFadeEnd) {
+                    float fadeIn = (curScaleY - scaleYThreshold) / (scaleYFadeEnd - scaleYThreshold);
+                    contentContainer.setAlpha(easeOutCubic(fadeIn));
+                } else {
+                    contentContainer.setAlpha(1f);
+                }
                 
                 int currentCornerPx;
                 if (progress < 0.5f) {
