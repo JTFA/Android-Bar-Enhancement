@@ -1393,6 +1393,7 @@ public class FloatWindowService extends Service {
                             if (contentContainer.getForeground() instanceof GradientDrawable) {
                                 ((GradientDrawable) contentContainer.getForeground()).setCornerRadius(dpToPx(currentCornerRadius));
                             }
+                            contentContainer.invalidateOutline();
                             
                             // 记录基础 margins
                             baseLeftMargin = contentLp.leftMargin;
@@ -3458,6 +3459,7 @@ public class FloatWindowService extends Service {
                         if (contentContainer.getForeground() instanceof GradientDrawable) {
                             ((GradientDrawable) contentContainer.getForeground()).setCornerRadius(dpToPx(currentCornerRadius));
                         }
+                        contentContainer.invalidateOutline();
                         
                         isShortcutWindowExpanded = true;
                         
@@ -4024,8 +4026,10 @@ public class FloatWindowService extends Service {
             final float endTranslationX = barPositionX - 2 * lp.leftMargin;
             final float endTranslationY = dpToPx(barPositionY) - 2 * lp.topMargin;
             
-            // 圆角插值：从快捷窗口圆角过渡到提示条圆角
-            final int startCornerPx = dpToPx(shortcutCornerRadius);
+            // 圆角插值：从快捷窗口实际圆角过渡到提示条圆角
+            // 从 contentContainer 的 GradientDrawable 读取实际圆角值（展开时设置的 currentCornerRadius），
+            // 避免使用 shortcutCornerRadius 配置值导致收起瞬间圆角跳变
+            final int startCornerPx = Math.round(((GradientDrawable) content.getBackground()).getCornerRadius());
             final int targetCornerPx = dpToPx(currentCornerRadius);
             
             Log.d(TAG, "收起快捷窗口动画 - scale: 1x1 -> " + endScaleX + "x" + endScaleY
@@ -4261,8 +4265,10 @@ public class FloatWindowService extends Service {
                 final float endTranslationX = targetX - 2 * lp.leftMargin;
                 final float endTranslationY = targetY - 2 * lp.topMargin;
                 
-                // ===== 圆角插值参数（从 AI 窗口圆角过渡到提示条圆角） =====
-                final int startCornerPx = dpToPx(windowRadius);
+                // ===== 圆角插值参数（从窗口实际圆角过渡到提示条圆角） =====
+                // 从 contentContainer 的 GradientDrawable 读取实际圆角值，
+                // 避免使用配置值导致收起瞬间圆角跳变
+                final int startCornerPx = Math.round(((GradientDrawable) content.getBackground()).getCornerRadius());
                 final int targetCornerPx = dpToPx(currentCornerRadius);
                 
             Log.d(TAG, "[COLLAPSE_DEBUG] collapseToBottomBar: endScale=" + endScaleX + "x" + endScaleY
