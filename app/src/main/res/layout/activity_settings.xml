@@ -819,9 +819,9 @@
             android:id="@+id/seek_overlay_anim_duration"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:min="20"
+            android:min="180"
             android:max="500"
-            android:progress="100"
+            android:progress="180"
             android:layout_marginBottom="24dp" />
 
         <!-- 分隔线 -->

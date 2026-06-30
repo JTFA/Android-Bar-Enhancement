@@ -1441,7 +1441,9 @@ public class FloatWindowService extends Service {
                                         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
                                             @Override
                                             public void doFrame(long frameTimeNanos) {
-                                                cc.setAlpha(1f);
+                                                // 不在这里设置 cc.setAlpha(1f)——遮罩期间 content 保持不可见，
+                                                // 避免在初始小尺寸+translation 状态下暴露"白条"
+                                                // 等遮罩完成后的 performSmoothExpandAnimation 再设为可见
                                                 if (!isOverlayAnimating) return;
                                                 long elapsed = System.currentTimeMillis() - startTime;
                                                 float progress = Math.min((float) elapsed / overlayAnimDuration, 1.0f);
@@ -3194,7 +3196,7 @@ public class FloatWindowService extends Service {
         if (barContainer == null || barLayoutParams == null) {
             return;
         }
-//        contentContainer.setAlpha(0f);
+        contentContainer.setAlpha(1f);
 
         final float startScaleX = contentContainer.getScaleX();
         final float startScaleY = contentContainer.getScaleY();
