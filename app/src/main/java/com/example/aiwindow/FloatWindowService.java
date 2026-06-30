@@ -3880,7 +3880,7 @@ public class FloatWindowService extends Service {
         
         cell.setOnClickListener(v -> launchShortcutApp(item));
         
-        // 按压图标缩小、松手回弹动画
+        // 按压图标缩小、松手回弹动画（连贯缩放）
         cell.setOnTouchListener(new View.OnTouchListener() {
             private boolean mIsPressed = false;
             @Override
@@ -3889,8 +3889,12 @@ public class FloatWindowService extends Service {
                     case MotionEvent.ACTION_DOWN:
                         mIsPressed = true;
                         v.animate().cancel();
-                        v.setScaleX(0.90f);
-                        v.setScaleY(0.90f);
+                        v.animate()
+                                .scaleX(0.90f)
+                                .scaleY(0.90f)
+                                .setDuration(120)
+                                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                                .start();
                         return false; // 让事件继续传播，OnClickListener 可触发
                     case MotionEvent.ACTION_UP:
                     case MotionEvent.ACTION_CANCEL:
@@ -3899,7 +3903,7 @@ public class FloatWindowService extends Service {
                             v.animate()
                                     .scaleX(1.0f)
                                     .scaleY(1.0f)
-                                    .setDuration(200)
+                                    .setDuration(250)
                                     .setInterpolator(new android.view.animation.OvershootInterpolator(2.0f))
                                     .start();
                         }
