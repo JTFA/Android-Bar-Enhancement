@@ -1381,13 +1381,7 @@ public class FloatWindowService extends Service {
                                     + " contentSize=" + contentTargetWidth + "x" + contentTargetHeight
                                     + " initScale=" + initScaleX + "x" + initScaleY);
                             
-                            contentContainer.setPivotX(contentTargetWidth / 2f);
-                            contentContainer.setPivotY(contentTargetHeight / 2f);
-                            contentContainer.setScaleX(initScaleX);
-                            contentContainer.setScaleY(initScaleY);
-                            contentContainer.setTranslationX(initTranslationX);
-                            contentContainer.setTranslationY(initTranslationY);
-                            contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                            contentContainer.setAlpha(0f);
                             Log.d(TAG, "[EXPAND_TRACE] scale/translation 已设置 at " + System.currentTimeMillis()
                                     + " scale=" + initScaleX + "x" + initScaleY
                                     + " trans=(" + initTranslationX + "," + initTranslationY + ")");
@@ -1425,11 +1419,16 @@ public class FloatWindowService extends Service {
                                             + " scale=" + cc.getScaleX() + "x" + cc.getScaleY()
                                             + " trans=(" + cc.getTranslationX() + "," + cc.getTranslationY() + ")");
 
-                                    // translation 已在首次 layout 完成后设置，此处不再重复设置
+                                   // layout 完成后设置全部属性（pivot/scale/translation/layer），确保首帧位置正确
+                                    cc.setPivotX(contentTargetWidth / 2f);
+                                    cc.setPivotY(contentTargetHeight / 2f);
+                                    cc.setScaleX(initScaleX);
+                                    cc.setScaleY(initScaleY);
+                                    cc.setTranslationX(initTranslationX);
+                                    cc.setTranslationY(initTranslationY);
+                                    cc.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
-
-                                    cc.setAlpha(0);
-//                                     背景遮罩先渐入完成，再执行窗口展开动画
+                                    // 背景遮罩先渐入完成，再执行窗口展开动画
                                     if (overlayView != null) {
 
                                         final View ov = overlayView;
@@ -3199,7 +3198,7 @@ public class FloatWindowService extends Service {
         if (barContainer == null || barLayoutParams == null) {
             return;
         }
-        contentContainer.setAlpha(0f);
+//        contentContainer.setAlpha(0f);
 
         final float startScaleX = contentContainer.getScaleX();
         final float startScaleY = contentContainer.getScaleY();
@@ -3238,16 +3237,16 @@ public class FloatWindowService extends Service {
                 // contentContainer 透明度：基于 scaleY 绝对值的渐入策略
                 // 使用绝对值而非 progress% 使行为与动画速度和窗口类型无关
                 // 当 scaleY < 0.20 时透明，0.20~0.40 渐入，>= 0.40 全可见
-                final float scaleYThreshold = 0.14f;
-                final float scaleYFadeEnd = 0.15f;
-                if (curScaleY < scaleYThreshold) {
-                    contentContainer.setAlpha(0f);
-                } else if (curScaleY < scaleYFadeEnd) {
-                    float fadeIn = (curScaleY - scaleYThreshold) / (scaleYFadeEnd - scaleYThreshold);
-                    contentContainer.setAlpha(easeOutCubic(fadeIn));
-                } else {
-                    contentContainer.setAlpha(1f);
-                }
+//                final float scaleYThreshold = 0.14f;
+//                final float scaleYFadeEnd = 0.15f;
+//                if (curScaleY < scaleYThreshold) {
+//                    contentContainer.setAlpha(0f);
+//                } else if (curScaleY < scaleYFadeEnd) {
+//                    float fadeIn = (curScaleY - scaleYThreshold) / (scaleYFadeEnd - scaleYThreshold);
+//                    contentContainer.setAlpha(easeOutCubic(fadeIn));
+//                } else {
+//                    contentContainer.setAlpha(1f);
+//                }
                 
                 // WebView 透明度：前一半为 0，后一半从 0 渐变为 1
                 if (aiWebView != null) {
@@ -3445,14 +3444,9 @@ public class FloatWindowService extends Service {
                                 + " margin=(" + contentLp.leftMargin + "," + contentLp.topMargin + ")"
                                 + " contentSize=" + contentTargetWidth + "x" + contentTargetHeight
                                 + " initScale=" + initScaleX + "x" + initScaleY);
-                        
-                        contentContainer.setPivotX(contentTargetWidth / 2f);
-                        contentContainer.setPivotY(contentTargetHeight / 2f);
-                        contentContainer.setScaleX(initScaleX);
-                        contentContainer.setScaleY(initScaleY);
-                        contentContainer.setTranslationX(initTranslationX);
-                        contentContainer.setTranslationY(initTranslationY);
-                        contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+
+
+                        contentContainer.setAlpha(0f);
                         Log.d(TAG, "[SHORTCUT_EXPAND_TRACE] scale/translation 已设置 at " + System.currentTimeMillis()
                                 + " scale=" + initScaleX + "x" + initScaleY
                                 + " trans=(" + initTranslationX + "," + initTranslationY + ")");
@@ -3485,9 +3479,15 @@ public class FloatWindowService extends Service {
                                         + " scale=" + cc.getScaleX() + "x" + cc.getScaleY()
                                         + " trans=(" + cc.getTranslationX() + "," + cc.getTranslationY() + ")");
                                 
-                                // 立即隐藏内容，等 overlay 背景遮罩渐入完成后再通过动画渐显
-                                cc.setAlpha(0);
-                                
+                                // layout 完成后设置全部属性（pivot/scale/translation/layer），确保首帧位置正确
+                                cc.setPivotX(contentTargetWidth / 2f);
+                                cc.setPivotY(contentTargetHeight / 2f);
+                                cc.setScaleX(initScaleX);
+                                cc.setScaleY(initScaleY);
+                                cc.setTranslationX(initTranslationX);
+                                cc.setTranslationY(initTranslationY);
+                                cc.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+
                                 // 背景遮罩先渐入完成，再执行窗口展开动画
                                 if (overlayView != null) {
                                     final View ov = overlayView;
@@ -3547,7 +3547,7 @@ public class FloatWindowService extends Service {
                 + " trans=(" + startTranslationX + "," + startTranslationY + ") -> 0"
                 + " delaySinceSet=" + (System.currentTimeMillis() - animationSetTime) + "ms");
         
-        contentContainer.setAlpha(0f);
+        contentContainer.setAlpha(1f);
         
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             private int frameCount = 0;
@@ -3569,17 +3569,17 @@ public class FloatWindowService extends Service {
                 // contentContainer 透明度：基于 scaleY 绝对值的渐入策略
                 // 使用绝对值而非 progress% 使行为与动画速度和窗口类型无关
                 // 当 scaleY < 0.20 时透明，0.20~0.40 渐入，>= 0.40 全可见
-                final float scaleYThreshold = 0.12f;
-                final float scaleYFadeEnd = 0.13f;
-                if (curScaleY < scaleYThreshold) {
-                    contentContainer.setAlpha(0f);
-                } else if (curScaleY < scaleYFadeEnd) {
-                    float fadeIn = (curScaleY - scaleYThreshold) / (scaleYFadeEnd - scaleYThreshold);
-                    contentContainer.setAlpha(easeOutCubic(fadeIn));
-                } else {
-                    contentContainer.setAlpha(1f);
-                }
-                
+//                final float scaleYThreshold = 0.12f;
+//                final float scaleYFadeEnd = 0.13f;
+//                if (curScaleY < scaleYThreshold) {
+//                    contentContainer.setAlpha(0f);
+//                } else if (curScaleY < scaleYFadeEnd) {
+//                    float fadeIn = (curScaleY - scaleYThreshold) / (scaleYFadeEnd - scaleYThreshold);
+//                    contentContainer.setAlpha(easeOutCubic(fadeIn));
+//                } else {
+//                    contentContainer.setAlpha(1f);
+//                }
+
 
                 
                 contentContainer.setScaleX(curScaleX);
