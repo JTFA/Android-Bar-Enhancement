@@ -1349,7 +1349,7 @@ public class FloatWindowService extends Service {
                             barContainer.addView(aiWindowView);
                             
                             // 获取 contentContainer 并设为目标尺寸
-                            View contentContainer = ((FrameLayout) ((FrameLayout) aiWindowView).getChildAt(1));
+                            View contentContainer = ((FrameLayout) ((FrameLayout) aiWindowView).getChildAt(0));
                             FrameLayout.LayoutParams contentLp = (FrameLayout.LayoutParams) contentContainer.getLayoutParams();
                             final int contentTargetWidth = contentLp.width;
                             final int contentTargetHeight = contentLp.height;
@@ -1600,27 +1600,6 @@ public class FloatWindowService extends Service {
         
         // System back (gesture + nav bar) handled by WindowHostActivity proxy
         
-        View shadowView = new View(this);
-        FrameLayout.LayoutParams shadowParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-        );
-        // 为阴影视图添加 margin，使其比内容区域大
-        int shadowMargin = -dpToPx(shadowWidth);
-        shadowParams.setMargins(shadowMargin, shadowMargin, shadowMargin, shadowMargin);
-        shadowView.setLayoutParams(shadowParams);
-        
-        // 设置阴影背景
-        if (shadowWidth > 0) {
-            try {
-                GradientDrawable shadowDrawable = createShadowDrawable();
-                shadowView.setBackground(shadowDrawable);
-                Log.d(TAG, "阴影已设置 - 宽度: " + shadowWidth + "dp");
-            } catch (Exception e) {
-                Log.e(TAG, "设置阴影失败", e);
-            }
-        }
-        
         // contentContainer: specific size, centered in fullscreen rootLayout with position offset
         FrameLayout contentContainer = new FrameLayout(this);
         FrameLayout.LayoutParams containerParams = new FrameLayout.LayoutParams(
@@ -1799,9 +1778,8 @@ public class FloatWindowService extends Service {
         
         Log.d(TAG, "✅ contentContainer 已设置 clipToOutline，WebView 有相同圆角背景");
         
-        // 组装层级：rootLayout -> [shadowView, contentContainer]
-        windowRootLayout.addView(shadowView);  // 先添加阴影（在底层）
-        windowRootLayout.addView(contentContainer);  // 再添加内容（在上层）
+        // 组装层级：rootLayout -> contentContainer
+        windowRootLayout.addView(contentContainer);
         
         // 外部触摸事件处理：使用 OnTouchListener 在 DOWN 阶段就主动消费外部触摸事件
         // 与 OnClickListener 不同，OnTouchListener 在 dispatchTouchEvent 内部执行，
@@ -1815,8 +1793,8 @@ public class FloatWindowService extends Service {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN: {
                         // 判断触摸点是否在 contentContainer 之外
-                // contentContainer 是 rootLayout 的第二个子视图（index 1）
-                        View content = windowRootLayout.getChildAt(1);
+                // contentContainer 是 rootLayout 的第一个子视图（index 0）
+                        View content = windowRootLayout.getChildAt(0);
                         if (content != null) {
                             Rect rect = new Rect();
                             content.getHitRect(rect);
@@ -3263,8 +3241,8 @@ public class FloatWindowService extends Service {
                 // contentContainer 透明度：基于 scaleY 绝对值的渐入策略
                 // 使用绝对值而非 progress% 使行为与动画速度和窗口类型无关
                 // 当 scaleY < 0.20 时透明，0.20~0.40 渐入，>= 0.40 全可见
-                final float scaleYThreshold = 0.13f;
-                final float scaleYFadeEnd = 0.14f;
+                final float scaleYThreshold = 0.14f;
+                final float scaleYFadeEnd = 0.15f;
                 if (curScaleY < scaleYThreshold) {
                     contentContainer.setAlpha(0f);
                 } else if (curScaleY < scaleYFadeEnd) {
@@ -3618,8 +3596,8 @@ public class FloatWindowService extends Service {
                 // contentContainer 透明度：基于 scaleY 绝对值的渐入策略
                 // 使用绝对值而非 progress% 使行为与动画速度和窗口类型无关
                 // 当 scaleY < 0.20 时透明，0.20~0.40 渐入，>= 0.40 全可见
-                final float scaleYThreshold = 0.15f;
-                final float scaleYFadeEnd = 0.16f;
+                final float scaleYThreshold = 0.14f;
+                final float scaleYFadeEnd = 0.15f;
                 if (curScaleY < scaleYThreshold) {
                     contentContainer.setAlpha(0f);
                 } else if (curScaleY < scaleYFadeEnd) {
@@ -4260,8 +4238,8 @@ public class FloatWindowService extends Service {
             View contentContainer = null;
             if (barContainer.getChildCount() > 0) {
                 View rootView = barContainer.getChildAt(0);
-                if (rootView instanceof FrameLayout && ((FrameLayout) rootView).getChildCount() > 1) {
-                    contentContainer = ((FrameLayout) rootView).getChildAt(1);
+                if (rootView instanceof FrameLayout && ((FrameLayout) rootView).getChildCount() > 0) {
+                    contentContainer = ((FrameLayout) rootView).getChildAt(0);
                 }
             }
             
@@ -5177,9 +5155,9 @@ public class FloatWindowService extends Service {
         if (barContainer == null || barContainer.getChildCount() == 0) return;
         
         final View rootView = barContainer.getChildAt(0);
-        if (!(rootView instanceof FrameLayout) || ((FrameLayout) rootView).getChildCount() < 2) return;
+        if (!(rootView instanceof FrameLayout) || ((FrameLayout) rootView).getChildCount() < 1) return;
         
-        final View content = ((FrameLayout) rootView).getChildAt(1);
+        final View content = ((FrameLayout) rootView).getChildAt(0);
         
         final float startTranslationY = content.getTranslationY();
         int offset = keyboardOffset;
@@ -5237,8 +5215,8 @@ public class FloatWindowService extends Service {
         if (barContainer == null || barContainer.getChildCount() == 0) return;
         try {
             View rootView = barContainer.getChildAt(0);
-            if (rootView instanceof FrameLayout && ((FrameLayout) rootView).getChildCount() > 1) {
-                View content = ((FrameLayout) rootView).getChildAt(1);
+            if (rootView instanceof FrameLayout && ((FrameLayout) rootView).getChildCount() > 0) {
+                View content = ((FrameLayout) rootView).getChildAt(0);
                 if (content.getTranslationY() != 0f) {
                     content.setTranslationY(0f);
                     Log.d(TAG, "resetKeyboardOffset: translationY -> 0");
@@ -5629,8 +5607,8 @@ public class FloatWindowService extends Service {
                     // Update contentContainer margins to reflect position offset
                     try {
                         View rootView = barContainer.getChildAt(0);
-                        if (rootView instanceof FrameLayout && ((FrameLayout) rootView).getChildCount() > 1) {
-                            View content = ((FrameLayout) rootView).getChildAt(1);
+                        if (rootView instanceof FrameLayout && ((FrameLayout) rootView).getChildCount() > 0) {
+                            View content = ((FrameLayout) rootView).getChildAt(0);
                             FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) content.getLayoutParams();
                             lp.leftMargin = windowPositionX;
                             lp.topMargin = windowPositionY;
