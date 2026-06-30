@@ -1406,7 +1406,7 @@ public class FloatWindowService extends Service {
                             
                             // ===== 第二层 listener：等待 contentContainer 布局完成后设置 translation =====
                             final View cc = contentContainer;
-                            
+
                             cc.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
                                 @Override
                                 public void onGlobalLayout() {
@@ -1416,14 +1416,15 @@ public class FloatWindowService extends Service {
                                             + " getX=" + cc.getX() + " getY=" + cc.getY()
                                             + " scale=" + cc.getScaleX() + "x" + cc.getScaleY()
                                             + " trans=(" + cc.getTranslationX() + "," + cc.getTranslationY() + ")");
-                                    
+
                                     // translation 已在首次 layout 完成后设置，此处不再重复设置
-                                    
+
                                     final int startCornerRadiusPx = dpToPx(currentCornerRadius);
                                     final int targetCornerRadiusPx = dpToPx(windowRadius);
-                                    
-                                    // 背景遮罩先渐入完成，再执行窗口展开动画
+                                    cc.setAlpha(0);
+//                                     背景遮罩先渐入完成，再执行窗口展开动画
                                     if (overlayView != null) {
+
                                         final View ov = overlayView;
                                         final float targetAlpha = overlayAlpha / 100.0f;
                                         final long startTime = System.currentTimeMillis();
@@ -1432,6 +1433,7 @@ public class FloatWindowService extends Service {
                                         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
                                             @Override
                                             public void doFrame(long frameTimeNanos) {
+//                                                cc.setAlpha(0);
                                                 if (!isOverlayAnimating) return;
                                                 long elapsed = System.currentTimeMillis() - startTime;
                                                 float progress = Math.min((float) elapsed / overlayAnimDuration, 1.0f);
@@ -1442,18 +1444,19 @@ public class FloatWindowService extends Service {
                                                 } else {
                                                     isOverlayAnimating = false;
                                                     performSmoothExpandAnimation(
-                                                        cc,
-                                                        startCornerRadiusPx, targetCornerRadiusPx
+                                                            cc,
+                                                            startCornerRadiusPx, targetCornerRadiusPx
                                                     );
                                                 }
                                             }
                                         });
-                                    } else {
-                                        performSmoothExpandAnimation(
-                                            cc,
-                                            startCornerRadiusPx, targetCornerRadiusPx
-                                        );
                                     }
+//                                    } else {
+//                                        performSmoothExpandAnimation(
+//                                            cc,
+//                                            startCornerRadiusPx, targetCornerRadiusPx
+//                                        );
+//                                    }
                                 }
                             });
                         } catch (Exception e) {
@@ -3215,7 +3218,8 @@ public class FloatWindowService extends Service {
         if (barContainer == null || barLayoutParams == null) {
             return;
         }
-        
+        contentContainer.setAlpha(0f);
+
         final float startScaleX = contentContainer.getScaleX();
         final float startScaleY = contentContainer.getScaleY();
         final float startTranslationX = contentContainer.getTranslationX();
@@ -3232,11 +3236,9 @@ public class FloatWindowService extends Service {
         
         // 立即记录开始时间，避免首帧被跳过
         final long adjustedStartTime = System.nanoTime();
-        
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             private int frameCount = 0;
             private long prevFrameTime = 0;
-            
             @Override
             public void doFrame(long frameTimeNanos) {
                 if (prevFrameTime == 0) {
@@ -3251,6 +3253,14 @@ public class FloatWindowService extends Service {
                 float timeProgress = (float) (frameTimeNanos - adjustedStartTime) / 1000000f / animationDuration;
                 float progress = Math.min(timeProgress, 1.0f);
                 float easedProgress = animInterpolator.getInterpolation(progress);
+                
+                // contentContainer 透明度：缓动进度 < 15% 时保持透明，15%~30% 渐入，之后完全可见
+                // 这个阈值对应 frameCount≈10 的实测最佳效果：scale 达到 ~15% 后才可见，消除从薄条扫过的视觉
+                if (easedProgress < 0.05f) {
+                    contentContainer.setAlpha(0f);
+                } else {
+                    contentContainer.setAlpha(1f);
+                }
                 
                 // WebView 透明度：前一半为 0，后一半从 0 渐变为 1
                 if (aiWebView != null) {
@@ -3510,6 +3520,9 @@ public class FloatWindowService extends Service {
                                         + " scale=" + cc.getScaleX() + "x" + cc.getScaleY()
                                         + " trans=(" + cc.getTranslationX() + "," + cc.getTranslationY() + ")");
                                 
+                                // 立即隐藏内容，等 overlay 背景遮罩渐入完成后再通过动画渐显
+                                cc.setAlpha(0);
+                                
                                 // 淡入背景遮罩
                                 if (overlayView != null) {
                                     final View ov = overlayView;
@@ -3567,6 +3580,8 @@ public class FloatWindowService extends Service {
                 + " corner: " + startCornerPx + "px -> " + targetCornerPx + "px"
                 + " delaySinceSet=" + (System.currentTimeMillis() - animationSetTime) + "ms");
         
+        contentContainer.setAlpha(0f);
+        
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             private int frameCount = 0;
             
@@ -3576,6 +3591,13 @@ public class FloatWindowService extends Service {
                 float timeProgress = (float) (frameTimeNanos - adjustedStartTime) / 1000000f / animationDuration;
                 float progress = Math.min(timeProgress, 1.0f);
                 float easedProgress = animInterpolator.getInterpolation(progress);
+                
+                // contentContainer 透明度：缓动进度 < 15% 时保持透明，15%~30% 渐入，之后完全可见
+                if (easedProgress < 0.2f) {
+                    contentContainer.setAlpha(0f);
+                } else {
+                    contentContainer.setAlpha(1f);
+                }
                 
                 float curScaleX = startScaleX + (1f - startScaleX) * easedProgress;
                 float curScaleY = startScaleY + (1f - startScaleY) * easedProgress;
