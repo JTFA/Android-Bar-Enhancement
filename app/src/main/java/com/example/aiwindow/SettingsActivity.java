@@ -100,6 +100,7 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_SHORTCUT_BORDER_ALPHA = "shortcut_border_alpha";
     private static final String KEY_SHORTCUT_BG_COLOR = "shortcut_bg_color";
     private static final String KEY_SHORTCUT_ANIM_DURATION = "shortcut_anim_duration";
+    private static final String KEY_SHORTCUT_ICON_SIZE = "shortcut_icon_size";
     
     // AI URL 输入框
     private EditText editAiUrl;
@@ -183,6 +184,8 @@ public class SettingsActivity extends AppCompatActivity {
     private SeekBar seekShortcutAnimDuration;
     private TextView textShortcutAnimDuration;
     private Button btnEditShortcuts;
+    private SeekBar seekShortcutIconSize;
+    private TextView textShortcutIconSize;
     
     // 保存按钮
     private Button btnSave;
@@ -323,6 +326,8 @@ public class SettingsActivity extends AppCompatActivity {
         editShortcutBgColor = findViewById(R.id.edit_shortcut_bg_color);
         seekShortcutAnimDuration = findViewById(R.id.seek_shortcut_anim_duration);
         textShortcutAnimDuration = findViewById(R.id.text_shortcut_anim_duration);
+        seekShortcutIconSize = findViewById(R.id.seek_shortcut_icon_size);
+        textShortcutIconSize = findViewById(R.id.text_shortcut_icon_size);
         btnEditShortcuts = findViewById(R.id.btn_edit_shortcuts);
         
         // 保存按钮
@@ -528,6 +533,10 @@ public class SettingsActivity extends AppCompatActivity {
         int shortcutAnim = preferences.getInt(KEY_SHORTCUT_ANIM_DURATION, 350);
         seekShortcutAnimDuration.setProgress(shortcutAnim);
         textShortcutAnimDuration.setText("快捷动画时长: " + shortcutAnim + "ms");
+        
+        int shortcutIconSize = preferences.getInt(KEY_SHORTCUT_ICON_SIZE, 100);
+        seekShortcutIconSize.setProgress(shortcutIconSize);
+        textShortcutIconSize.setText("图标大小: " + shortcutIconSize + "%");
     }
     
     /**
@@ -668,6 +677,7 @@ public class SettingsActivity extends AppCompatActivity {
         }
         editor.putString(KEY_SHORTCUT_BG_COLOR, scBgColor);
         editor.putInt(KEY_SHORTCUT_ANIM_DURATION, seekShortcutAnimDuration.getProgress());
+        editor.putInt(KEY_SHORTCUT_ICON_SIZE, seekShortcutIconSize.getProgress());
         
         // 提交保存
         editor.apply();
@@ -790,6 +800,7 @@ public class SettingsActivity extends AppCompatActivity {
         }
         shortcutIntent.putExtra("shortcut_bg_color", scBgColor);
         shortcutIntent.putExtra("shortcut_anim_duration", seekShortcutAnimDuration.getProgress());
+        shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
         startService(shortcutIntent);
     }
 
@@ -1185,6 +1196,17 @@ public class SettingsActivity extends AppCompatActivity {
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
         
+        // 快捷方式图标大小 - 实时更新
+        seekShortcutIconSize.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textShortcutIconSize.setText("图标大小: " + progress + "%");
+                applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        
         // 编辑快捷方式内容按钮
         btnEditShortcuts.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -1342,6 +1364,7 @@ public class SettingsActivity extends AppCompatActivity {
         }
         shortcutIntent.putExtra("shortcut_bg_color", scBgColor);
         shortcutIntent.putExtra("shortcut_anim_duration", seekShortcutAnimDuration.getProgress());
+        shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
         startService(shortcutIntent);
     }
     

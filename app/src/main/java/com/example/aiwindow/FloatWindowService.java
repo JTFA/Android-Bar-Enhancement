@@ -144,6 +144,7 @@ public class FloatWindowService extends Service {
     private float shortcutBorderAlpha = 0.1f;
     private String shortcutBgColor = "#FFFFFF";
     private int shortcutAnimDuration = 350; // ms
+    private int shortcutIconSize = 100; // 图标大小百分比 50-150，默认 100%
     
     // 双击检测相关
     private static final int DOUBLE_TAP_TIMEOUT = 300; // ms
@@ -512,10 +513,12 @@ public class FloatWindowService extends Service {
             String sBgColor = intent.getStringExtra("shortcut_bg_color");
             if (sBgColor != null) shortcutBgColor = sBgColor;
             shortcutAnimDuration = intent.getIntExtra("shortcut_anim_duration", shortcutAnimDuration);
+            shortcutIconSize = intent.getIntExtra("shortcut_icon_size", shortcutIconSize);
             
             Log.d(TAG, "快捷方式窗口设置已更新: 宽=" + shortcutWindowWidth + " 高=" + shortcutWindowHeight
                     + " Y=" + shortcutWindowPositionY + " 边框=" + shortcutBorderWidth
-                    + " 圆角=" + shortcutCornerRadius + " 动画=" + shortcutAnimDuration);
+                    + " 圆角=" + shortcutCornerRadius + " 动画=" + shortcutAnimDuration
+                    + " 图标大小=" + shortcutIconSize + "%");
             
             // 如果窗口已展开，需要重建
             if (isShortcutWindowExpanded) {
@@ -3805,11 +3808,14 @@ public class FloatWindowService extends Service {
         cell.setClickable(true);
         cell.setFocusable(true);
         
+        // 图标大小缩放因子
+        final float iconScale = Math.max(0.5f, Math.min(1.5f, shortcutIconSize / 100.0f));
+        
         // 判断图标类型
         if ("image".equals(item.getIconType())) {
             // ===== 图片图标（圆角矩形） =====
             FrameLayout iconContainer = new FrameLayout(this);
-            int iconSize = cellWidth - dpToPx(16);
+            int iconSize = Math.round((cellWidth - dpToPx(16)) * iconScale);
             FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(iconSize, iconSize);
             iconParams.gravity = Gravity.CENTER;
             iconContainer.setLayoutParams(iconParams);
@@ -3848,7 +3854,7 @@ public class FloatWindowService extends Service {
                         ? item.getName().substring(0, 1) : "?";
                 placeholderText.setText(firstChar);
                 placeholderText.setTextColor(0xFFFFFFFF);
-                placeholderText.setTextSize(22);
+                placeholderText.setTextSize(Math.round(22 * iconScale));
                 iconContainer.addView(placeholderText);
             }
             cell.addView(iconContainer);
@@ -3856,7 +3862,7 @@ public class FloatWindowService extends Service {
             // ===== Emoji 图标 =====
             TextView iconView = new TextView(this);
             iconView.setText(item.getIcon() != null ? item.getIcon() : "⚡");
-            iconView.setTextSize(30);
+            iconView.setTextSize(Math.round(30 * iconScale));
             iconView.setGravity(Gravity.CENTER);
             iconView.setPadding(0, 0, 0, dpToPx(4));
             cell.addView(iconView);
@@ -3865,7 +3871,7 @@ public class FloatWindowService extends Service {
         // 名称
         TextView nameView = new TextView(this);
         nameView.setText(item.getName());
-        nameView.setTextSize(11);
+        nameView.setTextSize(Math.max(8, Math.round(11 * iconScale)));
         nameView.setTextColor(0xFF666666);
         nameView.setGravity(Gravity.CENTER);
         nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -3873,6 +3879,35 @@ public class FloatWindowService extends Service {
         cell.addView(nameView);
         
         cell.setOnClickListener(v -> launchShortcutApp(item));
+        
+        // 按压图标缩小、松手回弹动画
+        cell.setOnTouchListener(new View.OnTouchListener() {
+            private boolean mIsPressed = false;
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        mIsPressed = true;
+                        v.animate().cancel();
+                        v.setScaleX(0.90f);
+                        v.setScaleY(0.90f);
+                        return false; // 让事件继续传播，OnClickListener 可触发
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        if (mIsPressed) {
+                            mIsPressed = false;
+                            v.animate()
+                                    .scaleX(1.0f)
+                                    .scaleY(1.0f)
+                                    .setDuration(200)
+                                    .setInterpolator(new android.view.animation.OvershootInterpolator(2.0f))
+                                    .start();
+                        }
+                        return false;
+                }
+                return false;
+            }
+        });
         
         return cell;
     }
@@ -5818,6 +5853,7 @@ public class FloatWindowService extends Service {
             shortcutBorderAlpha = prefs.getInt("shortcut_border_alpha", (int)(shortcutBorderAlpha * 100)) / 100.0f;
             shortcutBgColor = prefs.getString("shortcut_bg_color", shortcutBgColor);
             shortcutAnimDuration = prefs.getInt("shortcut_anim_duration", shortcutAnimDuration);
+            shortcutIconSize = prefs.getInt("shortcut_icon_size", shortcutIconSize);
             
             Log.d(TAG, "设置已加载 - 提示条: 宽=" + currentWidth + ", 高=" + currentHeight + 
                   ", 圆角=" + currentCornerRadius + ", 透明度=" + currentAlpha +
