@@ -3196,7 +3196,8 @@ public class FloatWindowService extends Service {
         if (barContainer == null || barLayoutParams == null) {
             return;
         }
-        contentContainer.setAlpha(1f);
+        // setAlpha(1f) 移入 doFrame 第一帧中，与 scale/translation 同时生效，
+        // 避免在动画首帧前暴露初始小尺寸+translation 状态造成闪一下
 
         final float startScaleX = contentContainer.getScaleX();
         final float startScaleY = contentContainer.getScaleY();
@@ -3259,6 +3260,8 @@ public class FloatWindowService extends Service {
 
                 
                 // 应用变换（只改 View 属性，不触发 updateViewLayout）
+                // 首个 vsync 帧时与 scale/translation 一起置为可见，消除初始状态的闪现
+                contentContainer.setAlpha(1f);
                 contentContainer.setScaleX(curScaleX);
                 contentContainer.setScaleY(curScaleY);
                 contentContainer.setTranslationX(curTranslationX);
@@ -3543,7 +3546,8 @@ public class FloatWindowService extends Service {
                 + " trans=(" + startTranslationX + "," + startTranslationY + ") -> 0"
                 + " delaySinceSet=" + (System.currentTimeMillis() - animationSetTime) + "ms");
         
-        contentContainer.setAlpha(1f);
+        // setAlpha(1f) 移入 doFrame 第一帧中，与 scale/translation 同时生效，
+        // 避免在动画首帧前暴露初始小尺寸+translation 状态造成闪一下
         
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             private int frameCount = 0;
@@ -3578,6 +3582,7 @@ public class FloatWindowService extends Service {
 
 
                 
+                contentContainer.setAlpha(1f);
                 contentContainer.setScaleX(curScaleX);
                 contentContainer.setScaleY(curScaleY);
                 contentContainer.setTranslationX(curTranslationX);
