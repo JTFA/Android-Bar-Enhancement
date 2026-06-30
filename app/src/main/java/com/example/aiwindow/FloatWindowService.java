@@ -4115,6 +4115,7 @@ public class FloatWindowService extends Service {
         } catch (Exception e) {
             Log.e(TAG, "finishCollapseShortcutWindow 失败", e);
             isShortcutWindowExpanded = false;
+            finishWindowHostActivity();
         }
     }
     
@@ -4386,6 +4387,7 @@ public class FloatWindowService extends Service {
         } catch (Exception e) {
             Log.e(TAG, "finishCollapse failed", e);
             isAiWindowExpanded = false;
+            finishWindowHostActivity();
         }
     }
     
@@ -4428,7 +4430,7 @@ public class FloatWindowService extends Service {
                     // 延迟兜底：finishActivity 可能导致布局重排，多次确保位置正确
                     scheduleKeyboardPositionFallback();
                     // 不finish WindowHostActivity，用户可再次按返回关闭窗口
-               } else if (backPrioritizeWebview && aiWebView != null && aiWebView.canGoBack()) {
+               } else if (backPrioritizeWebview && isAiWindowExpanded && aiWebView != null && aiWebView.canGoBack()) {
                     // 开启"优先返回网页上一级"时，先尝试网页内返回
                     Log.d(TAG, "Back pressed: WebView can go back, backPrioritizeWebview=true");
                     aiWebView.goBack();

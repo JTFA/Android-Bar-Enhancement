@@ -144,9 +144,13 @@ public class WindowHostActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        instance = null;
+        // 只清理 instance 当它仍指向本实例时，防止后续新 Activity 实例被误清除
+        if (instance == this) {
+            instance = null;
+        }
         super.onDestroy();
-        if (!handled) {
+        // 同样只在无后继实例时才清理回调，避免清除新 Activity 设置的 onBackCallback
+        if (!handled && instance == null) {
             Log.d(TAG, "Destroyed without back press, cleaning callback");
             onBackCallback = null;
         }
