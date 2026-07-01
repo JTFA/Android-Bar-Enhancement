@@ -628,11 +628,11 @@
             android:background="#DDDDDD"
             android:layout_marginBottom="24dp" />
 
-        <!-- ===== 单击提示条操作设置 ===== -->
+        <!-- ===== 提示条触发行为设置 ===== -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/click_bar_action"
+            android:text="@string/bar_trigger_actions"
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="#333333"
@@ -641,14 +641,14 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/click_bar_action_desc"
+            android:text="@string/bar_trigger_actions_desc"
             android:textSize="12sp"
             android:textColor="#999999"
             android:layout_marginBottom="16dp" />
 
-        <!-- 已选应用显示区域（可点击） -->
+        <!-- 单击行为选择 -->
         <LinearLayout
-            android:id="@+id/layout_select_app"
+            android:id="@+id/layout_click_action"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
@@ -657,7 +657,40 @@
             android:padding="12dp"
             android:clickable="true"
             android:focusable="true"
-            android:layout_marginBottom="24dp">
+            android:layout_marginBottom="4dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/click_action"
+                android:textSize="14sp"
+                android:textColor="#666666" />
+
+            <TextView
+                android:id="@+id/text_click_action"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/action_none"
+                android:textSize="14sp"
+                android:textColor="#333333"
+                android:gravity="end" />
+
+        </LinearLayout>
+
+        <!-- 单击应用选择（仅当单击行为为"打开指定应用"时可见） -->
+        <LinearLayout
+            android:id="@+id/layout_click_app"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@android:drawable/edit_text"
+            android:padding="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone">
 
             <TextView
                 android:layout_width="0dp"
@@ -668,7 +701,137 @@
                 android:textColor="#666666" />
 
             <TextView
-                android:id="@+id/text_selected_app"
+                android:id="@+id/text_click_selected_app"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/not_selected"
+                android:textSize="14sp"
+                android:textColor="#333333"
+                android:gravity="end" />
+
+        </LinearLayout>
+
+        <!-- 双击行为选择 -->
+        <LinearLayout
+            android:id="@+id/layout_double_click_action"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@android:drawable/edit_text"
+            android:padding="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginBottom="4dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/double_click_action"
+                android:textSize="14sp"
+                android:textColor="#666666" />
+
+            <TextView
+                android:id="@+id/text_double_click_action"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/action_open_shortcut"
+                android:textSize="14sp"
+                android:textColor="#333333"
+                android:gravity="end" />
+
+        </LinearLayout>
+
+        <!-- 双击应用选择（仅当双击行为为"打开指定应用"时可见） -->
+        <LinearLayout
+            android:id="@+id/layout_double_click_app"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@android:drawable/edit_text"
+            android:padding="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/select_app"
+                android:textSize="14sp"
+                android:textColor="#666666" />
+
+            <TextView
+                android:id="@+id/text_double_click_selected_app"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/not_selected"
+                android:textSize="14sp"
+                android:textColor="#333333"
+                android:gravity="end" />
+
+        </LinearLayout>
+
+        <!-- 长按行为选择 -->
+        <LinearLayout
+            android:id="@+id/layout_long_press_action"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@android:drawable/edit_text"
+            android:padding="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginBottom="4dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/long_press_action"
+                android:textSize="14sp"
+                android:textColor="#666666" />
+
+            <TextView
+                android:id="@+id/text_long_press_action"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/action_open_ai"
+                android:textSize="14sp"
+                android:textColor="#333333"
+                android:gravity="end" />
+
+        </LinearLayout>
+
+        <!-- 长按应用选择（仅当长按行为为"打开指定应用"时可见） -->
+        <LinearLayout
+            android:id="@+id/layout_long_press_app"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@android:drawable/edit_text"
+            android:padding="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginBottom="24dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/select_app"
+                android:textSize="14sp"
+                android:textColor="#666666" />
+
+            <TextView
+                android:id="@+id/text_long_press_selected_app"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/not_selected"

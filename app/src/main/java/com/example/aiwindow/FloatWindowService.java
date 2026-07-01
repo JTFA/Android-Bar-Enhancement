@@ -181,6 +181,26 @@ public class FloatWindowService extends Service {
     private String clickAppName = "";
     private String clickAppClass = "";
     
+    // ===== 触发行为配置 =====
+    private static final String ACTION_NONE = "none";
+    private static final String ACTION_APP = "app";
+    private static final String ACTION_SHORTCUT = "shortcut";
+    private static final String ACTION_AI = "ai";
+    
+    private String clickAction = ""; // 单击行为（空字符串表示由加载的设置决定）
+    private String doubleClickAction = ACTION_SHORTCUT; // 双击行为（默认快捷方式窗口）
+    private String longPressAction = ACTION_AI; // 长按行为（默认AI窗口）
+    
+    // 双击打开第三方应用
+    private String doubleClickAppPackage = "";
+    private String doubleClickAppName = "";
+    private String doubleClickAppClass = "";
+    
+    // 长按打开第三方应用
+    private String longPressAppPackage = "";
+    private String longPressAppName = "";
+    private String longPressAppClass = "";
+    
     // 点击窗口外关闭窗口设置
     private boolean closeOnOutsideClick = true; // 默认开启
     
@@ -493,6 +513,27 @@ public class FloatWindowService extends Service {
                 clickAppClass = intent.getStringExtra("click_app_class");
                 Log.d(TAG, "单击打开应用已更新: " + clickAppName + " (" + clickAppPackage + ")");
             }
+            
+            // 触发行为配置
+            if (intent.hasExtra("click_action")) {
+                clickAction = intent.getStringExtra("click_action");
+            }
+            if (intent.hasExtra("double_click_action")) {
+                doubleClickAction = intent.getStringExtra("double_click_action");
+            }
+            if (intent.hasExtra("long_press_action")) {
+                longPressAction = intent.getStringExtra("long_press_action");
+            }
+            if (intent.hasExtra("double_click_app_package")) {
+                doubleClickAppPackage = intent.getStringExtra("double_click_app_package");
+                doubleClickAppName = intent.getStringExtra("double_click_app_name");
+                doubleClickAppClass = intent.getStringExtra("double_click_app_class");
+            }
+            if (intent.hasExtra("long_press_app_package")) {
+                longPressAppPackage = intent.getStringExtra("long_press_app_package");
+                longPressAppName = intent.getStringExtra("long_press_app_name");
+                longPressAppClass = intent.getStringExtra("long_press_app_class");
+            }
         }
         // 处理输入法避让设置更新
         else if (intent != null && "UPDATE_KEYBOARD_SETTINGS".equals(intent.getAction())) {
@@ -547,6 +588,28 @@ public class FloatWindowService extends Service {
                 clickAppName = intent.getStringExtra("click_app_name");
                 clickAppClass = intent.getStringExtra("click_app_class");
                 Log.d(TAG, "单击打开应用设置已更新: " + clickAppName + " (" + clickAppPackage + ")");
+            }
+        }
+        // 处理触发行为配置更新
+        else if (intent != null && "UPDATE_TRIGGER_ACTIONS".equals(intent.getAction())) {
+            if (intent.hasExtra("click_action")) {
+                clickAction = intent.getStringExtra("click_action");
+                doubleClickAction = intent.getStringExtra("double_click_action");
+                longPressAction = intent.getStringExtra("long_press_action");
+                
+                clickAppPackage = intent.getStringExtra("click_app_package");
+                clickAppName = intent.getStringExtra("click_app_name");
+                clickAppClass = intent.getStringExtra("click_app_class");
+                
+                doubleClickAppPackage = intent.getStringExtra("double_click_app_package");
+                doubleClickAppName = intent.getStringExtra("double_click_app_name");
+                doubleClickAppClass = intent.getStringExtra("double_click_app_class");
+                
+                longPressAppPackage = intent.getStringExtra("long_press_app_package");
+                longPressAppName = intent.getStringExtra("long_press_app_name");
+                longPressAppClass = intent.getStringExtra("long_press_app_class");
+                
+                Log.d(TAG, "触发行为配置已更新: click=" + clickAction + " double=" + doubleClickAction + " long=" + longPressAction);
             }
         }
         return START_STICKY; // 服务被杀死后自动重启
@@ -762,10 +825,10 @@ public class FloatWindowService extends Service {
         singleTapRunnable = new Runnable() {
             @Override
             public void run() {
-                // 超时后执行单击（打开第三方应用），未被双击覆盖
+                // 超时后执行单击行为，未被双击覆盖
                 if (!isShortcutWindowExpanded && !isAiWindowExpanded) {
-                    launchClickApp();
-                    Log.d(TAG, "单击触发：打开第三方应用");
+                    performGestureAction("click");
+                    Log.d(TAG, "单击触发");
                 }
             }
         };
@@ -803,7 +866,7 @@ public class FloatWindowService extends Service {
                             // 两次快速点击 → 双击
                             lastTapTime = 0;
                             onBarDoubleClicked();
-                            Log.d(TAG, "双击触发：打开快捷方式窗口");
+                            Log.d(TAG, "双击触发");
                         } else {
                             // 第一次点击，记录时间并等待双击超时
                             lastTapTime = now;
@@ -1238,48 +1301,125 @@ public class FloatWindowService extends Service {
     }
     
     /**
-     * 长按回调函数（占位方法，可在此添加自定义逻辑）
+     * 长按回调：根据配置执行行为
      */
     private void onBarLongPressed() {
-        Log.d(TAG, "提示条被长按，准备展开AI窗口");
-//        Toast.makeText(this, "提示条被长按", Toast.LENGTH_SHORT).show();
+        Log.d(TAG, "提示条被长按");
         
-        // 展开 AI 对话窗口
-        expandToAiWindow();
+        // 执行长按对应的行为
+        performGestureAction("long_press");
     }
     
     /**
-     * 双击提示条回调：展开快捷方式窗口
+     * 双击提示条回调：根据配置执行行为
      */
     private void onBarDoubleClicked() {
-        Log.d(TAG, "提示条被双击，准备打开快捷方式窗口");
+        Log.d(TAG, "提示条被双击");
         
         if (isAiWindowExpanded || isShortcutWindowExpanded) {
             return;
         }
-        expandToShortcutWindow();
+        performGestureAction("double_click");
     }
     
     /**
-     * 单击提示条：打开已选择的第三方应用
+     * 根据手势类型执行配置的行为
      */
-    private void launchClickApp() {
-        if (TextUtils.isEmpty(clickAppPackage) || TextUtils.isEmpty(clickAppClass)) {
+    private void performGestureAction(String gesture) {
+        String action = getGestureAction(gesture);
+        String pkg = getGestureAppPackage(gesture);
+        String cls = getGestureAppClass(gesture);
+        String name = getGestureAppName(gesture);
+        
+        if (ACTION_NONE.equals(action)) {
+            Log.d(TAG, gesture + " 行为：无");
+            return;
+        } else if (ACTION_APP.equals(action)) {
+            if (!TextUtils.isEmpty(pkg) && !TextUtils.isEmpty(cls)) {
+                launchApp(pkg, name, cls);
+                Log.d(TAG, gesture + " 行为：打开应用 " + name);
+            } else {
+                Log.d(TAG, gesture + " 行为：未配置应用");
+            }
+        } else if (ACTION_SHORTCUT.equals(action)) {
+            Log.d(TAG, gesture + " 行为：打开快捷方式窗口");
+            if (!isShortcutWindowExpanded && !isAiWindowExpanded) {
+                expandToShortcutWindow();
+            }
+        } else if (ACTION_AI.equals(action)) {
+            Log.d(TAG, gesture + " 行为：打开AI窗口");
+            if (!isShortcutWindowExpanded && !isAiWindowExpanded) {
+                expandToAiWindow();
+            }
+        }
+    }
+    
+    /**
+     * 获取指定手势的配置行为
+     */
+    private String getGestureAction(String gesture) {
+        if ("click".equals(gesture)) return clickAction;
+        else if ("double_click".equals(gesture)) return doubleClickAction;
+        else if ("long_press".equals(gesture)) return longPressAction;
+        return ACTION_NONE;
+    }
+    
+    /**
+     * 获取指定手势的应用包名
+     */
+    private String getGestureAppPackage(String gesture) {
+        if ("click".equals(gesture)) return clickAppPackage;
+        else if ("double_click".equals(gesture)) return doubleClickAppPackage;
+        else if ("long_press".equals(gesture)) return longPressAppPackage;
+        return "";
+    }
+    
+    /**
+     * 获取指定手势的应用名称
+     */
+    private String getGestureAppName(String gesture) {
+        if ("click".equals(gesture)) return clickAppName;
+        else if ("double_click".equals(gesture)) return doubleClickAppName;
+        else if ("long_press".equals(gesture)) return longPressAppName;
+        return "";
+    }
+    
+    /**
+     * 获取指定手势的应用类名
+     */
+    private String getGestureAppClass(String gesture) {
+        if ("click".equals(gesture)) return clickAppClass;
+        else if ("double_click".equals(gesture)) return doubleClickAppClass;
+        else if ("long_press".equals(gesture)) return longPressAppClass;
+        return "";
+    }
+    
+    /**
+     * 打开指定应用
+     */
+    private void launchApp(String appPackage, String appName, String appClass) {
+        if (TextUtils.isEmpty(appPackage) || TextUtils.isEmpty(appClass)) {
             Log.d(TAG, "未选择要打开的应用");
             return;
         }
         
         try {
-            // 使用显式 ComponentName 创建 Intent，跳过系统解析过程，避免 Android 12+ "30天" 确认弹窗
             Intent launchIntent = new Intent(Intent.ACTION_MAIN);
             launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-            launchIntent.setClassName(clickAppPackage, clickAppClass);
+            launchIntent.setClassName(appPackage, appClass);
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             startActivity(launchIntent);
-            Log.d(TAG, "已打开应用: " + clickAppName);
+            Log.d(TAG, "已打开应用: " + appName);
         } catch (Exception e) {
-            Log.e(TAG, "打开应用失败: " + clickAppName, e);
+            Log.e(TAG, "打开应用失败: " + appName, e);
         }
+    }
+    
+    /**
+     * 单击提示条：打开已选择的第三方应用（兼容旧版，保留引用）
+     */
+    private void launchClickApp() {
+        launchApp(clickAppPackage, clickAppName, clickAppClass);
     }
     
     /**
@@ -5792,6 +5932,25 @@ public class FloatWindowService extends Service {
             clickAppPackage = prefs.getString("click_app_package", "");
             clickAppName = prefs.getString("click_app_name", "");
             clickAppClass = prefs.getString("click_app_class", "");
+            
+            // ===== 加载触发行为配置 =====
+            clickAction = prefs.getString("click_action", "");
+            // 向后兼容：如果 clickAction 未设置
+            if (TextUtils.isEmpty(clickAction)) {
+                clickAction = TextUtils.isEmpty(clickAppPackage) ? ACTION_NONE : ACTION_APP;
+            }
+            doubleClickAction = prefs.getString("double_click_action", ACTION_SHORTCUT);
+            longPressAction = prefs.getString("long_press_action", ACTION_AI);
+            
+            // 加载双击打开的应用
+            doubleClickAppPackage = prefs.getString("double_click_app_package", "");
+            doubleClickAppName = prefs.getString("double_click_app_name", "");
+            doubleClickAppClass = prefs.getString("double_click_app_class", "");
+            
+            // 加载长按打开的应用
+            longPressAppPackage = prefs.getString("long_press_app_package", "");
+            longPressAppName = prefs.getString("long_press_app_name", "");
+            longPressAppClass = prefs.getString("long_press_app_class", "");
             
             // 加载动画速度
             animationDuration = prefs.getInt("anim_duration", animationDuration);

@@ -49,4 +49,17 @@
     
     <!-- 双击提示条 -->
     <string name="double_tap_hint">双击提示条可打开快捷方式窗口</string>
+    
+    <!-- 提示条触发行为设置 -->
+    <string name="bar_trigger_actions">提示条触发行为</string>
+    <string name="bar_trigger_actions_desc">分别设置单击、双击、长按提示条时的触发行为</string>
+    <string name="click_action">单击行为</string>
+    <string name="double_click_action">双击行为</string>
+    <string name="long_press_action">长按行为</string>
+    <string name="action_none">无</string>
+    <string name="action_open_app">打开指定应用</string>
+    <string name="action_open_shortcut">打开快捷方式</string>
+    <string name="action_open_ai">打开AI窗口</string>
+    <string name="select_action">选择行为</string>
+    <string name="select_app_for">选择要打开的应用</string>
 </resources>
