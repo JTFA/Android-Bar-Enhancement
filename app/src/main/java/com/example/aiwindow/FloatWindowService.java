@@ -31,6 +31,7 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.GestureDetector;
 import android.view.KeyEvent;
+import android.view.ViewOutlineProvider;
 import android.view.ViewTreeObserver;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -59,6 +60,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.Toast;
 import android.view.animation.OvershootInterpolator;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -66,6 +68,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+
 import android.app.DownloadManager;
 import android.webkit.URLUtil;
 import android.text.Editable;
@@ -87,12 +90,12 @@ public class FloatWindowService extends Service {
     private WindowManager windowManager;
     private View floatView;
     private WindowManager.LayoutParams layoutParams;
-    
+
     // 底部提示条相关
     private FrameLayout barContainer;
     private View bottomBar;
     private WindowManager.LayoutParams barLayoutParams;
-    
+
     // 默认样式参数
     private int currentWidth = 375;
     private int currentHeight = 9; // dp
@@ -112,7 +115,7 @@ public class FloatWindowService extends Service {
     private int pressedBarFeatherWidth = 10; // 按下时边缘羽化宽度 (dp)
     private int pressedBarPositionY = 16; // 按下时位置Y (dp，正值向上)
     private View pressedOverlay; // 按下状态覆盖层（透明度渐变显示按下样式）
-    
+
     // AI 对话窗口相关
     private FrameLayout aiWindowContainer;
     private WebView aiWebView;
@@ -120,20 +123,20 @@ public class FloatWindowService extends Service {
     private boolean isAiWindowExpanded = false;
     private String currentAiUrl = "https://www.doubao.com"; // 默认 URL，可通过设置修改
     private String loadedAiUrl = null; // 实际已加载的 URL（用于判断是否需要重新加载）
-    
+
     // AI 窗口默认尺寸（单位：dp，在 onCreate 中转换为 px）
     private static final int AI_WINDOW_WIDTH_DP = 333;
     private static final int AI_WINDOW_HEIGHT_DP = 450;
-    
+
     private int aiWindowWidth;   // 像素值，在 onCreate 中初始化
     private int aiWindowHeight;  // 像素值，在 onCreate 中初始化
     private int windowPositionX = 0; // 窗口 X 偏移
     private int windowPositionY = 225; // 窗口 Y 偏移
-    
+
     // ===== 快捷方式窗口相关 =====
     private boolean isShortcutWindowExpanded = false;
     private View shortcutWindowView;
-    
+
     // 快捷方式窗口默认设置
     private int shortcutWindowWidth = 350;  // dp
     private int shortcutWindowHeight = 350; // dp
@@ -144,13 +147,13 @@ public class FloatWindowService extends Service {
     private float shortcutBorderAlpha = 0.1f;
     private String shortcutBgColor = "#FFFFFF";
     private int shortcutIconSize = 100; // 图标大小百分比 50-150，默认 100%
-    
+
     // 双击检测相关
     private static final int DOUBLE_TAP_TIMEOUT = 300; // ms
     private long lastTapTime = 0;
     private Handler tapHandler = new Handler(Looper.getMainLooper());
     private Runnable singleTapRunnable;
-    
+
     // 边框和阴影设置
     private int borderWidth = 1; // dp
     private int cornerRadius = 30; // dp - 窗口圆角半径
@@ -159,12 +162,12 @@ public class FloatWindowService extends Service {
     private int shadowWidth = 0; // dp
     private String shadowColor = "#000000";
     private float shadowAlpha = 0.0f; // 关键修复：增加默认透明度从 0.3 到 0.6，使阴影更明显
-    
+
     // 背景遮罩设置
     private View overlayView;
     private String overlayColor = "#000000";
     private int overlayAlpha = 50; // 遮罩透明度 0-100
-    
+
     private WindowManager.LayoutParams overlayLayoutParams;    // 关闭按钮显示设置
     private GradientDrawable overlayBackground; // 遮罩背景 Drawable
     private boolean isOverlayAnimating = false; // 遮罩动画进行中标志
@@ -174,38 +177,38 @@ public class FloatWindowService extends Service {
 
     // 返回上一级按钮引用（用于在页面加载后更新状态）
     private ImageView backButtonRef;
-    
+
     // 单击提示条打开第三方应用
     private String clickAppPackage = "";
     private String clickAppName = "";
     private String clickAppClass = "";
-    
+
     // ===== 触发行为配置 =====
     private static final String ACTION_NONE = "none";
     private static final String ACTION_APP = "app";
     private static final String ACTION_SHORTCUT = "shortcut";
     private static final String ACTION_AI = "ai";
-    
+
     private String clickAction = ""; // 单击行为（空字符串表示由加载的设置决定）
     private String doubleClickAction = ACTION_SHORTCUT; // 双击行为（默认快捷方式窗口）
     private String longPressAction = ACTION_AI; // 长按行为（默认AI窗口）
-    
+
     // 双击打开第三方应用
     private String doubleClickAppPackage = "";
     private String doubleClickAppName = "";
     private String doubleClickAppClass = "";
-    
+
     // 长按打开第三方应用
     private String longPressAppPackage = "";
     private String longPressAppName = "";
     private String longPressAppClass = "";
-    
+
     // 点击窗口外关闭窗口设置
     private boolean closeOnOutsideClick = true; // 默认开启
-    
+
     // 侧边返回手势优先返回网页上一级（true）还是始终关闭窗口（false）
     private boolean backPrioritizeWebview = true;
-    
+
     // IME 代理 EditText（解决 TYPE_APPLICATION_OVERLAY 中 WebView 无法建立 InputConnection 的问题）
     private EditText proxyIme;
     private GestureDetector gestureDetector;
@@ -217,7 +220,7 @@ public class FloatWindowService extends Service {
     private volatile String pendingPasteText; // 待粘贴的剪贴板文本（通过 @JavascriptInterface 传递，避免嵌入 JS 代码导致超长限制）
     private FrameLayout windowRootLayout;
     private Runnable blurRefocusRunnable; // 输入框失焦后延迟重聚焦（用于区分发送按钮短暂失焦与真正失焦）
-    
+
     // 输入法避让相关
     private boolean isKeyboardVisible = false;
     private int baseLeftMargin = 0;     // 无键盘时的 leftMargin
@@ -229,10 +232,10 @@ public class FloatWindowService extends Service {
     private ViewTreeObserver.OnGlobalLayoutListener keyboardLayoutListener;
     private boolean isKeyboardAnimating = false;
     private Runnable keyboardHideDetector = null;
-    
+
     // IME 处理中标志（类级别），可在 cleanupProxyIme 中重置，防止死锁
     private volatile boolean isImeProcessing = false;
-    
+
     // 按下样式预览自动隐藏（设置页调节按下样式时使用）
     private Handler pressedPreviewHandler = new Handler(Looper.getMainLooper());
     private Runnable pressedPreviewTimeout = new Runnable() {
@@ -242,17 +245,17 @@ public class FloatWindowService extends Service {
             Log.d(TAG, "按下样式预览超时，已自动隐藏");
         }
     };
-    
+
     // 动画相关
     private int animationDuration = 385; // 毫秒（展开/收起动画时长，可从设置调节）
     private int overlayAnimDuration = 100; // 毫秒（背景遮罩透明度渐变动画时长）
     private static final long FRAME_INTERVAL = 8; // 120fps (1000/120 ≈ 8ms)
     private static final String TAG = "FloatWindowService";
-    
+
     // Android 官方贝塞尔曲线插值器（API 21+ 内置，零依赖）
     // Material Design FastOutSlowIn 标准缓动，先快后慢，末尾平滑自然
     private final PathInterpolator animInterpolator = new PathInterpolator(0.4f, 0.0f, 0.2f, 1.0f);
-    
+
     // 展开动画插值器：在 FastOutSlowIn 基础上末尾有微小超调（~2.5%），自然连贯不抽搐
     // 第二控制点 y=1.035 使贝塞尔曲线在末尾轻微越过 1.0 后回落，模拟物理弹簧阻尼
 //    private final PathInterpolator expandInterpolator = new PathInterpolator(0.4f, 0.2f, 0.2f, 1.0f);
@@ -265,7 +268,7 @@ public class FloatWindowService extends Service {
         int nightMode = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         return nightMode == Configuration.UI_MODE_NIGHT_YES;
     }
-    
+
     /**
      * 获取窗口背景色（跟随系统深色模式）
      */
@@ -276,7 +279,7 @@ public class FloatWindowService extends Service {
             return Color.WHITE;
         }
     }
-    
+
     /**
      * 为 WebView 应用深色模式设置（API 29+）
      * 每次展开窗口时都调用，对新创建和复用的 WebView 均生效
@@ -301,7 +304,7 @@ public class FloatWindowService extends Service {
         // 注入 CSS filter 作为深色模式后备方案（FORCE_DARK_ON 在某些设备不生效时保障）
         injectDarkModeCSS(webView);
     }
-    
+
     /**
      * 注入 CSS filter 实现深色模式（后备方案）
      * 使用 filter: invert(0.85) hue-rotate(180deg) 反转页面颜色，
@@ -330,7 +333,7 @@ public class FloatWindowService extends Service {
                     "if(s){s.parentNode.removeChild(s);}" +
                     "})()";
         }
-        
+
         try {
             view.evaluateJavascript(js, null);
             Log.d(TAG, isDarkMode() ? "Dark mode CSS filter injected" : "Dark mode CSS filter removed");
@@ -346,33 +349,33 @@ public class FloatWindowService extends Service {
         Log.d(TAG, "FloatWindowService onCreate 被调用");
         Log.d(TAG, "Android 版本: " + Build.VERSION.SDK_INT);
         Log.d(TAG, "权限状态: " + hasOverlayPermission());
-        
+
         // 关键修复：从 SharedPreferences 加载保存的设置
         loadSettings();
         Log.d(TAG, "AI 窗口尺寸 - 宽: " + aiWindowWidth + "px, 高: " + aiWindowHeight + "px");
-        
+
         try {
             createNotificationChannel();
             Log.d(TAG, "通知渠道创建成功");
-            
+
             Notification notification = createNotification();
             Log.d(TAG, "通知对象创建成功");
-            
+
             startForeground(NOTIFICATION_ID, notification);
             Log.d(TAG, "前台服务启动成功，通知已显示");
-            
+
             initBottomBar();
             Log.d(TAG, "底部提示条初始化完成");
-            
+
         } catch (Exception e) {
             Log.e(TAG, "❌❌❌ 服务启动失败", e);
             e.printStackTrace();
             stopSelf(); // 启动失败则停止服务
         }
-        
+
         Log.d(TAG, "========================================");
     }
-    
+
     /**
      * 检查悬浮窗权限
      */
@@ -401,7 +404,7 @@ public class FloatWindowService extends Service {
             int posY = intent.getIntExtra("position_y", barPositionY);
             int duration = intent.getIntExtra("long_press_duration", longPressDuration);
             int animDuration = intent.getIntExtra("anim_duration", animationDuration);
-            
+
             // 按下状态样式（可选参数，不存在时保持当前值）
             if (intent.hasExtra("pressed_bar_enabled")) {
                 pressedBarEnabled = intent.getBooleanExtra("pressed_bar_enabled", pressedBarEnabled);
@@ -427,7 +430,7 @@ public class FloatWindowService extends Service {
             if (intent.hasExtra("pressed_bar_position_y")) {
                 pressedBarPositionY = intent.getIntExtra("pressed_bar_position_y", pressedBarPositionY);
             }
-            
+
             updateBarStyles(width, height, corner, alpha);
             updateBarPosition(posX, posY);
             updateLongPressDuration(duration);
@@ -443,7 +446,7 @@ public class FloatWindowService extends Service {
                     Log.d(TAG, "遮罩渐变时长已更新: " + overlayAnimDuration + "ms");
                 }
             }
-            
+
             // 按下样式预览（设置页调节按下样式时使用）
             if (intent.getBooleanExtra("show_pressed_preview", false)) {
                 pressedPreviewHandler.removeCallbacks(pressedPreviewTimeout);
@@ -458,7 +461,7 @@ public class FloatWindowService extends Service {
             int windowHeight = intent.getIntExtra("window_height", aiWindowHeight);
             int winPosX = intent.getIntExtra("window_position_x", windowPositionX);
             int winPosY = intent.getIntExtra("window_position_y", windowPositionY);
-            
+
             // 获取边框、圆角和阴影设置
             int bWidth = intent.getIntExtra("border_width", borderWidth);
             int cRadius = intent.getIntExtra("corner_radius", cornerRadius); // 新增：圆角半径
@@ -481,7 +484,7 @@ public class FloatWindowService extends Service {
                 overlayColor = overlayCol;
             }
             overlayAlpha = overlayAlp;
-            
+
             // 遮罩渐变时长
             if (intent.hasExtra("overlay_anim_duration")) {
                 int overlayAnim = intent.getIntExtra("overlay_anim_duration", overlayAnimDuration);
@@ -490,10 +493,10 @@ public class FloatWindowService extends Service {
                     Log.d(TAG, "遮罩渐变时长已更新: " + overlayAnimDuration + "ms");
                 }
             }
-            
+
             // 更新遮罩窗口外观（如果已创建）
             updateOverlayAppearance();
-            
+
             updateWindowSize(windowWidth, windowHeight);
             updateWindowPosition(winPosX, winPosY);
             updateWindowBorder(bWidth, cRadius, bColor, bAlpha, sWidth, sColor, sAlpha);
@@ -504,7 +507,7 @@ public class FloatWindowService extends Service {
             Log.d(TAG, "点击窗口外关闭窗口设置已更新: " + closeOnOutsideClick);
             backPrioritizeWebview = backPrioritize;
             Log.d(TAG, "侧边返回手势设置已更新: " + backPrioritizeWebview);
-            
+
             // 单击提示条打开的应用设置
             if (intent.hasExtra("click_app_package")) {
                 clickAppPackage = intent.getStringExtra("click_app_package");
@@ -512,7 +515,7 @@ public class FloatWindowService extends Service {
                 clickAppClass = intent.getStringExtra("click_app_class");
                 Log.d(TAG, "单击打开应用已更新: " + clickAppName + " (" + clickAppPackage + ")");
             }
-            
+
             // 触发行为配置
             if (intent.hasExtra("click_action")) {
                 clickAction = intent.getStringExtra("click_action");
@@ -557,7 +560,7 @@ public class FloatWindowService extends Service {
             shortcutBorderAlpha = intent.getFloatExtra("shortcut_border_alpha", shortcutBorderAlpha);
             shortcutIconSize = intent.getIntExtra("shortcut_icon_size", shortcutIconSize);
 
-            
+
             // 如果窗口已展开，需要重建
             if (isShortcutWindowExpanded) {
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
@@ -588,19 +591,19 @@ public class FloatWindowService extends Service {
                 clickAction = intent.getStringExtra("click_action");
                 doubleClickAction = intent.getStringExtra("double_click_action");
                 longPressAction = intent.getStringExtra("long_press_action");
-                
+
                 clickAppPackage = intent.getStringExtra("click_app_package");
                 clickAppName = intent.getStringExtra("click_app_name");
                 clickAppClass = intent.getStringExtra("click_app_class");
-                
+
                 doubleClickAppPackage = intent.getStringExtra("double_click_app_package");
                 doubleClickAppName = intent.getStringExtra("double_click_app_name");
                 doubleClickAppClass = intent.getStringExtra("double_click_app_class");
-                
+
                 longPressAppPackage = intent.getStringExtra("long_press_app_package");
                 longPressAppName = intent.getStringExtra("long_press_app_name");
                 longPressAppClass = intent.getStringExtra("long_press_app_class");
-                
+
                 Log.d(TAG, "触发行为配置已更新: click=" + clickAction + " double=" + doubleClickAction + " long=" + longPressAction);
             }
         }
@@ -618,7 +621,7 @@ public class FloatWindowService extends Service {
                     NotificationManager.IMPORTANCE_LOW
             );
             channel.setDescription("保持悬浮窗在后台运行");
-            
+
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
                 manager.createNotificationChannel(channel);
@@ -643,11 +646,11 @@ public class FloatWindowService extends Service {
      */
     private void initBottomBar() {
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
-        
+
         // 创建容器
         barContainer = new FrameLayout(this);
         barContainer.setClipChildren(false); // 允许子视图超出容器边界（覆盖层尺寸较大时不被截断）
-        
+
         // 设置提示条布局参数
         barLayoutParams = new WindowManager.LayoutParams();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -655,7 +658,7 @@ public class FloatWindowService extends Service {
         } else {
             barLayoutParams.type = WindowManager.LayoutParams.TYPE_PHONE;
         }
-        
+
         // 关键配置：不拦截外部点击，但能响应自身触摸事件
         barLayoutParams.format = PixelFormat.RGBA_8888;
         barLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
@@ -672,27 +675,27 @@ public class FloatWindowService extends Service {
         }
         // 高度考虑覆盖层偏移（pressedBarPositionY 正值向上，容器需加高以容纳偏移后的覆盖层底部）
         barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + Math.abs(dpToPx(pressedBarPositionY)));
-        
+
         // CENTER_VERTICAL|CENTER_HORIZONTAL 下：x=barPositionX(居中偏移), y=dpToPx(barPositionY)(居中偏移)
         barLayoutParams.x = barPositionX;
         barLayoutParams.y = dpToPx(barPositionY);
-        
+
         Log.d(TAG, "提示条参数 - 宽度: " + currentWidth + ", 高度: " + dpToPx(currentHeight) + "px");
         Log.d(TAG, "提示条参数 - 圆角: " + currentCornerRadius + "dp, 透明度: " + currentAlpha);
         Log.d(TAG, "提示条位置 - X: " + barPositionX + ", Y: " + barPositionY + "dp (正值向上)");
-        
+
         // 创建提示条视图
         bottomBar = createBottomBarView();
         barContainer.addView(bottomBar);
-        
+
         // 创建按下状态覆盖层（置于 bottomBar 之上，初始透明）
         pressedOverlay = createPressedOverlay();
         barContainer.addView(pressedOverlay);
-        
+
         // 创建背景遮罩窗口（全屏覆盖状态栏和导航栏，不触摸、不聚焦，在提示条下方）
         try {
             overlayView = new View(this);
-            
+
             // 使用 GradientDrawable 作为背景（用于颜色和初始状态）
             GradientDrawable overlayBg = new GradientDrawable();
             overlayBg.setShape(GradientDrawable.RECTANGLE);
@@ -702,11 +705,11 @@ public class FloatWindowService extends Service {
             overlayView.setBackground(overlayBg);
             overlayBackground = overlayBg;
             overlayView.setAlpha(0f); // View 初始完全透明
-            
+
             // 获取包含系统装饰区的实际屏幕尺寸，使遮罩覆盖到状态栏和导航栏下方
             DisplayMetrics realMetrics = new DisplayMetrics();
             windowManager.getDefaultDisplay().getRealMetrics(realMetrics);
-            
+
             overlayLayoutParams = new WindowManager.LayoutParams();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 overlayLayoutParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
@@ -725,18 +728,18 @@ public class FloatWindowService extends Service {
             overlayLayoutParams.height = realMetrics.heightPixels;
             overlayLayoutParams.x = 0;
             overlayLayoutParams.y = 0;
-            
+
             windowManager.addView(overlayView, overlayLayoutParams);
-            
+
             Log.d(TAG, "背景遮罩窗口已创建 - 尺寸: " + realMetrics.widthPixels + "x" + realMetrics.heightPixels
-                + ", 颜色: " + overlayColor + ", 透明度: " + overlayAlpha + "%");
+                    + ", 颜色: " + overlayColor + ", 透明度: " + overlayAlpha + "%");
         } catch (Exception e) {
             Log.e(TAG, "创建背景遮罩窗口失败", e);
             overlayView = null;
             overlayLayoutParams = null;
             overlayBackground = null;
         }
-        
+
         // 添加到底部窗口（在遮罩之上）
         try {
             windowManager.addView(barContainer, barLayoutParams);
@@ -746,13 +749,13 @@ public class FloatWindowService extends Service {
             e.printStackTrace();
         }
     }
-    
+
     /**
      * 创建底部提示条视图
      */
     private View createBottomBarView() {
         FeatheredFrameLayout bar = new FeatheredFrameLayout(this);
-        
+
         // 设置尺寸（bottomBar 对齐容器底部，使覆盖层在容器顶部时有正确层次）
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 currentWidth,
@@ -760,37 +763,37 @@ public class FloatWindowService extends Service {
         );
         params.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
         bar.setLayoutParams(params);
-        
+
         // 创建圆角背景
         GradientDrawable background = createRoundedBackground(
                 currentCornerRadius,
                 currentAlpha
         );
         bar.setBackground(background);
-        
+
         // 设置内边距
         int padding = dpToPx(16);
         bar.setPadding(padding, 0, padding, 0);
-        
+
         // 关键功能：实现自定义长按时间的触摸监听器
         final Handler longPressHandler = new Handler(Looper.getMainLooper());
-        
+
         // 标记长按是否已触发，用于阻止 ACTION_UP 传播到 OnClickListener
         final boolean[] longPressTriggered = {false};
-        
+
         final Runnable longPressRunnable = new Runnable() {
             @Override
             public void run() {
                 // 标记长按已触发，用于 ACTION_UP 中阻止点击事件
                 longPressTriggered[0] = true;
-                
+
                 // 长按触发前先淡出按下覆盖层（不触发窗口恢复）
                 restoreNormalBarStyles(false);
-                
+
                 // 关键优化：提前启动 WindowHostActivity，让 Activity 创建
                 // 在 bottomBar 淡出动画期间（150ms）完成，避免抢占展开动画帧的主线程时间
                 startWindowHostActivity();
-                
+
                 // 淡出提示条后执行展开
                 if (bottomBar != null) {
                     bottomBar.animate().alpha(0f).setDuration(150).withEndAction(new Runnable() {
@@ -806,12 +809,12 @@ public class FloatWindowService extends Service {
                 }
             }
         };
-        
+
         // 记录按下时的坐标，用于判断是否有大幅移动
         final float[] downX = {0};
         final float[] downY = {0};
         final int MOVE_THRESHOLD = dpToPx(10); // 移动阈值：10dp
-        
+
         // 双击检测用处理器
         tapHandler = new Handler(Looper.getMainLooper());
         singleTapRunnable = new Runnable() {
@@ -824,7 +827,7 @@ public class FloatWindowService extends Service {
                 }
             }
         };
-        
+
         bar.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
@@ -886,54 +889,55 @@ public class FloatWindowService extends Service {
                 return true; // 消费事件，防止事件穿透
             }
         });
-        
+
         return bar;
     }
-    
+
     /**
      * 创建圆角背景
      */
     private GradientDrawable createRoundedBackground(int cornerRadiusDp, float alpha) {
         return createRoundedBackground(cornerRadiusDp, alpha, "#000000");
     }
-    
+
     /**
      * 创建圆角背景（支持自定义颜色）
      */
     private GradientDrawable createRoundedBackground(int cornerRadiusDp, float alpha, String colorHex) {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setShape(GradientDrawable.RECTANGLE);
-        
+
         // 关键修复：分别设置四个角的圆角半径，确保所有角都有圆角
         float radius = dpToPx(cornerRadiusDp);
         drawable.setCornerRadii(new float[]{
-            radius, radius,  // 左上
-            radius, radius,  // 右上
-            radius, radius,  // 右下
-            radius, radius   // 左下
+                radius, radius,  // 左上
+                radius, radius,  // 右上
+                radius, radius,  // 右下
+                radius, radius   // 左下
         });
-        
+
         int color = parseColorWithAlpha(colorHex, alpha);
         drawable.setColor(color);
-        
+
         return drawable;
     }
-    
+
     /**
      * 更新提示条样式
-     * @param width 宽度（像素），使用 MATCH_PARENT 或具体像素值
-     * @param height 高度（dp）
+     *
+     * @param width        宽度（像素），使用 MATCH_PARENT 或具体像素值
+     * @param height       高度（dp）
      * @param cornerRadius 圆角半径（dp）
-     * @param alpha 透明度 0.0-1.0
+     * @param alpha        透明度 0.0-1.0
      */
     public void updateBarStyles(int width, int height, int cornerRadius, float alpha) {
         currentWidth = width;
         currentHeight = height;
         currentCornerRadius = cornerRadius;
         currentAlpha = alpha;
-        
+
         Log.d(TAG, "更新样式 - 宽: " + width + ", 高: " + height + "dp, 圆角: " + cornerRadius + "dp, 透明度: " + alpha);
-        
+
         // 关键修复：立即在主线程执行，不使用 Handler.post 延迟
         if (Looper.myLooper() == Looper.getMainLooper()) {
             applyStyleChanges();
@@ -946,7 +950,7 @@ public class FloatWindowService extends Service {
             });
         }
     }
-    
+
     /**
      * 应用样式更改到视图
      */
@@ -963,7 +967,7 @@ public class FloatWindowService extends Service {
                 barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + Math.abs(dpToPx(pressedBarPositionY)));
                 barLayoutParams.x = barPositionX;
                 barLayoutParams.y = dpToPx(barPositionY); // 正值越大提示条越靠上
-                
+
                 // 关键修复：同时更新 bottomBar 内部的 LayoutParams，确保宽度/高度实时生效
                 FrameLayout.LayoutParams bottomLp = (FrameLayout.LayoutParams) bottomBar.getLayoutParams();
                 bottomLp.width = currentWidth;
@@ -975,10 +979,10 @@ public class FloatWindowService extends Service {
                         currentAlpha
                 );
                 bottomBar.setBackground(background);
-                
+
                 // 强制刷新布局
                 bottomBar.requestLayout();
-                
+
                 // 应用更新
                 windowManager.updateViewLayout(barContainer, barLayoutParams);
                 Log.d(TAG, "样式已实时更新");
@@ -989,7 +993,7 @@ public class FloatWindowService extends Service {
             Log.w(TAG, "无法更新样式：视图未初始化");
         }
     }
-    
+
     /**
      * 创建按下状态覆盖层
      * 用于按下/释放时透明度渐变显示按下样式
@@ -1002,40 +1006,41 @@ public class FloatWindowService extends Service {
         );
         params.gravity = Gravity.CENTER_HORIZONTAL;
         overlay.setLayoutParams(params);
-        
+
         // 设置按下样式背景
         GradientDrawable bg = createRoundedBackground(pressedBarCorner, pressedBarAlpha / 100.0f, pressedBarColor);
         overlay.setBackground(bg);
-        
+
         // 启用边缘羽化
         int pressedColor = parseColorWithAlpha(pressedBarColor, pressedBarAlpha / 100.0f);
         overlay.setFeatherEnabled(true, pressedColor, pressedBarCorner, pressedBarFeatherWidth);
-        
+
         overlay.setAlpha(0f);
         return overlay;
     }
-    
+
     /**
      * 应用按下状态样式（手指按住提示条时的视觉效果）
      */
     private void applyPressedBarStyles() {
-        if (bottomBar == null || pressedOverlay == null || barLayoutParams == null || windowManager == null) return;
+        if (bottomBar == null || pressedOverlay == null || barLayoutParams == null || windowManager == null)
+            return;
         if (!pressedBarEnabled) return;
         if (isAiWindowExpanded) return;
-        
+
         try {
             // 取消正在进行的动画
             pressedOverlay.animate().cancel();
-            
+
             // === 关键修复：不改变 barContainer 的正常位置 ===
             // 覆盖层使用按下样式设置项（pressedBarWidth/Height/Corner），
             // 仅通过透明度变换显示按下效果，避免容器位置变化导致的位移和缩放
             // 容器已有 setClipChildren(false)，覆盖层可超出容器布局边界渲染
-            
+
             // == 第一步：更新覆盖层样式 ==
             // 容器已预设足够尺寸容纳覆盖层（初始化时取提示条/覆盖层中较大者），
             // 此处仅更新覆盖层自身的样式和位置，不改变窗口大小
-            
+
             // 日志：打印当前容器和覆盖层尺寸用于调试裁剪问题
             Log.d(TAG, "[PRESSED_DEBUG] 容器尺寸: w=" + barLayoutParams.width + " h=" + barLayoutParams.height
                     + " pressedOverlay尺寸: w=" + pressedBarWidth + " h=" + dpToPx(pressedBarHeight));
@@ -1046,7 +1051,7 @@ public class FloatWindowService extends Service {
             if (dpToPx(pressedBarHeight) > barLayoutParams.height) {
                 Log.w(TAG, "[PRESSED_DEBUG] 覆盖层高度(" + dpToPx(pressedBarHeight) + ") > 容器高度(" + barLayoutParams.height + ")，可能被裁剪！");
             }
-            
+
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) pressedOverlay.getLayoutParams();
             params.width = pressedBarWidth;
             params.height = dpToPx(pressedBarHeight);
@@ -1055,7 +1060,7 @@ public class FloatWindowService extends Service {
             // 负值（向下）→ 从容器顶部定位，正 translationY 向下偏移 → 覆盖层移入容器底部的额外空间
 //            if (pressedBarPositionY >= 0) {
 //                 向上偏移：从底部定位，用 translationY 向上推
-                params.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
+            params.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
 //            } else {
 //                // 向下偏移：从顶部定位，用 translationY 向下推
 //                params.gravity = Gravity.CENTER_HORIZONTAL; // 默认 TOP | CENTER_HORIZONTAL
@@ -1064,38 +1069,39 @@ public class FloatWindowService extends Service {
             pressedOverlay.setLayoutParams(params);
             // pressedBarPositionY：正值向上偏移覆盖层（正值越大覆盖层越靠上）
             pressedOverlay.setTranslationY(-dpToPx(pressedBarPositionY));
-            
+
             // 更新覆盖层背景为按下样式（颜色、透明度、圆角）
             GradientDrawable bg = createRoundedBackground(pressedBarCorner, pressedBarAlpha / 100.0f, pressedBarColor);
             pressedOverlay.setBackground(bg);
-            
+
             // 启用边缘羽化
             if (pressedOverlay instanceof FeatheredFrameLayout) {
                 int pressedColor = parseColorWithAlpha(pressedBarColor, pressedBarAlpha / 100.0f);
                 ((FeatheredFrameLayout) pressedOverlay).setFeatherEnabled(true, pressedColor, pressedBarCorner, pressedBarFeatherWidth);
             }
-            
+
             // == 第二步：纯透明度动画显示覆盖层 ==
             pressedOverlay.setAlpha(pressedBarAlpha / 100.0f * 0.6f);
             pressedOverlay.animate().alpha(pressedBarAlpha / 100.0f).setDuration(80).start();
-            
+
             Log.d(TAG, "按下样式已应用（纯透明度变换，无位移和缩放）");
         } catch (Exception e) {
             Log.e(TAG, "应用按下样式失败", e);
         }
     }
-    
+
     /**
      * 恢复原始样式（手指抬起时）
+     *
      * @param restoreWindow 是否在动画完成后恢复窗口位置和大小
      */
     private void restoreNormalBarStyles(boolean restoreWindow) {
         if (pressedOverlay == null) return;
         if (isAiWindowExpanded) return;
-        
+
         // 取消正在进行的动画
         pressedOverlay.animate().cancel();
-        
+
         if (restoreWindow) {
             // 透明度渐出隐藏按下样式，完成后恢复正常的 bottomBar 样式
             pressedOverlay.animate().alpha(0f).setDuration(150).withEndAction(new Runnable() {
@@ -1112,10 +1118,10 @@ public class FloatWindowService extends Service {
             // 仅淡出按下样式（用于长按触发展开前）
             pressedOverlay.animate().alpha(0f).setDuration(100).start();
         }
-        
+
         Log.d(TAG, "已恢复原始样式（透明度渐变）");
     }
-    
+
     /**
      * 恢复原始样式（手指抬起时）
      * 默认恢复窗口位置和大小
@@ -1123,18 +1129,19 @@ public class FloatWindowService extends Service {
     private void restoreNormalBarStyles() {
         restoreNormalBarStyles(true);
     }
-    
+
     /**
      * 更新提示条位置
+     *
      * @param posX X 偏移
      * @param posY Y 偏移（距底部，dp）
      */
     public void updateBarPosition(int posX, int posY) {
         barPositionX = posX;
         barPositionY = posY;
-        
+
         Log.d(TAG, "更新位置 - X: " + posX + ", Y: " + posY + "dp");
-        
+
         // 关键修复：立即在主线程执行
         if (Looper.myLooper() == Looper.getMainLooper()) {
             applyPositionChanges();
@@ -1147,7 +1154,7 @@ public class FloatWindowService extends Service {
             });
         }
     }
-    
+
     /**
      * 应用位置更改到视图
      */
@@ -1156,7 +1163,7 @@ public class FloatWindowService extends Service {
             try {
                 barLayoutParams.x = barPositionX;
                 barLayoutParams.y = dpToPx(barPositionY); // 正值越大提示条越靠上
-                
+
                 windowManager.updateViewLayout(barContainer, barLayoutParams);
                 Log.d(TAG, "位置已实时更新 - X: " + barPositionX + ", Y: " + barPositionY + "dp");
             } catch (Exception e) {
@@ -1164,27 +1171,28 @@ public class FloatWindowService extends Service {
             }
         }
     }
-    
+
     /**
      * 更新长按触发时间
+     *
      * @param duration 长按时间（毫秒）
      */
     public void updateLongPressDuration(int duration) {
         longPressDuration = duration;
         Log.d(TAG, "长按触发时间已更新: " + duration + "ms");
     }
-    
+
     /**
      * 更新窗口边框和阴影设置
      */
-    public void updateWindowBorder(int bWidth, int cRadius, String bColor, float bAlpha, 
+    public void updateWindowBorder(int bWidth, int cRadius, String bColor, float bAlpha,
                                    int sWidth, String sColor, float sAlpha) {
         Log.d(TAG, "========================================");
         Log.d(TAG, "更新边框、圆角和阴影设置:");
         Log.d(TAG, "  边框 - 宽度: " + bWidth + "dp, 颜色: " + bColor + ", 透明度: " + bAlpha);
         Log.d(TAG, "  圆角 - 半径: " + cRadius + "dp");
         Log.d(TAG, "  阴影 - 宽度: " + sWidth + "dp, 颜色: " + sColor + ", 透明度: " + sAlpha);
-        
+
         borderWidth = bWidth;
         cornerRadius = cRadius; // 新增：更新圆角半径
         borderColor = bColor != null ? bColor : "#4CAF50";
@@ -1192,13 +1200,13 @@ public class FloatWindowService extends Service {
         shadowWidth = sWidth;
         shadowColor = sColor != null ? sColor : "#000000";
         shadowAlpha = sAlpha;
-        
+
         Log.d(TAG, "更新后的成员变量:");
         Log.d(TAG, "  cornerRadius = " + cornerRadius);
         Log.d(TAG, "  borderColor = " + borderColor);
         Log.d(TAG, "  shadowColor = " + shadowColor);
         Log.d(TAG, "========================================");
-        
+
         // 如果窗口已经展开，需要重新创建视图以应用新样式
         if (isAiWindowExpanded && aiWebView != null) {
             new Handler(Looper.getMainLooper()).post(new Runnable() {
@@ -1209,14 +1217,14 @@ public class FloatWindowService extends Service {
             });
         }
     }
-    
+
     /**
      * 更新关闭按钮显示设置
      */
     public void updateShowCloseButton(boolean show) {
         showCloseButton = show;
         Log.d(TAG, "关闭按钮显示设置已更新: " + showCloseButton);
-        
+
         // 如果窗口已经展开，需要重新创建视图以应用新设置
         if (isAiWindowExpanded && aiWebView != null) {
             new Handler(Looper.getMainLooper()).post(new Runnable() {
@@ -1227,14 +1235,14 @@ public class FloatWindowService extends Service {
             });
         }
     }
-    
+
     /**
      * 更新刷新按钮显示设置
      */
     public void updateShowRefreshButton(boolean show) {
         showRefreshButton = show;
         Log.d(TAG, "刷新按钮显示设置已更新: " + showRefreshButton);
-        
+
         // 如果窗口已经展开，需要重新创建视图以应用新设置
         if (isAiWindowExpanded && aiWebView != null) {
             new Handler(Looper.getMainLooper()).post(new Runnable() {
@@ -1245,14 +1253,14 @@ public class FloatWindowService extends Service {
             });
         }
     }
-    
+
     /**
      * 更新后退按钮显示设置
      */
     public void updateShowBackButton(boolean show) {
         showBackButton = show;
         Log.d(TAG, "后退按钮显示设置已更新: " + showBackButton);
-        
+
         // 如果窗口已经展开，需要重新创建视图以应用新设置
         if (isAiWindowExpanded && aiWebView != null) {
             new Handler(Looper.getMainLooper()).post(new Runnable() {
@@ -1263,7 +1271,7 @@ public class FloatWindowService extends Service {
             });
         }
     }
-    
+
     /**
      * 重新创建 AI 窗口视图以应用新的边框和阴影样式
      */
@@ -1271,49 +1279,49 @@ public class FloatWindowService extends Service {
         if (barContainer == null || windowManager == null) {
             return;
         }
-        
+
         try {
             // 保留 WebView
             WebView oldWebView = aiWebView;
-            
+
             // 移除旧视图
             barContainer.removeAllViews();
-            
+
             // 创建新视图
             View aiWindowView = createAiWindowView();
             barContainer.addView(aiWindowView);
-            
+
             // 恢复 WebView 引用
             aiWebView = oldWebView;
-            
+
             Log.d(TAG, "AI 窗口视图已重新创建，应用新的边框和阴影样式");
         } catch (Exception e) {
             Log.e(TAG, "重新创建 AI 窗口视图失败", e);
         }
     }
-    
+
     /**
      * 长按回调：根据配置执行行为
      */
     private void onBarLongPressed() {
         Log.d(TAG, "提示条被长按");
-        
+
         // 执行长按对应的行为
         performGestureAction("long_press");
     }
-    
+
     /**
      * 双击提示条回调：根据配置执行行为
      */
     private void onBarDoubleClicked() {
         Log.d(TAG, "提示条被双击");
-        
+
         if (isAiWindowExpanded || isShortcutWindowExpanded) {
             return;
         }
         performGestureAction("double_click");
     }
-    
+
     /**
      * 根据手势类型执行配置的行为
      */
@@ -1322,7 +1330,7 @@ public class FloatWindowService extends Service {
         String pkg = getGestureAppPackage(gesture);
         String cls = getGestureAppClass(gesture);
         String name = getGestureAppName(gesture);
-        
+
         if (ACTION_NONE.equals(action)) {
             Log.d(TAG, gesture + " 行为：无");
             return;
@@ -1345,7 +1353,7 @@ public class FloatWindowService extends Service {
             }
         }
     }
-    
+
     /**
      * 获取指定手势的配置行为
      */
@@ -1355,7 +1363,7 @@ public class FloatWindowService extends Service {
         else if ("long_press".equals(gesture)) return longPressAction;
         return ACTION_NONE;
     }
-    
+
     /**
      * 获取指定手势的应用包名
      */
@@ -1365,7 +1373,7 @@ public class FloatWindowService extends Service {
         else if ("long_press".equals(gesture)) return longPressAppPackage;
         return "";
     }
-    
+
     /**
      * 获取指定手势的应用名称
      */
@@ -1375,7 +1383,7 @@ public class FloatWindowService extends Service {
         else if ("long_press".equals(gesture)) return longPressAppName;
         return "";
     }
-    
+
     /**
      * 获取指定手势的应用类名
      */
@@ -1385,7 +1393,7 @@ public class FloatWindowService extends Service {
         else if ("long_press".equals(gesture)) return longPressAppClass;
         return "";
     }
-    
+
     /**
      * 打开指定应用
      */
@@ -1394,7 +1402,7 @@ public class FloatWindowService extends Service {
             Log.d(TAG, "未选择要打开的应用");
             return;
         }
-        
+
         try {
             Intent launchIntent = new Intent(Intent.ACTION_MAIN);
             launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -1406,14 +1414,14 @@ public class FloatWindowService extends Service {
             Log.e(TAG, "打开应用失败: " + appName, e);
         }
     }
-    
+
     /**
      * 单击提示条：打开已选择的第三方应用（兼容旧版，保留引用）
      */
     private void launchClickApp() {
         launchApp(clickAppPackage, clickAppName, clickAppClass);
     }
-    
+
     /**
      * 展开为 AI 对话窗口
      */
@@ -1421,7 +1429,7 @@ public class FloatWindowService extends Service {
         if (isAiWindowExpanded) {
             return;
         }
-        
+
         // Save start position for animation
         final int startWidth = barLayoutParams.width;
         final int startHeight = barLayoutParams.height;
@@ -1429,7 +1437,7 @@ public class FloatWindowService extends Service {
         // CENTER_VERTICAL|CENTER_HORIZONTAL 下：x=barPositionX(居中偏移), y=dpToPx(barPositionY)(居中偏移)
         final int startX = barPositionX;
         final int startY = dpToPx(barPositionY);
-        
+
         if (barContainer != null && windowManager != null) {
             try {
                 // 关键修复：使用 getRealMetrics 获取包含导航栏的全屏尺寸
@@ -1438,7 +1446,7 @@ public class FloatWindowService extends Service {
                 windowManager.getDefaultDisplay().getRealMetrics(realMetrics);
                 final int screenWidth = realMetrics.widthPixels;
                 final int screenHeight = realMetrics.heightPixels;
-                
+
                 // ===== 保持 CENTER_VERTICAL|CENTER_HORIZONTAL 重力，无需切换 =====
                 // gravity stays CENTER_VERTICAL | CENTER_HORIZONTAL, 无需切换
                 barLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
@@ -1457,7 +1465,7 @@ public class FloatWindowService extends Service {
                 // 以防止 SurfaceFlinger 裁剪超出 Surface 缓冲区的内容
                 int requiredWidth = Math.max(screenWidth, 4 * Math.abs(windowPositionX) + aiWindowWidth);
                 int requiredHeight = Math.max(screenHeight, 4 * Math.abs(windowPositionY) + aiWindowHeight);
-                
+
                 // barContainer 立即设为足够大的尺寸，不再逐帧调整窗口 LayoutParams（改用 View 变换动画）
                 barLayoutParams.x = 0;
                 barLayoutParams.y = 0;
@@ -1465,7 +1473,7 @@ public class FloatWindowService extends Service {
                 barLayoutParams.height = requiredHeight;
                 windowManager.updateViewLayout(barContainer, barLayoutParams);
                 Log.d(TAG, "[EXPAND_DEBUG] barContainer 全屏: w=" + requiredWidth + " h=" + requiredHeight);
-                
+
                 // ===== 关键修复：嵌套 OnGlobalLayoutListener 确保两层布局都完成 =====
                 // 第一层：等待 barContainer 完成全屏布局
                 // 第二层：等待 contentContainer 完成布局后再设置 translation 和启动动画
@@ -1481,27 +1489,27 @@ public class FloatWindowService extends Service {
                         }
                         barContainer.getViewTreeObserver().removeOnGlobalLayoutListener(this);
                         Log.d(TAG, "[EXPAND_DEBUG] barContainer 全屏布局完成，添加视图");
-                        
+
                         try {
                             // ===== 替换视图内容 =====
                             barContainer.removeAllViews();
                             View aiWindowView = createAiWindowView();
                             barContainer.addView(aiWindowView);
-                            
+
                             // 获取 contentContainer 并设为目标尺寸
                             View contentContainer = ((FrameLayout) ((FrameLayout) aiWindowView).getChildAt(0));
                             FrameLayout.LayoutParams contentLp = (FrameLayout.LayoutParams) contentContainer.getLayoutParams();
                             final int contentTargetWidth = contentLp.width;
                             final int contentTargetHeight = contentLp.height;
                             contentContainer.setAlpha(0f);
-                            
+
                             int effectiveStartWidth = (startWidth == ViewGroup.LayoutParams.MATCH_PARENT || startWidth <= 0) ? screenWidth : startWidth;
                             final int contentStartWidth = effectiveStartWidth;
                             // content 立即设为目标尺寸，通过初始 scale 呈现提示条大小的视觉效果
                             contentLp.width = contentTargetWidth;
                             contentLp.height = contentTargetHeight;
                             contentContainer.setLayoutParams(contentLp);
-                            
+
                             // ===== 同时设置 scale, pivot 和 translation，避免先 setScale 后 setTranslation 的帧间隙 =====
                             // 注意：setTranslationX/Y 在布局前设置是安全的，Android 会在布局完成后自动叠加到最终位置
                             final float initScaleX = (float) contentStartWidth / contentTargetWidth;
@@ -1513,26 +1521,26 @@ public class FloatWindowService extends Service {
                                     + " margin=(" + contentLp.leftMargin + "," + contentLp.topMargin + ")"
                                     + " contentSize=" + contentTargetWidth + "x" + contentTargetHeight
                                     + " initScale=" + initScaleX + "x" + initScaleY);
-                            
+
                             contentContainer.setAlpha(0f);
                             Log.d(TAG, "[EXPAND_TRACE] scale/translation 已设置 at " + System.currentTimeMillis()
                                     + " scale=" + initScaleX + "x" + initScaleY
                                     + " trans=(" + initTranslationX + "," + initTranslationY + ")");
                             animationSetTime = System.currentTimeMillis();
-                            
+
                             // ===== 设置初始圆角 =====
-                            ((GradientDrawable) contentContainer.getBackground()).setCornerRadius(dpToPx(currentCornerRadius));
-                            if (contentContainer.getForeground() instanceof GradientDrawable) {
-                                ((GradientDrawable) contentContainer.getForeground()).setCornerRadius(dpToPx(currentCornerRadius));
-                            }
-                            contentContainer.invalidateOutline();
-                            
+//                            ((GradientDrawable) contentContainer.getBackground()).setCornerRadius(dpToPx(currentCornerRadius));
+//                            if (contentContainer.getForeground() instanceof GradientDrawable) {
+//                                ((GradientDrawable) contentContainer.getForeground()).setCornerRadius(dpToPx(currentCornerRadius));
+//                            }
+//                            contentContainer.invalidateOutline();
+
                             // 记录基础 margins
                             baseLeftMargin = contentLp.leftMargin;
                             baseTopMargin = contentLp.topMargin;
                             baseRightMargin = contentLp.rightMargin;
                             baseBottomMargin = contentLp.bottomMargin;
-                            
+
                             isAiWindowExpanded = true;
                             startWindowHostActivity();
                             isKeyboardVisible = false;
@@ -1600,7 +1608,7 @@ public class FloatWindowService extends Service {
                         }
                     }
                 });
-                
+
             } catch (Exception e) {
                 Log.e(TAG, "expand failed", e);
                 isOverlayAnimating = false;
@@ -1608,7 +1616,7 @@ public class FloatWindowService extends Service {
             }
         }
     }
-    
+
     /**
      * Animate contentContainer from start size to target size
      */
@@ -1622,28 +1630,28 @@ public class FloatWindowService extends Service {
                 long elapsed = System.currentTimeMillis() - startTime;
                 float progress = Math.min((float) elapsed / animationDuration, 1.0f);
                 float easedProgress = easeOutCubic(progress);
-                
+
                 int currentWidth = (int) (startWidth + (targetWidth - startWidth) * easedProgress);
                 int currentHeight = (int) (startHeight + (targetHeight - startHeight) * easedProgress);
-                
+
                 FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) content.getLayoutParams();
                 lp.width = Math.max(currentWidth, 1);
                 lp.height = Math.max(currentHeight, 1);
                 content.setLayoutParams(lp);
-                
+
                 if (progress < 1.0f) {
                     handler.postDelayed(this, FRAME_INTERVAL);
                 }
             }
         });
     }
-    
+
     /**
      * 创建 AI 对话窗口
      */
     private void createAiWindow() {
         aiWindowContainer = new FrameLayout(this);
-        
+
         // 设置 AI 窗口布局参数
         aiWindowParams = new WindowManager.LayoutParams();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -1651,18 +1659,18 @@ public class FloatWindowService extends Service {
         } else {
             aiWindowParams.type = WindowManager.LayoutParams.TYPE_PHONE;
         }
-        
+
         aiWindowParams.format = PixelFormat.RGBA_8888;
         aiWindowParams.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
         aiWindowParams.gravity = Gravity.CENTER;
         aiWindowParams.width = aiWindowWidth;
         aiWindowParams.height = aiWindowHeight;
-        
+
         // 创建 AI 窗口视图
         View aiWindowView = createAiWindowView();
         aiWindowContainer.addView(aiWindowView);
-        
+
         // 添加到窗口（初始尺寸为0，用于动画）
         try {
             aiWindowParams.width = 0;
@@ -1672,7 +1680,7 @@ public class FloatWindowService extends Service {
             e.printStackTrace();
         }
     }
-    
+
     /**
      * 创建 AI 窗口视图（包含 WebView 和关闭按钮）
      */
@@ -1680,7 +1688,7 @@ public class FloatWindowService extends Service {
         Log.d(TAG, "创建 AI 窗口 - 边框: " + borderWidth + "dp, 颜色: " + borderColor + ", 透明度: " + borderAlpha);
         Log.d(TAG, "创建 AI 窗口 - 圆角: " + cornerRadius + "dp");
         Log.d(TAG, "创建 AI 窗口 - 阴影: " + shadowWidth + "dp, 颜色: " + shadowColor + ", 透明度: " + shadowAlpha);
-        
+
         // rootLayout: fullscreen transparent overlay for outside touch detection
         windowRootLayout = new FrameLayout(this);
         windowRootLayout.setLayoutParams(new FrameLayout.LayoutParams(
@@ -1692,14 +1700,14 @@ public class FloatWindowService extends Service {
         // 当窗口位置调低时（windowPositionY 较大），contentContainer 底部可能超出 windowRootLayout
         // 默认 clipChildren=true 会裁剪超出部分，导致导航栏区域被裁切
         windowRootLayout.setClipChildren(false);
-        
+
         // 拦截返回键（键盘显示时 overlay 有焦点，需要自行处理返回键）
         windowRootLayout.setFocusable(true);
         windowRootLayout.setFocusableInTouchMode(true);
         windowRootLayout.setOnKeyListener(new View.OnKeyListener() {
             @Override
             public boolean onKey(View v, int keyCode, android.view.KeyEvent event) {
-                if (keyCode == android.view.KeyEvent.KEYCODE_BACK 
+                if (keyCode == android.view.KeyEvent.KEYCODE_BACK
                         && event.getAction() == android.view.KeyEvent.ACTION_UP) {
                     Log.d(TAG, "windowRootLayout BACK key intercepted, isKeyboardVisible=" + isKeyboardVisible);
                     if (isKeyboardVisible) {
@@ -1728,12 +1736,12 @@ public class FloatWindowService extends Service {
                 return false;
             }
         });
-        
+
         // 点击外部区域处理见下面的 OnTouchListener（在 addView 完成后设置）
         // 注意：不要在此处设置 setOnClickListener，OnTouchListener 在 DOWN 阶段消费事件更可靠
-        
+
         // System back (gesture + nav bar) handled by WindowHostActivity proxy
-        
+
         // contentContainer: specific size, centered in fullscreen rootLayout with position offset
         FrameLayout contentContainer = new FrameLayout(this);
         FrameLayout.LayoutParams containerParams = new FrameLayout.LayoutParams(
@@ -1747,7 +1755,7 @@ public class FloatWindowService extends Service {
         containerParams.rightMargin = -windowPositionX;
         containerParams.bottomMargin = -windowPositionY;
         contentContainer.setLayoutParams(containerParams);
-        
+
         // Block click propagation to rootLayout (outside click handler)
         contentContainer.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -1755,37 +1763,34 @@ public class FloatWindowService extends Service {
                 // consume click, don't propagate to rootLayout
             }
         });
-        
-        // 关键修复4：创建带边框的背景，确保边框在所有方向都显示
-        GradientDrawable background = new GradientDrawable();
-        background.setShape(GradientDrawable.RECTANGLE);
+
+        // 使用连续曲率圆角背景
+        ContinuousRoundRectDrawable background = new ContinuousRoundRectDrawable(
+                getWindowBgColor(),
+                dpToPx(cornerRadius)
+        );
+        // 显式设置圆角（某些情况下构造参数可能未触发 buildPath）
         background.setCornerRadius(dpToPx(cornerRadius));
-        background.setColor(getWindowBgColor());
-        
-        // 关键修复5：直接设置边框，确保颜色正确且四周都显示
         contentContainer.setBackground(background);
-        contentContainer.setClipToOutline(true);
-        
+// 注意：连续曲率 Path 无法通过 setClipToOutline 裁剪，所以去掉这行
+// contentContainer.setClipToOutline(true); // 删除或注释掉
+
         if (borderWidth > 0) {
             try {
                 int borderColorWithAlpha = parseColorWithAlpha(borderColor, borderAlpha);
-                GradientDrawable foregroundBorder = new GradientDrawable();
-                foregroundBorder.setShape(GradientDrawable.RECTANGLE);
-                foregroundBorder.setCornerRadius(dpToPx(cornerRadius));
-                foregroundBorder.setColor(Color.TRANSPARENT);
-                foregroundBorder.setStroke(dpToPx(borderWidth), borderColorWithAlpha);
-                contentContainer.setForeground(foregroundBorder);
-                Log.d(TAG, "border set to foreground: " + borderColor + " -> 0x" + Integer.toHexString(borderColorWithAlpha));
+                // 将边框参数直接设置到背景 Drawable 中
+                background.setStroke(dpToPx(borderWidth), borderColorWithAlpha);
+                Log.d(TAG, "Continuous border set: " + borderColor + " -> 0x" + Integer.toHexString(borderColorWithAlpha));
             } catch (Exception e) {
                 Log.e(TAG, "set border failed", e);
             }
         }
-        
+
         // 关键修复：为边框留出空间
         // setStroke 绘制的边框在形状外侧，setClipToOutline 裁剪的是填充区域
         // 需要添加等于边框宽度的 padding，否则 WebView 会覆盖边框
         // No padding needed - foreground border draws on top of children
-        
+
         // 判断是否复用已有的 WebView（保留上次关闭时的网页状态）
         boolean isNewWebView = false;
         if (aiWebView == null) {
@@ -1803,18 +1808,28 @@ public class FloatWindowService extends Service {
                 FrameLayout.LayoutParams.MATCH_PARENT
         );
         aiWebView.setLayoutParams(webViewParams);
-        
+
         GradientDrawable webViewBackground = new GradientDrawable();
         webViewBackground.setShape(GradientDrawable.RECTANGLE);
         webViewBackground.setCornerRadius(dpToPx(cornerRadius));
         webViewBackground.setColor(Color.TRANSPARENT);
         aiWebView.setBackground(webViewBackground);
-        
+
         // ✅ 启用 WebView 的硬件加速和图层类型，确保圆角渲染正确
         aiWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-        
+        // 为 WebView 设置圆角裁剪，使其与 contentContainer 的圆角一致
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            final float radius = dpToPx(cornerRadius);
+            aiWebView.setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View view, Outline outline) {
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+                }
+            });
+            aiWebView.setClipToOutline(true);
+        }
         contentContainer.addView(aiWebView);
-        
+
         // 复用 WebView 时恢复渲染状态（收起时 onPause 暂停了内部渲染管线）
         if (!isNewWebView && aiWebView != null) {
             // 先置为可见，确保硬件渲染表面正确初始化
@@ -1825,10 +1840,10 @@ public class FloatWindowService extends Service {
             aiWebView.invalidate();
             Log.d(TAG, "Reused WebView: onResume + invalidate called");
         }
-        
+
         // 为新创建和复用的 WebView 均应用深色模式设置
         applyWebViewDarkMode(aiWebView);
-        
+
         // 仅新创建的 WebView 需要加载 URL；已有 WebView 保留上次的网页状态
         if (isNewWebView) {
             Log.d(TAG, "New WebView, loading URL: " + currentAiUrl);
@@ -1843,7 +1858,7 @@ public class FloatWindowService extends Service {
                 loadedAiUrl = currentAiUrl;
             }
         }
-        
+
         // 创建隐藏 IME 代理 EditText（接收输入法输入，通过 JS 转发给 WebView）
         proxyIme = new EditText(this);
         proxyIme.setVisibility(View.INVISIBLE);
@@ -1855,13 +1870,13 @@ public class FloatWindowService extends Service {
         proxyIme.setFocusableInTouchMode(true);
         proxyIme.setBackground(null);
         contentContainer.addView(proxyIme);
-        
+
         // ===== 创建右上角按钮组（返回、刷新、关闭），根据设置控制显示 =====
         // 从右到左依次添加，自动右对齐：只显示可见的按钮，右侧紧密排列
         int buttonSize = dpToPx(32);
         int gap = dpToPx(10);
         int rightMargin = dpToPx(10); // 最右侧按钮的右边距
-        
+
         // 关闭按钮（最右侧）
         if (showCloseButton) {
             ImageView closeButton = createCloseButton();
@@ -1876,7 +1891,7 @@ public class FloatWindowService extends Service {
             rightMargin += buttonSize + gap;
             Log.d(TAG, "关闭按钮已显示");
         }
-        
+
         // 创建刷新按钮（中间）
         if (showRefreshButton) {
             ImageView refreshButton = createRefreshButton();
@@ -1890,7 +1905,7 @@ public class FloatWindowService extends Service {
             contentContainer.addView(refreshButton);
             rightMargin += buttonSize + gap;
         }
-        
+
         // 创建返回按钮（最左侧）
         if (showBackButton) {
             final ImageView backButton = createBackButton();
@@ -1903,31 +1918,31 @@ public class FloatWindowService extends Service {
             backBtnParams.setMargins(dpToPx(10), dpToPx(10), rightMargin, dpToPx(10));
             backButton.setLayoutParams(backBtnParams);
             contentContainer.addView(backButton);
-            
+
             // 更新返回按钮状态（根据 WebView 能否返回）
             updateBackButtonState(backButton);
         } else {
             backButtonRef = null;
         }
-        
+
         Log.d(TAG, "✅ contentContainer 已设置 clipToOutline，WebView 有相同圆角背景");
-        
+
         // 组装层级：rootLayout -> contentContainer
         windowRootLayout.addView(contentContainer);
-        
+
         // 外部触摸事件处理：使用 OnTouchListener 在 DOWN 阶段就主动消费外部触摸事件
         // 与 OnClickListener 不同，OnTouchListener 在 dispatchTouchEvent 内部执行，
         // 返回 true 可确保触摸序列被当前窗口完全捕获，不穿透到下层窗口
         // 解决 TYPE_APPLICATION_OVERLAY 下首次触摸被系统旁路的问题
         windowRootLayout.setOnTouchListener(new View.OnTouchListener() {
             private boolean mOutsideDown = false;
-            
+
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN: {
                         // 判断触摸点是否在 contentContainer 之外
-                // contentContainer 是 rootLayout 的第一个子视图（index 0）
+                        // contentContainer 是 rootLayout 的第一个子视图（index 0）
                         View content = windowRootLayout.getChildAt(0);
                         if (content != null) {
                             Rect rect = new Rect();
@@ -1978,60 +1993,62 @@ public class FloatWindowService extends Service {
                 }
             }
         });
-        
+
         return windowRootLayout;
     }
-    
+
     /**
      * 创建渐变阴影 Drawable
+     *
      * @return 渐变阴影背景
      */
     private GradientDrawable createShadowDrawable() {
         // 关键修复：使用径向渐变实现从内到外的阴影效果
         int[] colors;
-        
+
         try {
             int shadowColorWithAlpha = parseColorWithAlpha(shadowColor, shadowAlpha);
             int transparentColor = Color.argb(0, 0, 0, 0);
-            
+
             // 定义渐变色：从阴影颜色到透明
-            colors = new int[] {
-                shadowColorWithAlpha,  // 中心（靠近边框）
-                transparentColor       // 边缘（完全透明）
+            colors = new int[]{
+                    shadowColorWithAlpha,  // 中心（靠近边框）
+                    transparentColor       // 边缘（完全透明）
             };
-            
-            Log.d(TAG, "✅ 阴影渐变颜色 - 起始: 0x" + Integer.toHexString(shadowColorWithAlpha) + 
-                  ", 结束: 0x" + Integer.toHexString(transparentColor));
+
+            Log.d(TAG, "✅ 阴影渐变颜色 - 起始: 0x" + Integer.toHexString(shadowColorWithAlpha) +
+                    ", 结束: 0x" + Integer.toHexString(transparentColor));
         } catch (Exception e) {
             Log.e(TAG, "❌ 阴影颜色解析失败", e);
             // 默认黑色半透明阴影
-            colors = new int[] { Color.argb(128, 0, 0, 0), Color.argb(0, 0, 0, 0) };
+            colors = new int[]{Color.argb(128, 0, 0, 0), Color.argb(0, 0, 0, 0)};
         }
-        
+
         // 创建径向渐变 Drawable
         GradientDrawable shadowDrawable = new GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 colors
         );
         shadowDrawable.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        
+
         // 关键修复：设置渐变半径为阴影视图的一半（从中心到边缘）
         // 阴影视图比内容大 shadowWidth*2，所以半径应该是 shadowWidth
         shadowDrawable.setGradientRadius(dpToPx(shadowWidth));
         shadowDrawable.setGradientCenter(0.5f, 0.5f);
-        
+
         // 设置圆角，与内容容器匹配
         shadowDrawable.setCornerRadius(dpToPx(cornerRadius + shadowWidth));
-        
+
         Log.d(TAG, "✅ 阴影 Drawable 已创建 - 半径: " + shadowWidth + "dp, 圆角: " + (cornerRadius + shadowWidth) + "dp");
-        
+
         return shadowDrawable;
     }
-    
+
     /**
      * 解析颜色字符串并应用透明度
+     *
      * @param colorHex 颜色字符串（如 #RRGGBB）
-     * @param alpha 透明度 0.0-1.0
+     * @param alpha    透明度 0.0-1.0
      * @return 带透明度的颜色值
      */
     private int parseColorWithAlpha(String colorHex, float alpha) {
@@ -2047,7 +2064,7 @@ public class FloatWindowService extends Service {
             return Color.parseColor("#4CAF50");
         }
     }
-    
+
     /**
      * 创建 WebView
      */
@@ -2065,7 +2082,7 @@ public class FloatWindowService extends Service {
                 }
                 super.onFocusChanged(focused, direction, previouslyFocusedRect);
             }
-            
+
             @Override
             public boolean requestFocus(int direction, Rect previouslyFocusedRect) {
                 // 当代理 IME 激活时，阻止 WebView 抢夺焦点
@@ -2078,7 +2095,7 @@ public class FloatWindowService extends Service {
                 }
                 return super.requestFocus(direction, previouslyFocusedRect);
             }
-            
+
             @Override
             public ActionMode startActionMode(ActionMode.Callback callback) {
                 // TYPE_APPLICATION_OVERLAY 窗口没有 Activity，默认 startActionMode 会失败
@@ -2095,7 +2112,7 @@ public class FloatWindowService extends Service {
                 }
                 return super.startActionMode(callback);
             }
-            
+
             @Override
             public ActionMode startActionMode(ActionMode.Callback callback, int type) {
                 Log.d(TAG, "WebView.startActionMode type=" + type + " called");
@@ -2113,7 +2130,7 @@ public class FloatWindowService extends Service {
         webView.setFocusableInTouchMode(true);
         // 阻断 WebView 原生长按处理，完全由自定义 GestureDetector + JS 接管文本选择
         webView.setOnLongClickListener(v -> true);
-        
+
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -2122,10 +2139,10 @@ public class FloatWindowService extends Service {
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        
+
         // WebView 深色模式由 applyWebViewDarkMode() 在展开窗口时动态设置
         // 不在此处硬编码，以确保每次展开都根据当前系统深色模式实时切换
-        
+
         // Enable media and file access for microphone and file upload
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(true);
@@ -2134,12 +2151,12 @@ public class FloatWindowService extends Service {
             settings.setAllowFileAccessFromFileURLs(true);
             settings.setAllowUniversalAccessFromFileURLs(true);
         }
-        
+
         // JavaScript 接口：检测输入框聚焦/失焦，通过隐藏的代理 EditText 接收 IME 输入
         // 在 TYPE_APPLICATION_OVERLAY 中 WebView 无法建立 InputConnection，
         // 因此使用代理 EditText 接收输入法文字，再通过 JS 转发到 WebView
         webView.addJavascriptInterface(new Object() {
-            
+
             @JavascriptInterface
             public void onInputFocus() {
                 Log.d(TAG, "JS: input focused");
@@ -2158,7 +2175,7 @@ public class FloatWindowService extends Service {
                 if (isKeyboardVisible && proxyIme != null && proxyIme.getVisibility() == View.VISIBLE) {
                     Log.d(TAG, "onInputFocus: IME already active, updating _imeTarget only");
                     aiWebView.evaluateJavascript(
-                        "(function(){var el=document.activeElement;if(el&&(el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.isContentEditable))window._imeTarget=el;})()", null);
+                            "(function(){var el=document.activeElement;if(el&&(el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.isContentEditable))window._imeTarget=el;})()", null);
                     return;
                 }
                 FloatWindowService.this.isImeProcessing = true;
@@ -2173,13 +2190,13 @@ public class FloatWindowService extends Service {
                         // 1. 在 WebView 中保存当前聚焦元素的引用
                         //    之后 proxyIme.requestFocus() 会使 WebView 失焦，activeElement 会变 null
                         aiWebView.evaluateJavascript(
-                            "(function(){" +
-                            "  var el = document.activeElement;" +
-                            "  if(el && (el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.isContentEditable)){" +
-                            "    window._imeTarget = el;" +
-                            "    window._imeValue = el.value || el.textContent || '';" +
-                            "  }" +
-                            "})()", null);
+                                "(function(){" +
+                                        "  var el = document.activeElement;" +
+                                        "  if(el && (el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.isContentEditable)){" +
+                                        "    window._imeTarget = el;" +
+                                        "    window._imeValue = el.value || el.textContent || '';" +
+                                        "  }" +
+                                        "})()", null);
                         // 2. 移除 FLAG_NOT_FOCUSABLE，让窗口可接收 IME 输入
                         removeNotFocusableFlag();
                         // 3. 延迟等待 flag 生效
@@ -2190,21 +2207,21 @@ public class FloatWindowService extends Service {
                                 //    使 delta 对比基于实际页面文本，而非从空字符串开始
                                 if (aiWebView != null) {
                                     aiWebView.evaluateJavascript(
-                                        "(function(){return window._imeValue||'';})()",
-                                        new ValueCallback<String>() {
-                                            @Override
-                                            public void onReceiveValue(String value) {
-                                                String initialText = "";
-                                                if (value != null && !"null".equals(value) && value.length() >= 2) {
-                                                    try {
-                                                        initialText = new org.json.JSONTokener(value).nextValue().toString();
-                                                    } catch (Exception e) {
-                                                        Log.e(TAG, "Failed to parse _imeValue JSON", e);
+                                            "(function(){return window._imeValue||'';})()",
+                                            new ValueCallback<String>() {
+                                                @Override
+                                                public void onReceiveValue(String value) {
+                                                    String initialText = "";
+                                                    if (value != null && !"null".equals(value) && value.length() >= 2) {
+                                                        try {
+                                                            initialText = new org.json.JSONTokener(value).nextValue().toString();
+                                                        } catch (Exception e) {
+                                                            Log.e(TAG, "Failed to parse _imeValue JSON", e);
+                                                        }
                                                     }
+                                                    setupProxyIme(initialText);
                                                 }
-                                                setupProxyIme(initialText);
-                                            }
-                                        });
+                                            });
                                 } else {
                                     setupProxyIme("");
                                 }
@@ -2213,7 +2230,7 @@ public class FloatWindowService extends Service {
                     }
                 });
             }
-            
+
             @JavascriptInterface
             public void onInputBlur() {
                 // 输入框失焦后，延迟 300ms 检测是否真正失焦（非短暂 blur-re-focus）
@@ -2251,7 +2268,7 @@ public class FloatWindowService extends Service {
                 };
                 new Handler(Looper.getMainLooper()).postDelayed(blurRefocusRunnable, 300);
             }
-            
+
             @JavascriptInterface
             public void onSelectionChange(int start, int end) {
                 Log.d(TAG, "[CURSOR] selection changed to (" + start + "," + end + ")");
@@ -2270,15 +2287,15 @@ public class FloatWindowService extends Service {
                     }
                 });
             }
-            
+
             @JavascriptInterface
             public String getPendingPasteText() {
                 String t = pendingPasteText;
-                Log.d(TAG, "[PASTE_DEBUG] getPendingPasteText called, text length=" + (t != null ? t.length() : -1) + " firstChar=" + (t != null && t.length() > 0 ? (int)t.charAt(0) : -1));
+                Log.d(TAG, "[PASTE_DEBUG] getPendingPasteText called, text length=" + (t != null ? t.length() : -1) + " firstChar=" + (t != null && t.length() > 0 ? (int) t.charAt(0) : -1));
                 pendingPasteText = null;
                 return t != null ? t : "";
             }
-            
+
             @JavascriptInterface
             public void syncProxyIme(String newValue) {
                 if (newValue == null) return;
@@ -2297,7 +2314,7 @@ public class FloatWindowService extends Service {
                 });
             }
         }, "AndroidBridge");
-        
+
         // 注入 JavaScript 监听输入框聚焦/失焦事件
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -2306,7 +2323,7 @@ public class FloatWindowService extends Service {
                 view.loadUrl(url);
                 return true;
             }
-            
+
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
@@ -2314,7 +2331,7 @@ public class FloatWindowService extends Service {
                 // 尽早注入深色模式 CSS filter，避免页面加载过程中白闪
                 injectDarkModeCSS(view);
             }
-            
+
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
@@ -2324,7 +2341,7 @@ public class FloatWindowService extends Service {
                 // 页面加载完成后更新返回按钮状态
                 updateBackButtonState(backButtonRef);
             }
-            
+
             @Override
             public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
                 super.doUpdateVisitedHistory(view, url, isReload);
@@ -2332,10 +2349,10 @@ public class FloatWindowService extends Service {
                 updateBackButtonState(backButtonRef);
             }
         });
-        
+
         // Set WebChromeClient for file upload and microphone permission
         webView.setWebChromeClient(new WebChromeClient() {
-            
+
             @Override
             public void onPermissionRequest(PermissionRequest request) {
                 Log.d(TAG, "WebView permission requested: " + java.util.Arrays.toString(request.getResources()));
@@ -2347,23 +2364,24 @@ public class FloatWindowService extends Service {
                     Log.e(TAG, "Failed to grant WebView permissions", e);
                 }
             }
-            
+
             @Override
             public boolean onShowFileChooser(WebView webView,
                                              final ValueCallback<Uri[]> filePathCallback,
                                              final FileChooserParams fileChooserParams) {
                 Log.d(TAG, "File chooser requested");
-                
+
                 // Cancel any pending callback from previous attempt
                 if (FileChooserActivity.uploadCallback != null) {
                     try {
                         FileChooserActivity.uploadCallback.onReceiveValue(null);
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    }
                 }
-                
+
                 // Hide floating window so file chooser dialog is not blocked
                 hideFloatingWindow();
-                
+
                 // Wrap callback to restore floating window after file selection
                 FileChooserActivity.uploadCallback = new ValueCallback<Uri[]>() {
                     @Override
@@ -2382,18 +2400,18 @@ public class FloatWindowService extends Service {
                         showFloatingWindow();
                     }
                 };
-                
+
                 try {
                     Intent proxyIntent = new Intent(FloatWindowService.this, FileChooserActivity.class);
                     proxyIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    
+
                     // Pass accept types and mode to FileChooserActivity
                     String[] acceptTypes = fileChooserParams.getAcceptTypes();
                     proxyIntent.putExtra("accept_types", acceptTypes);
                     proxyIntent.putExtra("allow_multiple", fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
-                    
+
                     Log.d(TAG, "Accept types: " + java.util.Arrays.toString(acceptTypes));
-                    
+
                     startActivity(proxyIntent);
                 } catch (Exception e) {
                     Log.e(TAG, "Failed to launch file chooser", e);
@@ -2404,7 +2422,7 @@ public class FloatWindowService extends Service {
                 return true;
             }
         });
-        
+
         // 设置下载监听器，支持网页内的下载按钮触发文件下载
         webView.setDownloadListener(new DownloadListener() {
             @Override
@@ -2422,15 +2440,15 @@ public class FloatWindowService extends Service {
                         Log.d(TAG, "========== DOWNLOAD END (data URI) ==========");
                         return;
                     }
-                    
+
                     DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
-                    
+
                     // 转发 User-Agent（部分服务器校验）
                     if (userAgent != null && !userAgent.isEmpty()) {
                         request.addRequestHeader("User-Agent", userAgent);
                         Log.d(TAG, "  User-Agent forwarded");
                     }
-                    
+
                     // 转发 WebView 的 Cookies（登录态），否则服务器可能拒绝
                     try {
                         android.webkit.CookieManager cookieManager = android.webkit.CookieManager.getInstance();
@@ -2444,21 +2462,21 @@ public class FloatWindowService extends Service {
                     } catch (Exception e) {
                         Log.e(TAG, "  Failed to attach cookies", e);
                     }
-                    
+
                     if (mimetype != null && !mimetype.isEmpty()) {
                         request.setMimeType(mimetype);
                     }
                     request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                    
+
                     String fileName = URLUtil.guessFileName(url, contentDisposition, mimetype);
                     Log.d(TAG, "  guessedFileName: " + fileName);
                     request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName);
                     request.setAllowedOverMetered(true);
                     request.setAllowedOverRoaming(true);
-                    
+
                     DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
                     Log.d(TAG, "  DownloadManager service: " + (dm != null ? "OK" : "NULL"));
-                    
+
                     if (dm != null) {
                         long downloadId = dm.enqueue(request);
                         Log.d(TAG, "  download enqueued, ID: " + downloadId);
@@ -2473,7 +2491,7 @@ public class FloatWindowService extends Service {
                 }
             }
         });
-        
+
         // 在 WebView 上添加触摸监听器，当代理 IME 激活时阻止 WebView 抢走焦点
         // 点击发送按钮等操作时，WebView 内部可能 requestFocus 导致 proxyIme 失去焦点、IME 断开
         // 使用 GestureDetector 区分短按（点击）和长按：
@@ -2485,7 +2503,7 @@ public class FloatWindowService extends Service {
                 isLongPressing = false; // 每次新的触摸事件重置长按标记
                 return true; // 必须返回 true，GestureDetector 才能继续处理后续事件
             }
-            
+
             @Override
             public boolean onSingleTapUp(MotionEvent e) {
                 // 短按（点击）：重新聚焦代理 EditText 以保持 IME 连接
@@ -2496,12 +2514,12 @@ public class FloatWindowService extends Service {
                 // 非长按点击，清除选中状态（模拟正常浏览器点击取消选中的行为）
                 if (!isLongPressing && aiWebView != null) {
                     aiWebView.evaluateJavascript(
-                        "(function(){try{window.getSelection().removeAllRanges();}catch(e){}})()", null);
+                            "(function(){try{window.getSelection().removeAllRanges();}catch(e){}})()", null);
                 }
                 isLongPressing = false;
                 return false;
             }
-            
+
             @Override
             public void onLongPress(MotionEvent e) {
                 // 长按：设置标记，阻止 onSingleTapUp 聚焦 proxyIme
@@ -2516,10 +2534,242 @@ public class FloatWindowService extends Service {
                 final float touchX = e.getX();
                 final float touchY = e.getY();
                 Log.d(TAG, "Long press on WebView at (" + touchX + "," + touchY + ")");
-                
+
                 if (aiWebView != null) {
                     aiWebView.evaluateJavascript(
-                        "(function(x, y){" +
+                            "(function(x, y){" +
+                                    "  var R = {h:false, t:'', i:false, img:''};" +
+                                    "  var dpr = window.devicePixelRatio || 1, cx = x / dpr, cy = y / dpr;" +
+                                    "  var sel = window.getSelection();" +
+                                    "  try{" +
+                                    "    var hit = document.elementFromPoint(cx, cy);" +
+                                    "    if(hit && (hit.tagName==='INPUT'||hit.tagName==='TEXTAREA')){" +
+                                    "      R.i = true;" +
+                                    "      var s = hit.selectionStart, e = hit.selectionEnd;" +
+                                    "      if(s !== e){ R.h = true; R.t = hit.value.substring(s, e); }" +
+                                    "      else{" +
+                                    "        var off = 0;" +
+                                    "        var rect = hit.getBoundingClientRect();" +
+                                    "        var cs = window.getComputedStyle(hit);" +
+                                    "        var leftPad = (parseFloat(cs.paddingLeft)||0) + (parseFloat(cs.borderLeftWidth)||0);" +
+                                    "        var textX = cx - rect.left - leftPad + (hit.scrollLeft||0);" +
+                                    "        if(textX > 0){" +
+                                    "          var cv = document.createElement('canvas');" +
+                                    "          var ctx = cv.getContext('2d');" +
+                                    "          ctx.font = cs.font || (cs.fontSize + ' ' + cs.fontFamily);" +
+                                    "          var v = hit.value, lo = 0, hi = v.length;" +
+                                    "          while(lo < hi){" +
+                                    "            var mid = (lo + hi) >>> 1;" +
+                                    "            if(ctx.measureText(v.substring(0,mid)).width >= textX) hi = mid;" +
+                                    "            else lo = mid + 1;" +
+                                    "          }" +
+                                    "          off = lo;" +
+                                    "        }" +
+                                    "        hit.selectionStart = hit.selectionEnd = off;" +
+                                    "        window._dragAnchor = off;" +
+                                    "      }" +
+                                    "      return JSON.stringify(R);" +
+                                    "    }" +
+                                    "  }catch(e){}" +
+                                    "  try{if(sel) sel.removeAllRanges();}catch(e){}" +
+                                    "  try{" +
+                                    "    var elem = document.elementFromPoint(cx, cy);" +
+                                    "    if(elem && elem.nodeType === 1){" +
+                                    "      !function wn(n, cb){" +
+                                    "        if(n.nodeType === 3){ if(n.textContent.trim()) cb(n); return; }" +
+                                    "        if(n.nodeType === 1 && n.childNodes){" +
+                                    "          for(var i=0;i<n.childNodes.length;i++) wn(n.childNodes[i], cb);" +
+                                    "        }" +
+                                    "      }(elem, function(tn){" +
+                                    "        if(R.h) return;" +
+                                    "        var rc = document.createRange(); rc.selectNodeContents(tn);" +
+                                    "        var rect = rc.getBoundingClientRect();" +
+                                    "        if(cy >= rect.top-3 && cy <= rect.bottom+3 && cx >= rect.left-3 && cx <= rect.right+3){" +
+                                    "          var txt = tn.textContent;" +
+                                    "          for(var j=0; j<txt.length; j++){" +
+                                    "            rc.setStart(tn, j); rc.setEnd(tn, j+1);" +
+                                    "            var cr = rc.getBoundingClientRect();" +
+                                    "            if(cr.left <= cx && cx <= cr.right){" +
+                                    "              var st = j, en = j;" +
+                                    "              var _mL = (txt.charCodeAt(j)<128?50:0);" +
+                                    "              while(st > 0 && txt.charCodeAt(st-1) > 32 && j-st<_mL) st--;" +
+                                    "              while(en < txt.length && txt.charCodeAt(en) > 32 && en-j<_mL) en++;" +
+                                    "              if(_mL===0 && en===j && j+1<=txt.length) en=j+1;" +
+                                    "              if(st < en){" +
+                                    "                var wr = document.createRange();" +
+                                    "                wr.setStart(tn, st); wr.setEnd(tn, en);" +
+                                    "                sel.addRange(wr);" +
+                                    "                R.h = true; R.t = txt.substring(st, en);" +
+                                    "              } return;" +
+                                    "            }" +
+                                    "          }" +
+                                    "          var idx = Math.round((cx - rect.left) / rect.width * (txt.length-1));" +
+                                    "          idx = Math.max(0, Math.min(idx, txt.length-1));" +
+                                    "          var st = idx, en = idx;" +
+                                    "          var _mL2 = (txt.charCodeAt(idx)<128?50:0);" +
+                                    "          while(st > 0 && txt.charCodeAt(st-1) > 32 && idx-st<_mL2) st--;" +
+                                    "          while(en < txt.length && txt.charCodeAt(en) > 32 && en-idx<_mL2) en++;" +
+                                    "          if(_mL2===0 && en===idx && idx+1<=txt.length) en=idx+1;" +
+                                    "          if(st < en){" +
+                                    "            var wr = document.createRange();" +
+                                    "            wr.setStart(tn, st); wr.setEnd(tn, en);" +
+                                    "            sel.addRange(wr);" +
+                                    "            R.h = true; R.t = txt.substring(st, en);" +
+                                    "          }" +
+                                    "        }" +
+                                    "      });" +
+                                    "    }" +
+                                    "  }catch(e){}" +
+                                    "  if(!R.h && document.caretRangeFromPoint){" +
+                                    "    try{" +
+                                    "      var range = document.caretRangeFromPoint(cx, cy);" +
+                                    "      if(range){" +
+                                    "        var node = range.startContainer, off = range.startOffset;" +
+                                    "        if(node.nodeType === 3){" +
+                                    "          var txt = node.textContent;" +
+                                    "          var st = off, en = off;" +
+                                    "          var _mL3 = (txt.charCodeAt(off)<128?50:0);" +
+                                    "          while(st > 0 && txt.charCodeAt(st-1) > 32 && off-st<_mL3) st--;" +
+                                    "          while(en < txt.length && txt.charCodeAt(en) > 32 && en-off<_mL3) en++;" +
+                                    "          if(_mL3===0 && en===off && off+1<=txt.length) en=off+1;" +
+                                    "          if(st < en){" +
+                                    "            var wr = document.createRange();" +
+                                    "            wr.setStart(node, st); wr.setEnd(node, en);" +
+                                    "            sel.addRange(wr);" +
+                                    "            R.h = true; R.t = txt.substring(st, en);" +
+                                    "          }" +
+                                    "        }" +
+                                    "      }" +
+                                    "    }catch(e){}" +
+                                    "  }" +
+                                    "  if(sel && sel.rangeCount > 0){" +
+                                    "    var _r = sel.getRangeAt(0);" +
+                                    "    window._selAnchorNode = _r.startContainer;" +
+                                    "    window._selAnchorOffset = _r.startOffset;" +
+                                    "  }" +
+                                    "  if(!R.h && !R.i){" +
+                                    "    try{" +
+                                    "      var hit = document.elementFromPoint(cx, cy);" +
+                                    "      if(hit && hit.tagName === 'IMG'){" +
+                                    "        R.img = hit.currentSrc || hit.src || '';" +
+                                    "      }" +
+                                    "    }catch(e){}" +
+                                    "  }" +
+                                    "  return JSON.stringify(R);" +
+                                    "})(" + touchX + "," + touchY + ")",
+                            new ValueCallback<String>() {
+                                @Override
+                                public void onReceiveValue(String value) {
+                                    Log.d(TAG, "JS result raw: " + value);
+                                    boolean hasSel = false;
+                                    String selText = "";
+                                    boolean isInput = false;
+                                    String imageUrl = "";
+                                    if (value != null && !"null".equals(value) && value.length() > 2) {
+                                        try {
+                                            // evaluateJavascript 对返回值做了 JSON 编码。
+                                            // JS 中 JSON.stringify(R) 返回字符串，导致双重编码。
+                                            // 先用 JSONTokener 解码外层 JSON 字符串得到内层 JSON，再解析。
+                                            String jsonStr = new org.json.JSONTokener(value).nextValue().toString();
+                                            org.json.JSONObject json = new org.json.JSONObject(jsonStr);
+                                            hasSel = json.optBoolean("h", false);
+                                            selText = json.optString("t", "");
+                                            isInput = json.optBoolean("i", false);
+                                            imageUrl = json.optString("img", "");
+                                        } catch (Exception ex) {
+                                            Log.e(TAG, "Parse selection failed", ex);
+                                        }
+                                    }
+                                    Log.d(TAG, "JS result parsed -> hasSel=" + hasSel + " selText='" + selText + "' isInput=" + isInput + " imageUrl=" + imageUrl);
+                                    if (imageUrl.length() > 0) {
+                                        Log.d(TAG, "Image detected at long-press: " + imageUrl);
+                                        showContextMenu(touchX, touchY, "", false, false, imageUrl);
+                                        isLongPressing = false;
+                                    } else if (isInput && !hasSel) {
+                                        Log.d(TAG, "Input field, no selection, waiting for drag or up");
+                                    } else if (isInput && hasSel) {
+                                        Log.d(TAG, "Input field, word auto-selected, waiting for drag end");
+                                    } else if (!hasSel) {
+                                        isLongPressing = false;
+                                        Log.d(TAG, "No text at long-press position, cancelling");
+                                    } else {
+                                        Log.d(TAG, "Word selected '" + selText + "', waiting for drag end or touch up");
+                                    }
+                                }
+                            });
+                }
+            }
+        });
+
+        webView.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                gestureDetector.onTouchEvent(event);
+
+                if (isLongPressing) {
+                    int action = event.getActionMasked();
+                    if (action == MotionEvent.ACTION_MOVE) {
+                        final float mx = event.getX();
+                        final float my = event.getY();
+                        Log.d(TAG, "Drag extend to (" + mx + "," + my + ")");
+                        if (aiWebView != null) {
+                            aiWebView.evaluateJavascript(
+                                    "(function(x,y){" +
+                                            "  var dpr=window.devicePixelRatio||1,cx=x/dpr,cy=y/dpr;" +
+                                            "  try{" +
+                                            "    var hit=document.elementFromPoint(cx,cy);" +
+                                            "    if(hit&&(hit.tagName==='INPUT'||hit.tagName==='TEXTAREA')){" +
+                                            "      var off=0;" +
+                                            "      var rect=hit.getBoundingClientRect();" +
+                                            "      var cs=window.getComputedStyle(hit);" +
+                                            "      var leftPad=(parseFloat(cs.paddingLeft)||0)+(parseFloat(cs.borderLeftWidth)||0);" +
+                                            "      var textX=cx-rect.left-leftPad+(hit.scrollLeft||0);" +
+                                            "      if(textX>0){" +
+                                            "        var cv=document.createElement('canvas');" +
+                                            "        var ctx=cv.getContext('2d');" +
+                                            "        ctx.font=cs.font||(cs.fontSize+' '+cs.fontFamily);" +
+                                            "        var v=hit.value,lo=0,hi=v.length;" +
+                                            "        while(lo<hi){" +
+                                            "          var mid=(lo+hi)>>>1;" +
+                                            "          if(ctx.measureText(v.substring(0,mid)).width>=textX) hi=mid;" +
+                                            "          else lo=mid+1;" +
+                                            "        }" +
+                                            "        off=lo;" +
+                                            "      }" +
+                                            "      if(window._dragAnchor===undefined) window._dragAnchor=hit.selectionStart;" +
+                                            "      var anchor=window._dragAnchor;" +
+                                            "      hit.selectionStart=Math.min(anchor,off);" +
+                                            "      hit.selectionEnd=Math.max(anchor,off);" +
+                                            "    }else{" +
+                                            "      var sel=window.getSelection();" +
+                                            "      if(sel&&sel.rangeCount>0){var r=document.caretRangeFromPoint(cx,cy);if(r)sel.extend(r.startContainer,r.startOffset);}" +
+                                            "    }" +
+                                            "  }catch(e){}" +
+                                            "})(" + mx + "," + my + ")", null);
+                        }
+                    } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                        handleLongPressDragEnd(event.getX(), event.getY());
+                    }
+                }
+
+                return false;
+            }
+        });
+
+        return webView;
+    }
+
+    /**
+     * 长按拖拽结束后（ACTION_UP/CANCEL），读取最终选中文本并显示上下文菜单
+     */
+    private void handleLongPressDragEnd(final float touchX, final float touchY) {
+        if (aiWebView == null) {
+            isLongPressing = false;
+            return;
+        }
+        Log.d(TAG, "LP drag end, reading final selection at (" + touchX + "," + touchY + ")");
+        aiWebView.evaluateJavascript(
+                "(function(x,y){" +
                         "  var R = {h:false, t:'', i:false, img:''};" +
                         "  var dpr = window.devicePixelRatio || 1, cx = x / dpr, cy = y / dpr;" +
                         "  var sel = window.getSelection();" +
@@ -2529,105 +2779,13 @@ public class FloatWindowService extends Service {
                         "      R.i = true;" +
                         "      var s = hit.selectionStart, e = hit.selectionEnd;" +
                         "      if(s !== e){ R.h = true; R.t = hit.value.substring(s, e); }" +
-                        "      else{" +
-                        "        var off = 0;" +
-                        "        var rect = hit.getBoundingClientRect();" +
-                        "        var cs = window.getComputedStyle(hit);" +
-                        "        var leftPad = (parseFloat(cs.paddingLeft)||0) + (parseFloat(cs.borderLeftWidth)||0);" +
-                        "        var textX = cx - rect.left - leftPad + (hit.scrollLeft||0);" +
-                        "        if(textX > 0){" +
-                        "          var cv = document.createElement('canvas');" +
-                        "          var ctx = cv.getContext('2d');" +
-                        "          ctx.font = cs.font || (cs.fontSize + ' ' + cs.fontFamily);" +
-                        "          var v = hit.value, lo = 0, hi = v.length;" +
-                        "          while(lo < hi){" +
-                        "            var mid = (lo + hi) >>> 1;" +
-                        "            if(ctx.measureText(v.substring(0,mid)).width >= textX) hi = mid;" +
-                        "            else lo = mid + 1;" +
-                        "          }" +
-                        "          off = lo;" +
-                        "        }" +
-                        "        hit.selectionStart = hit.selectionEnd = off;" +
-                        "        window._dragAnchor = off;" +
-                        "      }" +
+                        "      window._dragAnchor = undefined;" +
                         "      return JSON.stringify(R);" +
                         "    }" +
                         "  }catch(e){}" +
-                        "  try{if(sel) sel.removeAllRanges();}catch(e){}" +
-                        "  try{" +
-                        "    var elem = document.elementFromPoint(cx, cy);" +
-                        "    if(elem && elem.nodeType === 1){" +
-                        "      !function wn(n, cb){" +
-                        "        if(n.nodeType === 3){ if(n.textContent.trim()) cb(n); return; }" +
-                        "        if(n.nodeType === 1 && n.childNodes){" +
-                        "          for(var i=0;i<n.childNodes.length;i++) wn(n.childNodes[i], cb);" +
-                        "        }" +
-                        "      }(elem, function(tn){" +
-                        "        if(R.h) return;" +
-                        "        var rc = document.createRange(); rc.selectNodeContents(tn);" +
-                        "        var rect = rc.getBoundingClientRect();" +
-                        "        if(cy >= rect.top-3 && cy <= rect.bottom+3 && cx >= rect.left-3 && cx <= rect.right+3){" +
-                        "          var txt = tn.textContent;" +
-                        "          for(var j=0; j<txt.length; j++){" +
-                        "            rc.setStart(tn, j); rc.setEnd(tn, j+1);" +
-                        "            var cr = rc.getBoundingClientRect();" +
-                        "            if(cr.left <= cx && cx <= cr.right){" +
-                        "              var st = j, en = j;" +
-                        "              var _mL = (txt.charCodeAt(j)<128?50:0);" +
-                        "              while(st > 0 && txt.charCodeAt(st-1) > 32 && j-st<_mL) st--;" +
-                        "              while(en < txt.length && txt.charCodeAt(en) > 32 && en-j<_mL) en++;" +
-                        "              if(_mL===0 && en===j && j+1<=txt.length) en=j+1;" +
-                        "              if(st < en){" +
-                        "                var wr = document.createRange();" +
-                        "                wr.setStart(tn, st); wr.setEnd(tn, en);" +
-                        "                sel.addRange(wr);" +
-                        "                R.h = true; R.t = txt.substring(st, en);" +
-                        "              } return;" +
-                        "            }" +
-                        "          }" +
-                        "          var idx = Math.round((cx - rect.left) / rect.width * (txt.length-1));" +
-                        "          idx = Math.max(0, Math.min(idx, txt.length-1));" +
-                        "          var st = idx, en = idx;" +
-                        "          var _mL2 = (txt.charCodeAt(idx)<128?50:0);" +
-                        "          while(st > 0 && txt.charCodeAt(st-1) > 32 && idx-st<_mL2) st--;" +
-                        "          while(en < txt.length && txt.charCodeAt(en) > 32 && en-idx<_mL2) en++;" +
-                        "          if(_mL2===0 && en===idx && idx+1<=txt.length) en=idx+1;" +
-                        "          if(st < en){" +
-                        "            var wr = document.createRange();" +
-                        "            wr.setStart(tn, st); wr.setEnd(tn, en);" +
-                        "            sel.addRange(wr);" +
-                        "            R.h = true; R.t = txt.substring(st, en);" +
-                        "          }" +
-                        "        }" +
-                        "      });" +
-                        "    }" +
-                        "  }catch(e){}" +
-                        "  if(!R.h && document.caretRangeFromPoint){" +
-                        "    try{" +
-                        "      var range = document.caretRangeFromPoint(cx, cy);" +
-                        "      if(range){" +
-                        "        var node = range.startContainer, off = range.startOffset;" +
-                        "        if(node.nodeType === 3){" +
-                        "          var txt = node.textContent;" +
-                        "          var st = off, en = off;" +
-                        "          var _mL3 = (txt.charCodeAt(off)<128?50:0);" +
-                        "          while(st > 0 && txt.charCodeAt(st-1) > 32 && off-st<_mL3) st--;" +
-                        "          while(en < txt.length && txt.charCodeAt(en) > 32 && en-off<_mL3) en++;" +
-                        "          if(_mL3===0 && en===off && off+1<=txt.length) en=off+1;" +
-                        "          if(st < en){" +
-                        "            var wr = document.createRange();" +
-                        "            wr.setStart(node, st); wr.setEnd(node, en);" +
-                        "            sel.addRange(wr);" +
-                        "            R.h = true; R.t = txt.substring(st, en);" +
-                        "          }" +
-                        "        }" +
-                        "      }" +
-                        "    }catch(e){}" +
-                        "  }" +
                         "  if(sel && sel.rangeCount > 0){" +
-                        "    var _r = sel.getRangeAt(0);" +
-                        "    window._selAnchorNode = _r.startContainer;" +
-                        "    window._selAnchorOffset = _r.startOffset;" +
+                        "    var txt = sel.toString().trim();" +
+                        "    if(txt.length > 0){ R.h = true; R.t = txt; }" +
                         "  }" +
                         "  if(!R.h && !R.i){" +
                         "    try{" +
@@ -2639,173 +2797,33 @@ public class FloatWindowService extends Service {
                         "  }" +
                         "  return JSON.stringify(R);" +
                         "})(" + touchX + "," + touchY + ")",
-                        new ValueCallback<String>() {
-                            @Override
-                            public void onReceiveValue(String value) {
-                                Log.d(TAG, "JS result raw: " + value);
-                                boolean hasSel = false;
-                                String selText = "";
-                                boolean isInput = false;
-                                String imageUrl = "";
-                                if (value != null && !"null".equals(value) && value.length() > 2) {
-                                    try {
-                                        // evaluateJavascript 对返回值做了 JSON 编码。
-                                        // JS 中 JSON.stringify(R) 返回字符串，导致双重编码。
-                                        // 先用 JSONTokener 解码外层 JSON 字符串得到内层 JSON，再解析。
-                                        String jsonStr = new org.json.JSONTokener(value).nextValue().toString();
-                                        org.json.JSONObject json = new org.json.JSONObject(jsonStr);
-                                        hasSel = json.optBoolean("h", false);
-                                        selText = json.optString("t", "");
-                                        isInput = json.optBoolean("i", false);
-                                        imageUrl = json.optString("img", "");
-                                    } catch (Exception ex) {
-                                        Log.e(TAG, "Parse selection failed", ex);
-                                    }
-                                }
-                                Log.d(TAG, "JS result parsed -> hasSel=" + hasSel + " selText='" + selText + "' isInput=" + isInput + " imageUrl=" + imageUrl);
-                                if (imageUrl.length() > 0) {
-                                    Log.d(TAG, "Image detected at long-press: " + imageUrl);
-                                    showContextMenu(touchX, touchY, "", false, false, imageUrl);
-                                    isLongPressing = false;
-                                } else if (isInput && !hasSel) {
-                                    Log.d(TAG, "Input field, no selection, waiting for drag or up");
-                                } else if (isInput && hasSel) {
-                                    Log.d(TAG, "Input field, word auto-selected, waiting for drag end");
-                                } else if (!hasSel) {
-                                    isLongPressing = false;
-                                    Log.d(TAG, "No text at long-press position, cancelling");
-                                } else {
-                                    Log.d(TAG, "Word selected '" + selText + "', waiting for drag end or touch up");
-                                }
+                new ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String value) {
+                        Log.d(TAG, "Final sel raw: " + value);
+                        boolean hasSel = false;
+                        String selText = "";
+                        boolean isInput = false;
+                        String imageUrl = "";
+                        if (value != null && !"null".equals(value) && value.length() > 2) {
+                            try {
+                                String jsonStr = new org.json.JSONTokener(value).nextValue().toString();
+                                org.json.JSONObject json = new org.json.JSONObject(jsonStr);
+                                hasSel = json.optBoolean("h", false);
+                                selText = json.optString("t", "");
+                                isInput = json.optBoolean("i", false);
+                                imageUrl = json.optString("img", "");
+                            } catch (Exception ex) {
+                                Log.e(TAG, "Parse final sel failed", ex);
                             }
-                        });
-                }
-            }
-        });
-        
-        webView.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                gestureDetector.onTouchEvent(event);
-                
-                if (isLongPressing) {
-                    int action = event.getActionMasked();
-                    if (action == MotionEvent.ACTION_MOVE) {
-                        final float mx = event.getX();
-                        final float my = event.getY();
-                        Log.d(TAG, "Drag extend to (" + mx + "," + my + ")");
-                        if (aiWebView != null) {
-                            aiWebView.evaluateJavascript(
-                                "(function(x,y){" +
-                                "  var dpr=window.devicePixelRatio||1,cx=x/dpr,cy=y/dpr;" +
-                                "  try{" +
-                                "    var hit=document.elementFromPoint(cx,cy);" +
-                                "    if(hit&&(hit.tagName==='INPUT'||hit.tagName==='TEXTAREA')){" +
-                                "      var off=0;" +
-                                "      var rect=hit.getBoundingClientRect();" +
-                                "      var cs=window.getComputedStyle(hit);" +
-                                "      var leftPad=(parseFloat(cs.paddingLeft)||0)+(parseFloat(cs.borderLeftWidth)||0);" +
-                                "      var textX=cx-rect.left-leftPad+(hit.scrollLeft||0);" +
-                                "      if(textX>0){" +
-                                "        var cv=document.createElement('canvas');" +
-                                "        var ctx=cv.getContext('2d');" +
-                                "        ctx.font=cs.font||(cs.fontSize+' '+cs.fontFamily);" +
-                                "        var v=hit.value,lo=0,hi=v.length;" +
-                                "        while(lo<hi){" +
-                                "          var mid=(lo+hi)>>>1;" +
-                                "          if(ctx.measureText(v.substring(0,mid)).width>=textX) hi=mid;" +
-                                "          else lo=mid+1;" +
-                                "        }" +
-                                "        off=lo;" +
-                                "      }" +
-                                "      if(window._dragAnchor===undefined) window._dragAnchor=hit.selectionStart;" +
-                                "      var anchor=window._dragAnchor;" +
-                                "      hit.selectionStart=Math.min(anchor,off);" +
-                                "      hit.selectionEnd=Math.max(anchor,off);" +
-                                "    }else{" +
-                                "      var sel=window.getSelection();" +
-                                "      if(sel&&sel.rangeCount>0){var r=document.caretRangeFromPoint(cx,cy);if(r)sel.extend(r.startContainer,r.startOffset);}" +
-                                "    }" +
-                                "  }catch(e){}" +
-                                "})(" + mx + "," + my + ")", null);
                         }
-                    } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                        handleLongPressDragEnd(event.getX(), event.getY());
+                        Log.d(TAG, "Final sel -> hasSel=" + hasSel + " text='" + selText + "' isInput=" + isInput + " imageUrl=" + imageUrl);
+                        showContextMenu(touchX, touchY, selText, hasSel, isInput, imageUrl);
+                        isLongPressing = false;
                     }
-                }
-                
-                return false;
-            }
-        });
-        
-        return webView;
+                });
     }
-    
-    /**
-     * 长按拖拽结束后（ACTION_UP/CANCEL），读取最终选中文本并显示上下文菜单
-     */
-    private void handleLongPressDragEnd(final float touchX, final float touchY) {
-        if (aiWebView == null) {
-            isLongPressing = false;
-            return;
-        }
-        Log.d(TAG, "LP drag end, reading final selection at (" + touchX + "," + touchY + ")");
-        aiWebView.evaluateJavascript(
-            "(function(x,y){" +
-            "  var R = {h:false, t:'', i:false, img:''};" +
-            "  var dpr = window.devicePixelRatio || 1, cx = x / dpr, cy = y / dpr;" +
-            "  var sel = window.getSelection();" +
-            "  try{" +
-            "    var hit = document.elementFromPoint(cx, cy);" +
-            "    if(hit && (hit.tagName==='INPUT'||hit.tagName==='TEXTAREA')){" +
-            "      R.i = true;" +
-            "      var s = hit.selectionStart, e = hit.selectionEnd;" +
-            "      if(s !== e){ R.h = true; R.t = hit.value.substring(s, e); }" +
-            "      window._dragAnchor = undefined;" +
-            "      return JSON.stringify(R);" +
-            "    }" +
-            "  }catch(e){}" +
-            "  if(sel && sel.rangeCount > 0){" +
-            "    var txt = sel.toString().trim();" +
-            "    if(txt.length > 0){ R.h = true; R.t = txt; }" +
-            "  }" +
-            "  if(!R.h && !R.i){" +
-            "    try{" +
-            "      var hit = document.elementFromPoint(cx, cy);" +
-            "      if(hit && hit.tagName === 'IMG'){" +
-            "        R.img = hit.currentSrc || hit.src || '';" +
-            "      }" +
-            "    }catch(e){}" +
-            "  }" +
-            "  return JSON.stringify(R);" +
-            "})(" + touchX + "," + touchY + ")",
-            new ValueCallback<String>() {
-                @Override
-                public void onReceiveValue(String value) {
-                    Log.d(TAG, "Final sel raw: " + value);
-                    boolean hasSel = false;
-                    String selText = "";
-                    boolean isInput = false;
-                    String imageUrl = "";
-                    if (value != null && !"null".equals(value) && value.length() > 2) {
-                        try {
-                            String jsonStr = new org.json.JSONTokener(value).nextValue().toString();
-                            org.json.JSONObject json = new org.json.JSONObject(jsonStr);
-                            hasSel = json.optBoolean("h", false);
-                            selText = json.optString("t", "");
-                            isInput = json.optBoolean("i", false);
-                            imageUrl = json.optString("img", "");
-                        } catch (Exception ex) {
-                            Log.e(TAG, "Parse final sel failed", ex);
-                        }
-                    }
-                    Log.d(TAG, "Final sel -> hasSel=" + hasSel + " text='" + selText + "' isInput=" + isInput + " imageUrl=" + imageUrl);
-                    showContextMenu(touchX, touchY, selText, hasSel, isInput, imageUrl);
-                    isLongPressing = false;
-                }
-            });
-    }
-    
+
     /**
      * Temporarily hide floating window so dialogs are not blocked
      */
@@ -2820,7 +2838,7 @@ public class FloatWindowService extends Service {
             }
         }
     }
-    
+
     /**
      * Restore floating window visibility after dialog closes
      */
@@ -2835,14 +2853,14 @@ public class FloatWindowService extends Service {
             }
         }
     }
-    
+
     /**
      * 将 content:// URI 复制到应用缓存目录的临时文件，返回 file:// URI 数组
      * 解决 FileChooserActivity 结束后 content URI 权限失效导致 WebView 无法读取文件的问题
      */
     private Uri[] copyContentUrisToTempFiles(Uri[] uris) {
         if (uris == null || uris.length == 0) return uris;
-        
+
         Uri[] result = new Uri[uris.length];
         for (int i = 0; i < uris.length; i++) {
             Uri uri = uris[i];
@@ -2861,11 +2879,11 @@ public class FloatWindowService extends Service {
                 String fileName = "upload_" + System.currentTimeMillis() + "_" + i;
                 String extension = getFileExtension(uri);
                 if (extension != null) fileName += extension;
-                
+
                 File cacheDir = new File(getCacheDir(), "webview_uploads");
                 if (!cacheDir.exists()) cacheDir.mkdirs();
                 File tempFile = new File(cacheDir, fileName);
-                
+
                 // 复制内容
                 InputStream in = null;
                 FileOutputStream out = null;
@@ -2885,10 +2903,16 @@ public class FloatWindowService extends Service {
                     out.flush();
                     Log.d(TAG, "Copied " + uri + " -> " + tempFile.getAbsolutePath() + " (" + tempFile.length() + " bytes)");
                 } finally {
-                    if (in != null) try { in.close(); } catch (Exception ignored) {}
-                    if (out != null) try { out.close(); } catch (Exception ignored) {}
+                    if (in != null) try {
+                        in.close();
+                    } catch (Exception ignored) {
+                    }
+                    if (out != null) try {
+                        out.close();
+                    } catch (Exception ignored) {
+                    }
                 }
-                
+
                 result[i] = Uri.fromFile(tempFile);
             } catch (Exception e) {
                 Log.e(TAG, "Failed to copy " + uri + " to temp file, using original", e);
@@ -2897,7 +2921,7 @@ public class FloatWindowService extends Service {
         }
         return result;
     }
-    
+
     /**
      * 从 content URI 推断文件扩展名
      */
@@ -2927,16 +2951,17 @@ public class FloatWindowService extends Service {
         }
         return null;
     }
-    
+
     /**
      * 将网页图片下载并保存到本地相册
+     *
      * @param imageUrl 图片的绝对 URL
      */
     private void saveImageToGallery(String imageUrl) {
         if (imageUrl == null || imageUrl.isEmpty()) return;
-        
+
         showToastTop("开始下载图片...", Toast.LENGTH_SHORT);
-        
+
         new Thread(() -> {
             try {
                 URL url = new URL(imageUrl);
@@ -2944,7 +2969,7 @@ public class FloatWindowService extends Service {
                 conn.setConnectTimeout(10000);
                 conn.setReadTimeout(30000);
                 conn.setInstanceFollowRedirects(true);
-                
+
                 byte[] imageData;
                 try (InputStream in = conn.getInputStream();
                      ByteArrayOutputStream out = new ByteArrayOutputStream()) {
@@ -2955,7 +2980,7 @@ public class FloatWindowService extends Service {
                     }
                     imageData = out.toByteArray();
                 }
-                
+
                 String mimeType = conn.getContentType();
                 if (mimeType == null) mimeType = "image/jpeg";
                 String extension = ".jpg";
@@ -2964,9 +2989,9 @@ public class FloatWindowService extends Service {
                 else if (mimeType.contains("webp")) extension = ".webp";
                 else if (mimeType.contains("bmp")) extension = ".bmp";
                 else if (mimeType.contains("svg")) extension = ".svg";
-                
+
                 String fileName = "IMG_" + System.currentTimeMillis() + extension;
-                
+
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     // Android 10+：使用 MediaStore 保存到相册（无需存储权限）
                     ContentValues values = new ContentValues();
@@ -2974,7 +2999,7 @@ public class FloatWindowService extends Service {
                     values.put(MediaStore.Images.Media.MIME_TYPE, mimeType);
                     values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/WebImages");
                     values.put(MediaStore.Images.Media.IS_PENDING, 1);
-                    
+
                     Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
                     if (uri != null) {
                         try (OutputStream out = getContentResolver().openOutputStream(uri)) {
@@ -2983,7 +3008,7 @@ public class FloatWindowService extends Service {
                         values.clear();
                         values.put(MediaStore.Images.Media.IS_PENDING, 0);
                         getContentResolver().update(uri, values, null, null);
-                        
+
                         showToastTop("图片已保存到相册", Toast.LENGTH_SHORT);
                         Log.d(TAG, "Image saved to MediaStore: " + fileName);
                     }
@@ -3000,7 +3025,7 @@ public class FloatWindowService extends Service {
                     Intent intent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
                     intent.setData(Uri.fromFile(imageFile));
                     sendBroadcast(intent);
-                    
+
                     showToastTop("图片已保存到相册", Toast.LENGTH_SHORT);
                     Log.d(TAG, "Image saved to: " + imageFile.getAbsolutePath());
                 }
@@ -3010,7 +3035,7 @@ public class FloatWindowService extends Service {
             }
         }).start();
     }
-    
+
     private void showToastTop(final String msg, final int duration) {
         new Handler(Looper.getMainLooper()).post(() -> {
             // 窗口未展开时回退到系统 Toast
@@ -3020,7 +3045,7 @@ public class FloatWindowService extends Service {
                 toast.show();
                 return;
             }
-            
+
             // 在悬浮窗内部创建自定义 Toast（避免系统 Toast 位置受限）
             TextView toastView = new TextView(FloatWindowService.this);
             toastView.setText(msg);
@@ -3030,14 +3055,14 @@ public class FloatWindowService extends Service {
             toastView.setGravity(Gravity.CENTER);
             toastView.setEllipsize(TextUtils.TruncateAt.END);
             toastView.setMaxLines(2);
-            
+
             // 半透明黑色圆角背景
             GradientDrawable bg = new GradientDrawable();
             bg.setShape(GradientDrawable.RECTANGLE);
             bg.setCornerRadius(dpToPx(8));
             bg.setColor(Color.parseColor("#DD333333"));
             toastView.setBackground(bg);
-            
+
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.WRAP_CONTENT,
                     FrameLayout.LayoutParams.WRAP_CONTENT
@@ -3045,27 +3070,27 @@ public class FloatWindowService extends Service {
             params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
             params.topMargin = dpToPx(60);
             toastView.setLayoutParams(params);
-            
+
             // 淡入动画
             toastView.setAlpha(0f);
             windowRootLayout.addView(toastView);
             toastView.animate().alpha(1f).setDuration(200).start();
-            
+
             // 定时自动移除（带淡出动画）
             int showMs = (duration == Toast.LENGTH_LONG) ? 3500 : 2000;
             toastView.postDelayed(() -> {
                 if (toastView.getParent() != null) {
                     toastView.animate().alpha(0f).setDuration(300)
-                        .withEndAction(() -> {
-                            if (toastView.getParent() instanceof ViewGroup) {
-                                ((ViewGroup) toastView.getParent()).removeView(toastView);
-                            }
-                        }).start();
+                            .withEndAction(() -> {
+                                if (toastView.getParent() instanceof ViewGroup) {
+                                    ((ViewGroup) toastView.getParent()).removeView(toastView);
+                                }
+                            }).start();
                 }
             }, showMs);
         });
     }
-    
+
     /**
      * 处理 data: URI 的数据下载（DownloadManager 不支持此类 URI）
      * 解析 base64 数据后保存到 Downloads 目录
@@ -3075,23 +3100,23 @@ public class FloatWindowService extends Service {
         try {
             // data: URI 格式: data:[<mediatype>][;base64],<data>
             if (!dataUri.startsWith("data:")) return;
-            
+
             // 去掉 data: 前缀
             String rest = dataUri.substring(5);
-            
+
             // 查找逗号分隔符
             int commaIndex = rest.indexOf(',');
             if (commaIndex < 0) {
                 Log.e(TAG, "Invalid data URI: no comma found");
                 return;
             }
-            
+
             String header = rest.substring(0, commaIndex);
             String data = rest.substring(commaIndex + 1);
-            
+
             // 判断是否是 base64 编码
             boolean isBase64 = header.contains(";base64");
-            
+
             // 从 header 中提取 MIME 类型（如果有）
             String mime = mimetype;
             if ((mime == null || mime.isEmpty()) && header.contains(";")) {
@@ -3100,9 +3125,9 @@ public class FloatWindowService extends Service {
                 mime = header;
             }
             if (mime == null || mime.isEmpty()) mime = "application/octet-stream";
-            
+
             Log.d(TAG, "  data URI mime: " + mime + ", isBase64: " + isBase64 + ", data length: " + data.length());
-            
+
             byte[] fileData;
             if (isBase64) {
                 fileData = Base64.decode(data, Base64.DEFAULT);
@@ -3111,9 +3136,9 @@ public class FloatWindowService extends Service {
                 String decoded = android.net.Uri.decode(data);
                 fileData = decoded.getBytes("UTF-8");
             }
-            
+
             Log.d(TAG, "  decoded data size: " + fileData.length + " bytes");
-            
+
             // 从 MIME 类型确定文件后缀
             String extension = ".bin";
             if (mime.contains("jpeg") || mime.contains("jpg")) extension = ".jpg";
@@ -3126,10 +3151,10 @@ public class FloatWindowService extends Service {
             else if (mime.contains("zip")) extension = ".zip";
             else if (mime.contains("mp4")) extension = ".mp4";
             else if (mime.contains("mp3")) extension = ".mp3";
-            
+
             String fileName = "download_" + System.currentTimeMillis() + extension;
             Log.d(TAG, "  saving to Downloads/" + fileName);
-            
+
             // 保存到 Downloads 目录
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 // Android 10+：使用 MediaStore Downloads
@@ -3137,7 +3162,7 @@ public class FloatWindowService extends Service {
                 values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
                 values.put(MediaStore.Downloads.MIME_TYPE, mime);
                 values.put(MediaStore.Downloads.IS_PENDING, 1);
-                
+
                 Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
                 if (uri != null) {
                     try (OutputStream out = getContentResolver().openOutputStream(uri)) {
@@ -3159,33 +3184,33 @@ public class FloatWindowService extends Service {
                 intent.setData(Uri.fromFile(file));
                 sendBroadcast(intent);
             }
-            
+
             Log.d(TAG, "Data URI download saved: " + fileName + " (" + fileData.length + " bytes)");
             showToastTop("下载完成: " + fileName, Toast.LENGTH_SHORT);
-            
+
         } catch (Exception e) {
             Log.e(TAG, "Failed to handle data URI download", e);
             showToastTop("下载失败: " + e.getMessage(), Toast.LENGTH_LONG);
         }
     }
-    
+
     /**
      * 创建刷新按钮
      */
     private ImageView createRefreshButton() {
         ImageView refreshButton = new ImageView(this);
-        
+
         // 用 Canvas 渲染 Unicode 刷新符号到 Bitmap 作为图标，与关闭按钮风格一致
         refreshButton.setImageDrawable(createRefreshIconDrawable());
         refreshButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         refreshButton.setPadding(dpToPx(2), dpToPx(0), dpToPx(2), dpToPx(2));
-        
+
         // 圆形灰色背景（与关闭按钮一致）
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
         bg.setColor(Color.parseColor("#F0F0F0"));
         refreshButton.setBackground(bg);
-        
+
         refreshButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -3197,24 +3222,24 @@ public class FloatWindowService extends Service {
         });
         return refreshButton;
     }
-    
+
     /**
      * 创建返回上一级按钮
      */
     private ImageView createBackButton() {
         ImageView backButton = new ImageView(this);
-        
+
         // 用 Canvas 渲染左箭头符号到 Bitmap 作为图标，与刷新按钮风格一致
         backButton.setImageDrawable(createBackIconDrawable());
         backButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         backButton.setPadding(dpToPx(2), dpToPx(0), dpToPx(2), dpToPx(2));
-        
+
         // 圆形灰色背景（与刷新/关闭按钮一致）
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
         bg.setColor(Color.parseColor("#F0F0F0"));
         backButton.setBackground(bg);
-        
+
         backButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -3233,7 +3258,7 @@ public class FloatWindowService extends Service {
         });
         return backButton;
     }
-    
+
     /**
      * 更新返回按钮的启用状态
      */
@@ -3244,7 +3269,7 @@ public class FloatWindowService extends Service {
         backButton.setAlpha(canGoBack ? 1.0f : 0.35f);
         Log.d(TAG, "返回按钮状态更新: enabled=" + canGoBack);
     }
-    
+
     /**
      * 用 Canvas 将 Unicode 左箭头绘制到 Bitmap，居中无偏移
      */
@@ -3257,15 +3282,15 @@ public class FloatWindowService extends Service {
         p.setTypeface(Typeface.DEFAULT_BOLD);
         p.setTextAlign(Paint.Align.CENTER);
         p.setTextSize(size * 0.8f);
-        
+
         Paint.FontMetrics fm = p.getFontMetrics();
         float x = size / 2f;
         float y = size / 2f - (fm.ascent + fm.descent) / 2f;
         c.drawText("\u2190", x, y, p);
-        
+
         return new BitmapDrawable(getResources(), bmp);
     }
-    
+
     /**
      * 用 Canvas 将 Unicode 刷新符号绘制到 Bitmap，居中无偏移
      */
@@ -3278,34 +3303,34 @@ public class FloatWindowService extends Service {
         p.setTypeface(Typeface.DEFAULT_BOLD);
         p.setTextAlign(Paint.Align.CENTER);
         p.setTextSize(size * 0.8f);
-        
+
         Paint.FontMetrics fm = p.getFontMetrics();
         float x = size / 2f;
         float y = size / 2f - (fm.ascent + fm.descent) / 2f;
         c.drawText("\u21BB", x, y, p);
-        
+
         return new BitmapDrawable(getResources(), bmp);
     }
-    
+
     /**
      * 创建关闭按钮
      */
-    
+
     private ImageView createCloseButton() {
         ImageView closeButton = new ImageView(this);
-        
+
         // 设置关闭图标（使用系统图标）
         closeButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
         closeButton.setColorFilter(Color.parseColor("#666666"));
         closeButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         closeButton.setPadding(dpToPx(4), dpToPx(4), dpToPx(4), dpToPx(4));
-        
+
         // 设置背景为圆形
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
         bg.setColor(Color.parseColor("#F0F0F0"));
         closeButton.setBackground(bg);
-        
+
         // 点击事件：收起为底部提示条
         closeButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -3314,16 +3339,16 @@ public class FloatWindowService extends Service {
                 collapseToBottomBar();
             }
         });
-        
+
         return closeButton;
     }
-    
+
     /**
      * 展开动画：通过 contentContainer 的 scaleX/scaleY/translationY 变换实现
      * barContainer 保持全屏，避免 updateViewLayout 逐帧重排导致的掉帧
      */
     private long animationSetTime = 0; // 记录 scale/translation 设置的时间点，用于日志
-    
+
     private void performSmoothExpandAnimation(
             final View contentContainer) {
         if (barContainer == null || barLayoutParams == null) {
@@ -3336,36 +3361,36 @@ public class FloatWindowService extends Service {
         final float startScaleY = contentContainer.getScaleY();
         final float startTranslationX = contentContainer.getTranslationX();
         final float startTranslationY = contentContainer.getTranslationY();
-        
 
-        
+
         // 立即记录开始时间，避免首帧被跳过
         final long adjustedStartTime = System.nanoTime();
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             private int frameCount = 0;
             private long prevFrameTime = 0;
+
             @Override
             public void doFrame(long frameTimeNanos) {
                 if (prevFrameTime == 0) {
                     prevFrameTime = frameTimeNanos;
                 }
-                
+
                 frameCount++;
                 long intervalNs = frameTimeNanos - prevFrameTime;
                 prevFrameTime = frameTimeNanos;
-                
+
                 // 纯时间进度
                 float timeProgress = (float) (frameTimeNanos - adjustedStartTime) / 1000000f / animationDuration;
                 float progress = Math.min(timeProgress, 1.0f);
                 // 统一连贯的贝塞尔曲线缓动，末尾自然带微小超调
                 float easedProgress = expandInterpolator.getInterpolation(progress);
-                
+
                 // 插值 scaleX/scaleY/translationX/translationY
                 float curScaleX = startScaleX + (1f - startScaleX) * easedProgress;
                 float curScaleY = startScaleY + (1f - startScaleY) * easedProgress;
                 float curTranslationX = startTranslationX * (1f - easedProgress);
                 float curTranslationY = startTranslationY * (1f - easedProgress);
-                
+
                 // contentContainer 透明度：基于 scaleY 绝对值的渐入策略
                 // 使用绝对值而非 progress% 使行为与动画速度和窗口类型无关
                 // 当 scaleY < 0.20 时透明，0.20~0.40 渐入，>= 0.40 全可见
@@ -3379,7 +3404,7 @@ public class FloatWindowService extends Service {
 //                } else {
 //                    contentContainer.setAlpha(1f);
 //                }
-                
+
                 // WebView 透明度：前一半为 0，后一半从 0 渐变为 1
                 if (aiWebView != null) {
                     if (progress < 0.5f) {
@@ -3389,9 +3414,8 @@ public class FloatWindowService extends Service {
                         aiWebView.setAlpha(easeOutCubic(alphaProgress));
                     }
                 }
-                
 
-                
+
                 // 应用变换（只改 View 属性，不触发 updateViewLayout）
                 // 首个 vsync 帧时与 scale/translation 一起置为可见，消除初始状态的闪现
                 contentContainer.setAlpha(1f);
@@ -3399,11 +3423,11 @@ public class FloatWindowService extends Service {
                 contentContainer.setScaleY(curScaleY);
                 contentContainer.setTranslationX(curTranslationX);
                 contentContainer.setTranslationY(curTranslationY);
-                
+
                 Log.d(TAG, "[EXPAND_TRACE] 第" + frameCount + "帧: tp=" + timeProgress + " p=" + progress + " ez=" + easedProgress
                         + " scale=" + curScaleX + "x" + curScaleY
                         + " trans=(" + curTranslationX + "," + curTranslationY + ")");
-                
+
                 if (progress < 1.0f) {
                     Choreographer.getInstance().postFrameCallback(this);
                 } else {
@@ -3413,7 +3437,7 @@ public class FloatWindowService extends Service {
                     contentContainer.setTranslationX(0f);
                     contentContainer.setTranslationY(0f);
                     contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
-                    
+
                     // 修复：强制 WebView 刷新渲染，解决偶现空白问题
                     // 展开动画期间 alpha 从 0→1 过渡，部分 Android 版本中硬件层可能不刷新初始帧
                     if (aiWebView != null) {
@@ -3424,7 +3448,7 @@ public class FloatWindowService extends Service {
             }
         });
     }
-    
+
     /**
      * 获取快捷方式列表
      */
@@ -3501,7 +3525,7 @@ public class FloatWindowService extends Service {
             }
         }
     }
-    
+
     /**
      * 双击提示条：展开快捷方式窗口
      */
@@ -3509,22 +3533,22 @@ public class FloatWindowService extends Service {
         if (isAiWindowExpanded || isShortcutWindowExpanded) {
             return;
         }
-        
+
         Log.d(TAG, "展开快捷方式窗口: isAiExpanded=" + isAiWindowExpanded
                 + " isShortcutExpanded=" + isShortcutWindowExpanded);
-        
+
         if (barContainer == null || windowManager == null) return;
-        
+
         try {
             DisplayMetrics realMetrics = new DisplayMetrics();
             windowManager.getDefaultDisplay().getRealMetrics(realMetrics);
             final int screenWidth = realMetrics.widthPixels;
             final int screenHeight = realMetrics.heightPixels;
-            
+
             // 保存展开前的位置用于动画
             final int startX = barPositionX;
             final int startY = dpToPx(barPositionY);
-            
+
             // 设置全屏表面
             barLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                     | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
@@ -3532,10 +3556,10 @@ public class FloatWindowService extends Service {
                     | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
             barLayoutParams.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
                     | WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED;
-            
+
             int requiredWidth = Math.max(screenWidth, 4 * Math.abs(0) + dpToPx(shortcutWindowWidth));
             int requiredHeight = Math.max(screenHeight, 4 * Math.abs(shortcutWindowPositionY) + dpToPx(shortcutWindowHeight));
-            
+
             barLayoutParams.x = 0;
             barLayoutParams.y = 0;
             barLayoutParams.width = requiredWidth;
@@ -3543,32 +3567,32 @@ public class FloatWindowService extends Service {
 
             windowManager.updateViewLayout(barContainer, barLayoutParams);
             Log.d(TAG, "[SHORTCUT_EXPAND_DEBUG] barContainer 全屏: w=" + requiredWidth + " h=" + requiredHeight);
-            
+
             // ===== 关键修复：等待 barContainer 布局完成后再设置变换和启动动画 =====
             barContainer.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
                 @Override
                 public void onGlobalLayout() {
                     barContainer.getViewTreeObserver().removeOnGlobalLayoutListener(this);
                     Log.d(TAG, "[SHORTCUT_EXPAND_DEBUG] barContainer 布局完成，开始设置变换");
-                    
+
                     try {
                         // 替换视图
                         barContainer.removeAllViews();
                         View shortcutView = createShortcutWindowView();
                         barContainer.addView(shortcutView);
-                        
+
                         // 获取内容容器（createShortcutWindowView 已设置实际高度）
                         FrameLayout rootLayout = (FrameLayout) shortcutView;
                         View contentContainer = rootLayout.getChildAt(0);
                         FrameLayout.LayoutParams contentLp = (FrameLayout.LayoutParams) contentContainer.getLayoutParams();
                         final int contentTargetWidth = contentLp.width;
                         final int contentTargetHeight = contentLp.height;
-                        
+
                         // 初始设为目标尺寸，用 scale 缩放
                         contentLp.width = contentTargetWidth;
                         contentLp.height = contentTargetHeight;
                         contentContainer.setLayoutParams(contentLp);
-                        
+
                         int effectiveStartWidth = (currentWidth == ViewGroup.LayoutParams.MATCH_PARENT || currentWidth <= 0) ? screenWidth : currentWidth;
                         final float initScaleX = (float) effectiveStartWidth / contentTargetWidth;
                         final float initScaleY = (float) dpToPx(currentHeight) / contentTargetHeight;
@@ -3586,24 +3610,24 @@ public class FloatWindowService extends Service {
                                 + " scale=" + initScaleX + "x" + initScaleY
                                 + " trans=(" + initTranslationX + "," + initTranslationY + ")");
                         animationSetTime = System.currentTimeMillis();
-                        
+
                         // 设置初始圆角
-                        ((GradientDrawable) contentContainer.getBackground()).setCornerRadius(dpToPx(currentCornerRadius));
-                        if (contentContainer.getForeground() instanceof GradientDrawable) {
-                            ((GradientDrawable) contentContainer.getForeground()).setCornerRadius(dpToPx(currentCornerRadius));
-                        }
-                        contentContainer.invalidateOutline();
-                        
+//                        ((GradientDrawable) contentContainer.getBackground()).setCornerRadius(dpToPx(currentCornerRadius));
+//                        if (contentContainer.getForeground() instanceof GradientDrawable) {
+//                            ((GradientDrawable) contentContainer.getForeground()).setCornerRadius(dpToPx(currentCornerRadius));
+//                        }
+//                        contentContainer.invalidateOutline();
+
                         isShortcutWindowExpanded = true;
-                        
+
                         // 提前启动代理 Activity，展开过程中即可响应返回手势
                         startWindowHostActivity();
-                        
+
                         // ===== View.post()：等待 contentContainer 布局完全完成后设置属性并启动动画 =====
                         // 使用 View.post() 而非 OnGlobalLayoutListener，兼容性更强
                         final View cc = contentContainer;
 
-                        
+
                         cc.post(new Runnable() {
                             @Override
                             public void run() {
@@ -3612,7 +3636,7 @@ public class FloatWindowService extends Service {
                                         + " getX=" + cc.getX() + " getY=" + cc.getY()
                                         + " scale=" + cc.getScaleX() + "x" + cc.getScaleY()
                                         + " trans=(" + cc.getTranslationX() + "," + cc.getTranslationY() + ")");
-                                
+
                                 // layout 完成后设置全部属性（pivot/scale/translation/layer），确保首帧位置正确
                                 cc.setPivotX(contentTargetWidth / 2f);
                                 cc.setPivotY(contentTargetHeight / 2f);
@@ -3650,7 +3674,7 @@ public class FloatWindowService extends Service {
                                 }
                             }
                         });
-                        
+
                     } catch (Exception e) {
                         Log.e(TAG, "[SHORTCUT_EXPAND_DEBUG] 布局回调内展开失败", e);
                         isOverlayAnimating = false;
@@ -3658,13 +3682,13 @@ public class FloatWindowService extends Service {
                     }
                 }
             });
-            
+
         } catch (Exception e) {
             Log.e(TAG, "展开快捷方式窗口失败", e);
             isShortcutWindowExpanded = false;
         }
     }
-    
+
     /**
      * 快捷方式窗口展开动画
      */
@@ -3673,20 +3697,20 @@ public class FloatWindowService extends Service {
         final float startScaleY = contentContainer.getScaleY();
         final float startTranslationX = contentContainer.getTranslationX();
         final float startTranslationY = contentContainer.getTranslationY();
-        
+
         final long adjustedStartTime = System.nanoTime();
-        
+
         Log.d(TAG, "[SHORTCUT_EXPAND_DEBUG] 展开动画开始 - scale: " + startScaleX + "x" + startScaleY
                 + " -> 1x1"
                 + " trans=(" + startTranslationX + "," + startTranslationY + ") -> 0"
                 + " delaySinceSet=" + (System.currentTimeMillis() - animationSetTime) + "ms");
-        
+
         // setAlpha(1f) 移入 doFrame 第一帧中，与 scale/translation 同时生效，
         // 避免在动画首帧前暴露初始小尺寸+translation 状态造成闪一下
-        
+
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             private int frameCount = 0;
-            
+
             @Override
             public void doFrame(long frameTimeNanos) {
                 frameCount++;
@@ -3695,12 +3719,12 @@ public class FloatWindowService extends Service {
                 float progress = Math.min(timeProgress, 1.0f);
                 // 统一连贯的贝塞尔曲线缓动，末尾自然带微小超调
                 float easedProgress = expandInterpolator.getInterpolation(progress);
-                
+
                 float curScaleX = startScaleX + (1f - startScaleX) * easedProgress;
                 float curScaleY = startScaleY + (1f - startScaleY) * easedProgress;
                 float curTranslationX = startTranslationX * (1f - easedProgress);
                 float curTranslationY = startTranslationY * (1f - easedProgress);
-                
+
                 // contentContainer 透明度：基于 scaleY 绝对值的渐入策略
                 // 使用绝对值而非 progress% 使行为与动画速度和窗口类型无关
                 // 当 scaleY < 0.20 时透明，0.20~0.40 渐入，>= 0.40 全可见
@@ -3716,17 +3740,16 @@ public class FloatWindowService extends Service {
 //                }
 
 
-                
                 contentContainer.setAlpha(1f);
                 contentContainer.setScaleX(curScaleX);
                 contentContainer.setScaleY(curScaleY);
                 contentContainer.setTranslationX(curTranslationX);
                 contentContainer.setTranslationY(curTranslationY);
-                
+
                 Log.d(TAG, "[SHORTCUT_EXPAND_TRACE] 第" + frameCount + "帧: tp=" + timeProgress + " p=" + progress + " ez=" + easedProgress
                         + " scale=" + curScaleX + "x" + curScaleY
                         + " trans=(" + curTranslationX + "," + curTranslationY + ")");
-                
+
                 if (progress < 1.0f) {
                     Choreographer.getInstance().postFrameCallback(this);
                 } else {
@@ -3740,7 +3763,7 @@ public class FloatWindowService extends Service {
             }
         });
     }
-    
+
     /**
      * 创建快捷方式窗口视图
      * 高度优先以图标行数所占高度为准，超过最大高度时限制高度并启用滑动
@@ -3753,10 +3776,11 @@ public class FloatWindowService extends Service {
                 FrameLayout.LayoutParams.MATCH_PARENT));
         rootLayout.setBackgroundColor(Color.TRANSPARENT);
         rootLayout.setClipChildren(false);
-        
+
         // 点击外部关闭
         rootLayout.setOnTouchListener(new View.OnTouchListener() {
             private boolean mOutsideDown = false;
+
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()) {
@@ -3787,19 +3811,19 @@ public class FloatWindowService extends Service {
                 }
             }
         });
-        
+
         // 先创建 GridLayout 并添加快捷方式，以便测量实际需要的高度
         android.widget.GridLayout gridLayout = new android.widget.GridLayout(this);
         gridLayout.setColumnCount(4);
         gridLayout.setRowCount(android.widget.GridLayout.UNDEFINED);
         gridLayout.setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12));
-        
+
         java.util.ArrayList<ShortcutItem> shortcuts = loadShortcutList();
         for (final ShortcutItem item : shortcuts) {
             View cell = createShortcutCell(item);
             gridLayout.addView(cell);
         }
-        
+
         // 测量 GridLayout 的自然高度
         int gridWidthMeasure = dpToPx(shortcutWindowWidth);
         gridLayout.measure(
@@ -3808,11 +3832,11 @@ public class FloatWindowService extends Service {
         int contentHeight = gridLayout.getMeasuredHeight();
         int maxHeight = dpToPx(shortcutWindowHeight);
         int actualHeight = Math.min(contentHeight, maxHeight);
-        
+
         // 计算调整后的Y位置，使窗口下边缘不随内容行数变化
         // 当内容高度小于最大高度时，增大topMargin将窗口上移以保持下边缘固定
         int adjustedTopMargin = shortcutWindowPositionY + (maxHeight - actualHeight) / 4;
-        
+
         // contentContainer: 居中显示快捷方式，高度取实际计算值
         FrameLayout contentContainer = new FrameLayout(this);
         FrameLayout.LayoutParams containerParams = new FrameLayout.LayoutParams(
@@ -3824,38 +3848,35 @@ public class FloatWindowService extends Service {
         containerParams.rightMargin = 0;
         containerParams.bottomMargin = -adjustedTopMargin;
         contentContainer.setLayoutParams(containerParams);
-        
-        // 背景色
-        int bgColorInt = getWindowBgColor();
 
-        GradientDrawable background = new GradientDrawable();
-        background.setShape(GradientDrawable.RECTANGLE);
-        background.setCornerRadius(dpToPx(shortcutCornerRadius));
-        background.setColor(bgColorInt);
+        // 背景色
+        int bgColorInt = getWindowBgColor(); // 跟随系统深色模式
+
+        // 使用连续曲率圆角背景
+        ContinuousRoundRectDrawable background = new ContinuousRoundRectDrawable(
+                bgColorInt,
+                dpToPx(shortcutCornerRadius)
+        );
         contentContainer.setBackground(background);
-        contentContainer.setClipToOutline(true);
-        
-        // 边框
+        // 去除 setClipToOutline
+        // contentContainer.setClipToOutline(true); // 删除或注释掉
+
+        // 边框（如果有）
         if (shortcutBorderWidth > 0) {
             try {
                 int borderColorWithAlpha = parseColorWithAlpha(shortcutBorderColor, shortcutBorderAlpha);
-                GradientDrawable foregroundBorder = new GradientDrawable();
-                foregroundBorder.setShape(GradientDrawable.RECTANGLE);
-                foregroundBorder.setCornerRadius(dpToPx(shortcutCornerRadius));
-                foregroundBorder.setColor(Color.TRANSPARENT);
-                foregroundBorder.setStroke(dpToPx(shortcutBorderWidth), borderColorWithAlpha);
-                contentContainer.setForeground(foregroundBorder);
+                background.setStroke(dpToPx(shortcutBorderWidth), borderColorWithAlpha);
             } catch (Exception e) {
                 Log.e(TAG, "set shortcut border failed", e);
             }
         }
-        
+
         // GridLayout 高度改为 WRAP_CONTENT，使其自然扩展
         FrameLayout.LayoutParams gridParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT);
         gridLayout.setLayoutParams(gridParams);
-        
+
         // 当内容超过最大高度时，包裹在 ScrollView 中实现滑动
         if (contentHeight > maxHeight) {
             android.widget.ScrollView scrollView = new android.widget.ScrollView(this);
@@ -3870,11 +3891,11 @@ public class FloatWindowService extends Service {
         } else {
             contentContainer.addView(gridLayout);
         }
-        
+
         rootLayout.addView(contentContainer);
         return rootLayout;
     }
-    
+
     /**
      * 创建单个快捷方式按钮
      * 支持 Emoji 和图片两种图标类型，图片显示为圆角矩形
@@ -3884,24 +3905,24 @@ public class FloatWindowService extends Service {
         cell.setOrientation(LinearLayout.VERTICAL);
         cell.setGravity(Gravity.CENTER);
         cell.setPadding(dpToPx(4), dpToPx(8), dpToPx(4), dpToPx(8));
-        
+
         // 计算均匀分布的单元格宽度：窗口宽度减去 grid padding 后 / 4
         int gridPadding = dpToPx(12) * 2;
         int cellWidth = (dpToPx(shortcutWindowWidth) - gridPadding) / 4;
-        
+
         android.widget.GridLayout.LayoutParams cellParams = new android.widget.GridLayout.LayoutParams(
                 android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED),
                 android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED));
         cellParams.width = cellWidth;
         cellParams.height = android.widget.GridLayout.LayoutParams.WRAP_CONTENT;
         cell.setLayoutParams(cellParams);
-        
+
         cell.setClickable(true);
         cell.setFocusable(true);
-        
+
         // 图标大小缩放因子
         final float iconScale = Math.max(0.5f, Math.min(1.5f, shortcutIconSize / 100.0f));
-        
+
         // 判断图标类型
         if ("image".equals(item.getIconType())) {
             // ===== 图片图标（圆角矩形） =====
@@ -3910,12 +3931,12 @@ public class FloatWindowService extends Service {
             FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(iconSize, iconSize);
             iconParams.gravity = Gravity.CENTER;
             iconContainer.setLayoutParams(iconParams);
-            
+
             // 圆角矩形背景
             GradientDrawable iconBg = new GradientDrawable();
             iconBg.setShape(GradientDrawable.RECTANGLE);
             iconBg.setCornerRadius(dpToPx(12));
-            
+
             // 尝试加载自定义图片
             android.graphics.Bitmap bitmap = loadShortcutIcon(item);
             if (bitmap != null) {
@@ -3934,7 +3955,7 @@ public class FloatWindowService extends Service {
                 iconBg.setColor(getShortcutPlaceholderColor(item.getId()));
                 iconContainer.setBackground(iconBg);
                 iconContainer.setClipToOutline(true);
-                
+
                 // 在占位图上显示名称首字符
                 TextView placeholderText = new TextView(this);
                 placeholderText.setLayoutParams(new FrameLayout.LayoutParams(
@@ -3958,7 +3979,7 @@ public class FloatWindowService extends Service {
             iconView.setPadding(0, 0, 0, dpToPx(4));
             cell.addView(iconView);
         }
-        
+
         // 名称
         TextView nameView = new TextView(this);
         nameView.setText(item.getName());
@@ -3968,12 +3989,13 @@ public class FloatWindowService extends Service {
         nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         nameView.setMaxLines(1);
         cell.addView(nameView);
-        
+
         cell.setOnClickListener(v -> launchShortcutApp(item));
-        
+
         // 按压图标缩小、松手回弹动画（连贯缩放）
         cell.setOnTouchListener(new View.OnTouchListener() {
             private boolean mIsPressed = false;
+
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()) {
@@ -4003,12 +4025,13 @@ public class FloatWindowService extends Service {
                 return false;
             }
         });
-        
+
         return cell;
     }
-    
+
     /**
      * 加载快捷方式的自定义图片图标
+     *
      * @return Bitmap，若无图片文件则返回 null
      */
     private android.graphics.Bitmap loadShortcutIcon(ShortcutItem item) {
@@ -4025,17 +4048,21 @@ public class FloatWindowService extends Service {
         }
         return null;
     }
-    
+
     /**
      * 根据快捷方式 ID 生成一致的占位颜色
      */
     private int getShortcutPlaceholderColor(String id) {
         if (id == null) return 0xFF1677FF;
         switch (id) {
-            case "alipay_scan": return 0xFF1677FF; // 蓝色
-            case "alipay_pay": return 0xFF1677FF;
-            case "wechat_scan": return 0xFF07C160; // 绿色
-            case "wechat_pay": return 0xFF07C160;
+            case "alipay_scan":
+                return 0xFF1677FF; // 蓝色
+            case "alipay_pay":
+                return 0xFF1677FF;
+            case "wechat_scan":
+                return 0xFF07C160; // 绿色
+            case "wechat_pay":
+                return 0xFF07C160;
             default: {
                 int hash = id.hashCode();
                 int r = (hash & 0xFF) % 200 + 55;
@@ -4045,7 +4072,7 @@ public class FloatWindowService extends Service {
             }
         }
     }
-    
+
     /**
      * 通过快捷方式打开应用
      */
@@ -4059,12 +4086,12 @@ public class FloatWindowService extends Service {
             Log.d(TAG, "快捷方式包名或类名为空");
             return;
         }
-        
+
         try {
             Intent launchIntent = createShortcutLaunchIntent(item);
             startActivity(launchIntent);
             Log.d(TAG, "已打开快捷方式: " + item.getName());
-            
+
             // 打开应用后收起快捷方式窗口
             collapseToBottomBar();
         } catch (android.content.ActivityNotFoundException e) {
@@ -4087,7 +4114,7 @@ public class FloatWindowService extends Service {
             Toast.makeText(this, "打开 " + item.getName() + " 失败", Toast.LENGTH_SHORT).show();
         }
     }
-    
+
     /**
      * 根据快捷方式创建适当的 Intent
      * 部分内部 Activity 非导出（android:exported=false），需使用 URL Scheme 替代显式组件名
@@ -4100,22 +4127,22 @@ public class FloatWindowService extends Service {
         if (configIntent != null) {
             return configIntent;
         }
-        
+
         // 对于导出的普通 Activity，使用显式组件名启动
         Intent intent = new Intent();
         intent.setClassName(item.getPackageName(), item.getClassName());
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return intent;
     }
-    
+
     /**
      * 快捷方式窗口内部收起（带连贯缩回动画）
      */
     private void collapseShortcutWindowInternal() {
         if (!isShortcutWindowExpanded) return;
-        
+
         Log.d(TAG, "收起快捷方式窗口: " + android.util.Log.getStackTraceString(new Throwable()));
-        
+
         // 动画期间在视图层拦截所有触摸
         barContainer.setOnTouchListener(new View.OnTouchListener() {
             @Override
@@ -4123,7 +4150,7 @@ public class FloatWindowService extends Service {
                 return true;
             }
         });
-        
+
         // 查找 contentContainer（rootLayout 下的第一个子view，即 createShortcutWindowView 中添加的 contentContainer）
         View contentContainer = null;
         if (barContainer.getChildCount() > 0) {
@@ -4132,55 +4159,55 @@ public class FloatWindowService extends Service {
                 contentContainer = ((FrameLayout) rootView).getChildAt(0);
             }
         }
-        
+
         final DisplayMetrics dm = new DisplayMetrics();
         windowManager.getDefaultDisplay().getRealMetrics(dm);
         final int screenW = dm.widthPixels;
-        
+
         if (contentContainer != null) {
             final View content = contentContainer;
             FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) content.getLayoutParams();
             final int contentStartWidth = lp.width;
             final int contentStartHeight = lp.height;
-            
+
             // content 缩小的目标尺寸：匹配提示条区域
             int effectiveTargetWidth = (currentWidth == ViewGroup.LayoutParams.MATCH_PARENT || currentWidth <= 0) ? screenW : currentWidth;
             final int contentTargetW = Math.max(effectiveTargetWidth, 1);
             final int contentTargetH = Math.max(dpToPx(currentHeight), 1);
-            
+
             // 收起动画目标变换（逆向展开动画的变换）
             final float endScaleX = (float) contentTargetW / contentStartWidth;
             final float endScaleY = (float) contentTargetH / contentStartHeight;
             final float endTranslationX = barPositionX - 2 * lp.leftMargin;
             final float endTranslationY = dpToPx(barPositionY) - 2 * lp.topMargin;
-            
+
             // 圆角插值：从快捷窗口实际圆角过渡到提示条圆角
             // 从 contentContainer 的 GradientDrawable 读取实际圆角值（展开时设置的 currentCornerRadius），
             // 避免使用 shortcutCornerRadius 配置值导致收起瞬间圆角跳变
-            final int startCornerPx = Math.round(((GradientDrawable) content.getBackground()).getCornerRadius());
-            final int targetCornerPx = dpToPx(currentCornerRadius);
-            
-            Log.d(TAG, "收起快捷窗口动画 - scale: 1x1 -> " + endScaleX + "x" + endScaleY
-                    + " trans: 0,0 -> (" + endTranslationX + "," + endTranslationY + ")"
-                    + " corner: " + startCornerPx + "px -> " + targetCornerPx + "px");
-            
+//            final int startCornerPx = Math.round(((GradientDrawable) content.getBackground()).getCornerRadius());
+//            final int targetCornerPx = dpToPx(currentCornerRadius);
+
+//            Log.d(TAG, "收起快捷窗口动画 - scale: 1x1 -> " + endScaleX + "x" + endScaleY
+//                    + " trans: 0,0 -> (" + endTranslationX + "," + endTranslationY + ")"
+//                    + " corner: " + startCornerPx + "px -> " + targetCornerPx + "px");
+
             performSmoothCollapseAnimation(
-                content,
-                endScaleX, endScaleY,
-                endTranslationX, endTranslationY,
-                startCornerPx, targetCornerPx,
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        finishCollapseShortcutWindow();
+                    content,
+                    endScaleX, endScaleY,
+                    endTranslationX, endTranslationY,
+//                    startCornerPx, targetCornerPx,
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            finishCollapseShortcutWindow();
+                        }
                     }
-                }
             );
         } else {
             finishCollapseShortcutWindow();
         }
     }
-    
+
     /**
      * 快捷方式窗口收起完成：清理并恢复底部提示条
      */
@@ -4188,7 +4215,7 @@ public class FloatWindowService extends Service {
         Log.d(TAG, "finishCollapseShortcutWindow");
         try {
             barContainer.removeAllViews();
-            
+
             // 恢复为底部提示条
             barLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                     | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
@@ -4205,19 +4232,19 @@ public class FloatWindowService extends Service {
             barLayoutParams.x = barPositionX;
             barLayoutParams.y = dpToPx(barPositionY);
             windowManager.updateViewLayout(barContainer, barLayoutParams);
-            
+
             barContainer.setBackground(null);
             barContainer.setClipToOutline(false);
-            
+
             // 重新创建底部提示条
             bottomBar = createBottomBarView();
             barContainer.addView(bottomBar);
             pressedOverlay = createPressedOverlay();
             barContainer.addView(pressedOverlay);
             barContainer.setAlpha(1f);
-            
+
             isShortcutWindowExpanded = false;
-            
+
             // 隐藏背景遮罩
             if (overlayView != null) {
                 final View ov = overlayView;
@@ -4238,9 +4265,9 @@ public class FloatWindowService extends Service {
                     }
                 });
             }
-            
+
             barContainer.setOnTouchListener(null);
-            
+
             // 关闭代理 Activity
             finishWindowHostActivity();
             Log.d(TAG, "快捷方式窗口已收起");
@@ -4250,7 +4277,7 @@ public class FloatWindowService extends Service {
             finishWindowHostActivity();
         }
     }
-    
+
     /**
      * 执行展开动画（旧版本，保留以防需要）
      */
@@ -4258,25 +4285,25 @@ public class FloatWindowService extends Service {
         if (aiWindowContainer == null || aiWindowParams == null) {
             return;
         }
-        
+
         // 从中心点开始放大
         final int targetWidth = aiWindowWidth;
         final int targetHeight = aiWindowHeight;
         final long startTime = System.currentTimeMillis();
-        
+
         final Handler handler = new Handler(Looper.getMainLooper());
         handler.post(new Runnable() {
             @Override
             public void run() {
                 long elapsed = System.currentTimeMillis() - startTime;
                 float progress = Math.min((float) elapsed / animationDuration, 1.0f);
-                
+
                 // 使用缓动函数让动画更自然
                 float easedProgress = easeOutCubic(progress);
-                
+
                 int currentWidth = (int) (targetWidth * easedProgress);
                 int currentHeight = (int) (targetHeight * easedProgress);
-                
+
                 try {
                     aiWindowParams.width = currentWidth;
                     aiWindowParams.height = currentHeight;
@@ -4284,7 +4311,7 @@ public class FloatWindowService extends Service {
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-                
+
                 if (progress < 1.0f) {
                     handler.postDelayed(this, FRAME_INTERVAL); // 8ms = 120fps
                 }
@@ -4292,7 +4319,7 @@ public class FloatWindowService extends Service {
         });
     }
 
-    
+
     /**
      * 收起为底部提示条
      */
@@ -4300,18 +4327,18 @@ public class FloatWindowService extends Service {
         if (!isAiWindowExpanded && !isShortcutWindowExpanded) {
             return;
         }
-        
+
         // 如果快捷方式窗口展开，直接收起（简化处理）
         if (isShortcutWindowExpanded) {
             collapseShortcutWindowInternal();
             return;
         }
-        
+
         Log.d(TAG, "[COLLAPSE_DEBUG] collapseToBottomBar 开始 at time=" + System.currentTimeMillis());
-        
+
         // 移除输入法检测
         removeKeyboardListener();
-        
+
         // 隐藏输入法并恢复 FLAG_NOT_FOCUSABLE（如果键盘正在显示）
         if (isKeyboardVisible) {
             stopKeyboardHideDetector();
@@ -4328,7 +4355,7 @@ public class FloatWindowService extends Service {
         }
         // 确保 FLAG_NOT_FOCUSABLE 被恢复（键盘显示时可能被移除）
         restoreNotFocusableFlag();
-        
+
         // 动画期间在视图层拦截所有触摸，防止触摸到达 WebView 视图层级（GestureDetector 等）干扰动画帧
         // 不修改窗口 flags（FLAG_NOT_TOUCHABLE 在某些 Android 版本会导致窗口半透明）
         // 直接在 barContainer 的 OnTouchListener 中消费所有事件，避免事件传播到子视图
@@ -4339,27 +4366,27 @@ public class FloatWindowService extends Service {
             }
         });
         Log.d(TAG, "[COLLAPSE_DEBUG] 收起动画开始，视图层拦截触摸");
-        
+
         // 直接计算 CENTER 重力下的目标位置，避免从动画结束值反算（需在 try 外声明，catch 中也用到）
         final int targetBtmX = barPositionX;
         final int targetBtmY = dpToPx(barPositionY);
-        
+
         try {
             // 获取当前 bar 位置/大小（全屏状态，CENTER 坐标系）
             final int startX = barLayoutParams.x;
             final int startY = barLayoutParams.y;
             final int startWidth = barLayoutParams.width;
             final int startHeight = barLayoutParams.height;
-                        
+
             Log.d(TAG, "[COLLAPSE_DEBUG] collapseToBottomBar: start=(" + startX + "," + startY + ") " + startWidth + "x" + startHeight
                     + " gravity=" + barLayoutParams.gravity);
-            
+
             // 获取屏幕尺寸（使用 getRealMetrics 确保包含导航栏区域，与 expand 保持一致）
             DisplayMetrics dm = new DisplayMetrics();
             windowManager.getDefaultDisplay().getRealMetrics(dm);
             final int screenW = dm.widthPixels;
             final int screenH = dm.heightPixels;
-            
+
             // 提示条的最终尺寸和位置（CENTER 坐标系，无需转换）
             final int targetWidth = currentWidth;
             final int targetHeight = dpToPx(currentHeight);
@@ -4375,7 +4402,7 @@ public class FloatWindowService extends Service {
                     contentContainer = ((FrameLayout) rootView).getChildAt(0);
                 }
             }
-            
+
             if (contentContainer != null) {
                 final View content = contentContainer;
                 FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) content.getLayoutParams();
@@ -4385,36 +4412,36 @@ public class FloatWindowService extends Service {
                 int effectiveTargetWidth = (currentWidth == ViewGroup.LayoutParams.MATCH_PARENT || currentWidth <= 0) ? screenW : currentWidth;
                 final int contentTargetW = Math.max(effectiveTargetWidth, 1);
                 final int contentTargetH = Math.max(targetHeight, 1);
-                
+
                 // ===== 收起动画目标变换 =====
                 final float endScaleX = (float) contentTargetW / contentStartWidth;
                 final float endScaleY = (float) contentTargetH / contentStartHeight;
                 // targetY = dpToPx(barPositionY) 是 bar 在 CENTER 坐标下的 Y，contentLp.topMargin = windowPositionY
                 final float endTranslationX = targetX - 2 * lp.leftMargin;
                 final float endTranslationY = targetY - 2 * lp.topMargin;
-                
+
                 // ===== 圆角插值参数（从窗口实际圆角过渡到提示条圆角） =====
                 // 从 contentContainer 的 GradientDrawable 读取实际圆角值，
                 // 避免使用配置值导致收起瞬间圆角跳变
-                final int startCornerPx = Math.round(((GradientDrawable) content.getBackground()).getCornerRadius());
-                final int targetCornerPx = dpToPx(currentCornerRadius);
-                
-            Log.d(TAG, "[COLLAPSE_DEBUG] collapseToBottomBar: endScale=" + endScaleX + "x" + endScaleY
-                    + " endTrans=(" + endTranslationX + "," + endTranslationY + ")"
-                    + " contentStart=" + contentStartWidth + "x" + contentStartHeight);
-                
+//                final int startCornerPx = Math.round(((GradientDrawable) content.getBackground()).getCornerRadius());
+//                final int targetCornerPx = dpToPx(currentCornerRadius);
+//
+//                Log.d(TAG, "[COLLAPSE_DEBUG] collapseToBottomBar: endScale=" + endScaleX + "x" + endScaleY
+//                        + " endTrans=(" + endTranslationX + "," + endTranslationY + ")"
+//                        + " contentStart=" + contentStartWidth + "x" + contentStartHeight);
+
                 performSmoothCollapseAnimation(
-                    content,
-                    endScaleX, endScaleY,
-                    endTranslationX, endTranslationY,
-                    startCornerPx, targetCornerPx,
-                    new Runnable() {
-                        @Override
-                        public void run() {
-                            Log.d(TAG, "[COLLAPSE_DEBUG] 收起动画完成回调 at time=" + System.currentTimeMillis());
-                            finishCollapseToBottomBar(targetBtmX, targetBtmY);
+                        content,
+                        endScaleX, endScaleY,
+                        endTranslationX, endTranslationY,
+//                        startCornerPx, targetCornerPx,
+                        new Runnable() {
+                            @Override
+                            public void run() {
+                                Log.d(TAG, "[COLLAPSE_DEBUG] 收起动画完成回调 at time=" + System.currentTimeMillis());
+                                finishCollapseToBottomBar(targetBtmX, targetBtmY);
+                            }
                         }
-                    }
                 );
             } else {
                 finishCollapseToBottomBar(targetBtmX, targetBtmY);
@@ -4424,7 +4451,7 @@ public class FloatWindowService extends Service {
             finishCollapseToBottomBar(targetBtmX, targetBtmY);
         }
     }
-    
+
     /**
      * Finish collapse - switch window back to bottom bar mode
      */
@@ -4432,23 +4459,23 @@ public class FloatWindowService extends Service {
         Log.d(TAG, "[COLLAPSE_DEBUG] finishCollapseToBottomBar 开始 at time=" + System.currentTimeMillis());
         Log.d(TAG, "[COLLAPSE_DEBUG] WindowHostActivity.instance=" + (WindowHostActivity.instance != null)
                 + " isFinishing=" + (WindowHostActivity.instance != null && WindowHostActivity.instance.isFinishing()));
-        
+
         if (barContainer == null || windowManager == null) {
             isAiWindowExpanded = false;
             isShortcutWindowExpanded = false;
             return;
         }
-        
+
         try {
             // ===== 关键修复：收起前暂停 WebView 渲染，避免内部渲染管线挂起 =====
             if (aiWebView != null) {
                 aiWebView.onPause();
                 Log.d(TAG, "WebView onPause called on collapse");
             }
-            
+
             // ===== 关键修复：先移除旧视图，再立即缩小窗口，防止 surface 残留白色区域 =====
             barContainer.removeAllViews();
-            
+
             // 立即将窗口设为底部提示条大小并切换重力，即使后续 addView 前的 stale frame 也只有小区域
             barLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                     | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
@@ -4468,22 +4495,22 @@ public class FloatWindowService extends Service {
             barLayoutParams.x = targetBtmX;
             barLayoutParams.y = targetBtmY;
             windowManager.updateViewLayout(barContainer, barLayoutParams);
-            
+
             // 清除圆角背景和裁剪
             barContainer.setBackground(null);
             barContainer.setClipToOutline(false);
-            
+
             // 现在创建并添加底部提示条视图
             bottomBar = createBottomBarView();
             barContainer.addView(bottomBar);
-            
+
             // 重新创建并添加按下状态覆盖层
             pressedOverlay = createPressedOverlay();
             barContainer.addView(pressedOverlay);
-            
+
             // 恢复提示条透明度（长按淡出展开时可能被置为0）
             barContainer.setAlpha(1f);
-            
+
             isAiWindowExpanded = false;
             isShortcutWindowExpanded = false;
             isKeyboardVisible = false;
@@ -4511,10 +4538,10 @@ public class FloatWindowService extends Service {
                     }
                 });
             }
-            
+
             // 恢复正常触摸处理（收起动画开始时在 barContainer 设置了拦截触摸的 OnTouchListener）
             barContainer.setOnTouchListener(null);
-            
+
             // Finish proxy Activity
             finishWindowHostActivity();
             Log.d(TAG, "Collapse to bottom bar complete");
@@ -4524,7 +4551,7 @@ public class FloatWindowService extends Service {
             finishWindowHostActivity();
         }
     }
-    
+
     /**
      * Start transparent proxy Activity to receive system back events.
      * System back (both nav bar button and gesture swipe) is only delivered to Activities,
@@ -4533,7 +4560,7 @@ public class FloatWindowService extends Service {
     private void startWindowHostActivity() {
         Log.d(TAG, "[COLLAPSE_DEBUG] startWindowHostActivity at time=" + System.currentTimeMillis()
                 + " isAiWindowExpanded=" + isAiWindowExpanded);
-        
+
         WindowHostActivity.onBackCallback = new Runnable() {
             @Override
             public void run() {
@@ -4541,7 +4568,7 @@ public class FloatWindowService extends Service {
                         + " isKeyboardVisible=" + isKeyboardVisible
                         + " canGoBack=" + (aiWebView != null && aiWebView.canGoBack())
                         + " isAiWindowExpanded=" + isAiWindowExpanded);
-                
+
                 if (isKeyboardVisible) {
                     // 键盘可见时：先隐藏键盘并恢复窗口位置，不关闭窗口
                     Log.d(TAG, "Back pressed: hiding keyboard and restoring window position");
@@ -4564,7 +4591,7 @@ public class FloatWindowService extends Service {
                     // 延迟兜底：finishActivity 可能导致布局重排，多次确保位置正确
                     scheduleKeyboardPositionFallback();
                     // 不finish WindowHostActivity，用户可再次按返回关闭窗口
-               } else if (backPrioritizeWebview && isAiWindowExpanded && aiWebView != null && aiWebView.canGoBack()) {
+                } else if (backPrioritizeWebview && isAiWindowExpanded && aiWebView != null && aiWebView.canGoBack()) {
                     // 开启"优先返回网页上一级"时，先尝试网页内返回
                     Log.d(TAG, "Back pressed: WebView can go back, backPrioritizeWebview=true");
                     aiWebView.goBack();
@@ -4584,8 +4611,8 @@ public class FloatWindowService extends Service {
         try {
             Intent intent = new Intent(this, WindowHostActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                        | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                    | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             startActivity(intent);
             Log.d(TAG, "WindowHostActivity started");
         } catch (Exception e) {
@@ -4593,7 +4620,7 @@ public class FloatWindowService extends Service {
             WindowHostActivity.onBackCallback = null;
         }
     }
-    
+
     /**
      * Finish the proxy Activity (called when we collapse the window ourselves).
      */
@@ -4612,9 +4639,9 @@ public class FloatWindowService extends Service {
             }
         }
     }
-    
+
     // ==================== FLAG_NOT_FOCUSABLE 动态管理 ====================
-    
+
     /**
      * 移除 FLAG_NOT_FOCUSABLE，让 overlay 窗口可接收焦点（IME 需要）
      */
@@ -4633,7 +4660,7 @@ public class FloatWindowService extends Service {
             Log.e(TAG, "removeNotFocusableFlag failed", e);
         }
     }
-    
+
     /**
      * 恢复 FLAG_NOT_FOCUSABLE，让触摸事件穿透到 WindowHostActivity（返回手势需要）
      */
@@ -4654,7 +4681,7 @@ public class FloatWindowService extends Service {
         // 安全兜底：确保窗口位置恢复（键盘避让动画可能被干扰）
         resetKeyboardOffset();
     }
-    
+
     /**
      * 注入 JavaScript 监听输入框聚焦/失焦事件
      */
@@ -4700,9 +4727,9 @@ public class FloatWindowService extends Service {
         webView.loadUrl(js);
         Log.d(TAG, "Input focus JS injected");
     }
-    
+
     // ==================== 输入法避让功能 ====================
-    
+
     /**
      * 显示键盘，带重试机制
      * WebView 的 InputConnection 可能需要额外时间建立，
@@ -4712,13 +4739,13 @@ public class FloatWindowService extends Service {
         try {
             final InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
             if (imm == null) return;
-            
+
             // 第一次尝试 showSoftInput
             boolean result = imm.showSoftInput(aiWebView, InputMethodManager.SHOW_FORCED);
-            Log.d(TAG, "showSoftInput attempt 1: result=" + result 
+            Log.d(TAG, "showSoftInput attempt 1: result=" + result
                     + ", hasFocus=" + (aiWebView != null ? aiWebView.hasFocus() : "null")
                     + ", hasWindowFocus=" + (aiWebView != null ? aiWebView.hasWindowFocus() : "null"));
-            
+
             if (!result) {
                 // showSoftInput 失败，延迟 200ms 重试
                 new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
@@ -4750,7 +4777,7 @@ public class FloatWindowService extends Service {
             }
         }
     }
-    
+
     /**
      * 设置 IME 代理 EditText
      * 使用从 WebView 读取的现有文本来初始化代理，确保增量对比正确
@@ -4772,9 +4799,13 @@ public class FloatWindowService extends Service {
         // 5. 设置 TextWatcher 捕获输入法输入
         proxyTextWatcher = new TextWatcher() {
             @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
             @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
             @Override
             public void afterTextChanged(Editable s) {
                 if (isUpdatingProxy) return;
@@ -4822,15 +4853,15 @@ public class FloatWindowService extends Service {
         //    这里仅做保险确认
         if (aiWebView != null) {
             aiWebView.evaluateJavascript(
-                "(function(){" +
-                "  var el = window._imeTarget;" +
-                "  if(el && document.activeElement !== el){" +
-                "    el.focus();" +
-                "  }" +
-                "})()", null);
+                    "(function(){" +
+                            "  var el = window._imeTarget;" +
+                            "  if(el && document.activeElement !== el){" +
+                            "    el.focus();" +
+                            "  }" +
+                            "})()", null);
         }
     }
-        
+
     /**
      * 将代理 EditText 的文本转发到 WebView 的输入框
      * 使用 window._imeTarget（在聚焦代理之前保存的元素引用）
@@ -4843,29 +4874,29 @@ public class FloatWindowService extends Service {
         // 由于代理 EditText 初始化时已包含 WebView 现有文本，首次输入不会覆盖
         final String escaped = escapeJsString(text);
         aiWebView.evaluateJavascript(
-            "(function(){" +
-            "  var el = window._imeTarget;" +
-            "  if(!el || !el.parentNode) return;" +
-            "  try{" +
-            "    var tag = el.tagName;" +
-            "    if(tag==='INPUT'||tag==='TEXTAREA'){" +
-            "      var proto = (tag==='TEXTAREA' ? HTMLTextAreaElement : HTMLInputElement).prototype;" +
-            "      var nativeSetter = Object.getOwnPropertyDescriptor(proto,'value');" +
-            "      if(nativeSetter && nativeSetter.set){" +
-            "        nativeSetter.set.call(el,'" + escaped + "');" +
-            "      } else {" +
-            "        el.value='" + escaped + "';" +
-            "      }" +
-            "      el.selectionStart = el.selectionEnd = " + cursorPos + ";" +
-            "      el.dispatchEvent(new Event('input',{bubbles:true}));" +
-            "      el.dispatchEvent(new Event('change',{bubbles:true}));" +
-            "    } else if(el.isContentEditable){" +
-            "      el.textContent='" + escaped + "';" +
-            "    }" +
-            "  } catch(e){}" +
-            "})()", null);
+                "(function(){" +
+                        "  var el = window._imeTarget;" +
+                        "  if(!el || !el.parentNode) return;" +
+                        "  try{" +
+                        "    var tag = el.tagName;" +
+                        "    if(tag==='INPUT'||tag==='TEXTAREA'){" +
+                        "      var proto = (tag==='TEXTAREA' ? HTMLTextAreaElement : HTMLInputElement).prototype;" +
+                        "      var nativeSetter = Object.getOwnPropertyDescriptor(proto,'value');" +
+                        "      if(nativeSetter && nativeSetter.set){" +
+                        "        nativeSetter.set.call(el,'" + escaped + "');" +
+                        "      } else {" +
+                        "        el.value='" + escaped + "';" +
+                        "      }" +
+                        "      el.selectionStart = el.selectionEnd = " + cursorPos + ";" +
+                        "      el.dispatchEvent(new Event('input',{bubbles:true}));" +
+                        "      el.dispatchEvent(new Event('change',{bubbles:true}));" +
+                        "    } else if(el.isContentEditable){" +
+                        "      el.textContent='" + escaped + "';" +
+                        "    }" +
+                        "  } catch(e){}" +
+                        "})()", null);
     }
-    
+
     /**
      * 转义文本中的特殊字符，使其可安全嵌入 JS 单引号字符串
      */
@@ -4874,21 +4905,36 @@ public class FloatWindowService extends Service {
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
             switch (c) {
-                case '\\': sb.append("\\\\"); break;
-                case '\'': sb.append("\\'"); break;
-                case '\n': sb.append("\\n"); break;
-                case '\r': sb.append("\\r"); break;
-                case '\t': sb.append("\\t"); break;
-                case '\u2028': sb.append("\\u2028"); break;
-                case '\u2029': sb.append("\\u2029"); break;
-                default: sb.append(c);
+                case '\\':
+                    sb.append("\\\\");
+                    break;
+                case '\'':
+                    sb.append("\\'");
+                    break;
+                case '\n':
+                    sb.append("\\n");
+                    break;
+                case '\r':
+                    sb.append("\\r");
+                    break;
+                case '\t':
+                    sb.append("\\t");
+                    break;
+                case '\u2028':
+                    sb.append("\\u2028");
+                    break;
+                case '\u2029':
+                    sb.append("\\u2029");
+                    break;
+                default:
+                    sb.append(c);
             }
         }
         return sb.toString();
     }
-    
+
     // ==================== 自定义上下文菜单（长按复制/粘贴） ====================
-    
+
     /**
      * 显示自定义长按上下文菜单（复制/全选/粘贴）
      */
@@ -4896,19 +4942,19 @@ public class FloatWindowService extends Service {
         Log.d(TAG, "showContextMenu called: hasSelection=" + hasSelection + " selectedText='" + selectedText + "' isInput=" + isInput + " imageUrl=" + imageUrl + " touch=(" + touchX + "," + touchY + ")");
         dismissContextMenu();
         if (aiWebView == null || barContainer == null || windowManager == null) return;
-        
+
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.HORIZONTAL);
         layout.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
         layout.setElevation(dpToPx(8));
-        
+
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.RECTANGLE);
         bg.setCornerRadius(dpToPx(8));
         bg.setColor(Color.parseColor("#FAFAFA"));
         bg.setStroke(1, Color.parseColor("#DDDDDD"));
         layout.setBackground(bg);
-        
+
         // 复制按钮（仅在选中文本时显示）
         if (hasSelection) {
             TextView copyBtn = new TextView(this);
@@ -4922,7 +4968,7 @@ public class FloatWindowService extends Service {
                 dismissContextMenu();
             });
             layout.addView(copyBtn);
-            
+
             // 剪切按钮（仅在输入框内的选中文本显示）
             if (isInput) {
                 TextView cutBtn = new TextView(this);
@@ -4938,7 +4984,7 @@ public class FloatWindowService extends Service {
                 layout.addView(cutBtn);
             }
         }
-        
+
         // 全选按钮
         TextView selectAllBtn = new TextView(this);
         selectAllBtn.setText("全选");
@@ -4951,7 +4997,7 @@ public class FloatWindowService extends Service {
             dismissContextMenu();
         });
         layout.addView(selectAllBtn);
-        
+
         // 粘贴按钮（仅在输入框显示）
         if (isInput) {
             TextView pasteBtn = new TextView(this);
@@ -4966,7 +5012,7 @@ public class FloatWindowService extends Service {
             });
             layout.addView(pasteBtn);
         }
-        
+
         // 保存图片按钮（当长按检测到图片时显示）
         if (imageUrl != null && imageUrl.length() > 0) {
             TextView saveImgBtn = new TextView(this);
@@ -4981,43 +5027,43 @@ public class FloatWindowService extends Service {
             });
             layout.addView(saveImgBtn);
         }
-        
+
         // 测量尺寸
         int widthSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
         int heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
         layout.measure(widthSpec, heightSpec);
         int popupWidth = Math.max(layout.getMeasuredWidth(), 1);
         int popupHeight = Math.max(layout.getMeasuredHeight(), 1);
-        
+
         // 将 WebView 内的触摸坐标转换为屏幕坐标
         int[] webViewLoc = new int[2];
         aiWebView.getLocationOnScreen(webViewLoc);
         int popupX = webViewLoc[0] + (int) touchX - popupWidth / 2;
         int popupY = webViewLoc[1] + (int) touchY - popupHeight - dpToPx(10);
-        
+
         // 边界约束：确保菜单不超出屏幕
         DisplayMetrics dm = getResources().getDisplayMetrics();
         popupX = Math.max(dpToPx(4), Math.min(popupX, dm.widthPixels - popupWidth - dpToPx(4)));
         popupY = Math.max(dpToPx(4), Math.min(popupY, dm.heightPixels - popupHeight - dpToPx(4)));
-        
+
         // 使用 WindowManager 创建独立覆盖层（TYPE_APPLICATION_OVERLAY 中 PopupWindow 不可靠）
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-            popupWidth,
-            popupHeight,
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                : WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
+                popupWidth,
+                popupHeight,
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                        ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                        : WindowManager.LayoutParams.TYPE_PHONE,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
         );
         params.gravity = Gravity.TOP | Gravity.START;
         params.x = popupX;
         params.y = popupY;
         params.token = barContainer.getWindowToken();
-        
+
         // 监听外部点击以关闭菜单
         layout.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_OUTSIDE) {
@@ -5026,7 +5072,7 @@ public class FloatWindowService extends Service {
             }
             return false;
         });
-        
+
         try {
             windowManager.addView(layout, params);
             contextMenuPopupView = layout;
@@ -5035,7 +5081,7 @@ public class FloatWindowService extends Service {
             Log.e(TAG, "Failed to show context menu", e);
         }
     }
-    
+
     /**
      * 关闭上下文菜单
      */
@@ -5050,7 +5096,7 @@ public class FloatWindowService extends Service {
             contextMenuPopupView = null;
         }
     }
-    
+
     /**
      * 复制文本到系统剪贴板
      */
@@ -5066,30 +5112,30 @@ public class FloatWindowService extends Service {
             Log.e(TAG, "Copy failed", e);
         }
     }
-    
+
     /**
      * 在 WebView 中全选文本
      */
     private void selectAllWebView() {
         if (aiWebView == null) return;
         aiWebView.evaluateJavascript(
-            "(function(){" +
-            "  var el = document.activeElement;" +
-            "  if(el && (el.tagName==='INPUT'||el.tagName==='TEXTAREA')){" +
-            "    el.select();" +
-            "  }else{" +
-            "    var sel = window.getSelection();" +
-            "    if(sel){" +
-            "      var range = document.createRange();" +
-            "      range.selectNodeContents(document.body);" +
-            "      sel.removeAllRanges();" +
-            "      sel.addRange(range);" +
-            "    }" +
-            "  }" +
-            "})()", null);
+                "(function(){" +
+                        "  var el = document.activeElement;" +
+                        "  if(el && (el.tagName==='INPUT'||el.tagName==='TEXTAREA')){" +
+                        "    el.select();" +
+                        "  }else{" +
+                        "    var sel = window.getSelection();" +
+                        "    if(sel){" +
+                        "      var range = document.createRange();" +
+                        "      range.selectNodeContents(document.body);" +
+                        "      sel.removeAllRanges();" +
+                        "      sel.addRange(range);" +
+                        "    }" +
+                        "  }" +
+                        "})()", null);
         Toast.makeText(this, "已全选", Toast.LENGTH_SHORT).show();
     }
-    
+
     /**
      * 从剪贴板粘贴到 WebView 输入框
      */
@@ -5101,64 +5147,64 @@ public class FloatWindowService extends Service {
             ClipData.Item item = clipboard.getPrimaryClip().getItemAt(0);
             CharSequence pasteText = item.getText();
             if (pasteText == null || pasteText.length() == 0) return;
-            
+
             final String text = pasteText.toString();
             // 将文本存储到字段，通过 @JavascriptInterface 传递给 JS
             // 避免将文本直接嵌入 JS 代码字符串，防止 evaluateJavascript 因超长 JS 代码失败
             Log.d(TAG, "[PASTE_DEBUG] clipboard text length=" + text.length());
             pendingPasteText = text;
-            
+
             aiWebView.evaluateJavascript(
-                "(function(){" +
-                "  try{" +
-                "    var el = document.activeElement;" +
-                "    if(!el || (el.tagName!=='INPUT'&&el.tagName!=='TEXTAREA')){" +
-                "      el = window._imeTarget;" +
-                "    }" +
-                "    if(!el || (el.tagName!=='INPUT'&&el.tagName!=='TEXTAREA'&&!el.isContentEditable)){" +
-                "      console.log('[PASTE_JS] no target element'); return;" +
-                "    }" +
-                "    var text = AndroidBridge.getPendingPasteText();" +
-                "    console.log('[PASTE_JS] text len=' + (text?text.length:-1));" +
-                "    if(!text || text.length === 0){ console.log('[PASTE_JS] empty text'); return; }" +
-                "    if(el.tagName==='INPUT'||el.tagName==='TEXTAREA'){" +
-                "      var s = el.selectionStart, e = el.selectionEnd;" +
-                "      var newVal = el.value.substring(0,s) + text + el.value.substring(e);" +
-                "      var tag = el.tagName;" +
-                "      var proto = (tag==='TEXTAREA' ? HTMLTextAreaElement : HTMLInputElement).prototype;" +
-                "      var nativeSetter = Object.getOwnPropertyDescriptor(proto,'value');" +
-                "      if(nativeSetter && nativeSetter.set){" +
-                "        nativeSetter.set.call(el, newVal);" +
-                "      } else {" +
-                "        el.value = newVal;" +
-                "      }" +
-                "      el.selectionStart = el.selectionEnd = s + text.length;" +
-                "      el.dispatchEvent(new Event('input', {bubbles:true}));" +
-                "      el.dispatchEvent(new Event('change', {bubbles:true}));" +
-                "      console.log('[PASTE_JS] paste to input ok');" +
-                "    }else if(el.isContentEditable){" +
-                "      var sel = window.getSelection();" +
-                "      if(sel && sel.rangeCount > 0){" +
-                "        var range = sel.getRangeAt(0);" +
-                "        range.deleteContents();" +
-                "        range.insertNode(document.createTextNode(text));" +
-                "        range.collapse(false);" +
-                "        sel.removeAllRanges();" +
-                "        sel.addRange(range);" +
-                "      }" +
-                "      el.dispatchEvent(new Event('input', {bubbles:true}));" +
-                "      el.dispatchEvent(new Event('change', {bubbles:true}));" +
-                "      console.log('[PASTE_JS] paste to contenteditable ok');" +
-                "    }" +
-                "    AndroidBridge.syncProxyIme(el.value||el.textContent||'');" +
-                "  }catch(e){ console.log('[PASTE_JS] error: ' + e.message); }" +
-                "})()", null);
+                    "(function(){" +
+                            "  try{" +
+                            "    var el = document.activeElement;" +
+                            "    if(!el || (el.tagName!=='INPUT'&&el.tagName!=='TEXTAREA')){" +
+                            "      el = window._imeTarget;" +
+                            "    }" +
+                            "    if(!el || (el.tagName!=='INPUT'&&el.tagName!=='TEXTAREA'&&!el.isContentEditable)){" +
+                            "      console.log('[PASTE_JS] no target element'); return;" +
+                            "    }" +
+                            "    var text = AndroidBridge.getPendingPasteText();" +
+                            "    console.log('[PASTE_JS] text len=' + (text?text.length:-1));" +
+                            "    if(!text || text.length === 0){ console.log('[PASTE_JS] empty text'); return; }" +
+                            "    if(el.tagName==='INPUT'||el.tagName==='TEXTAREA'){" +
+                            "      var s = el.selectionStart, e = el.selectionEnd;" +
+                            "      var newVal = el.value.substring(0,s) + text + el.value.substring(e);" +
+                            "      var tag = el.tagName;" +
+                            "      var proto = (tag==='TEXTAREA' ? HTMLTextAreaElement : HTMLInputElement).prototype;" +
+                            "      var nativeSetter = Object.getOwnPropertyDescriptor(proto,'value');" +
+                            "      if(nativeSetter && nativeSetter.set){" +
+                            "        nativeSetter.set.call(el, newVal);" +
+                            "      } else {" +
+                            "        el.value = newVal;" +
+                            "      }" +
+                            "      el.selectionStart = el.selectionEnd = s + text.length;" +
+                            "      el.dispatchEvent(new Event('input', {bubbles:true}));" +
+                            "      el.dispatchEvent(new Event('change', {bubbles:true}));" +
+                            "      console.log('[PASTE_JS] paste to input ok');" +
+                            "    }else if(el.isContentEditable){" +
+                            "      var sel = window.getSelection();" +
+                            "      if(sel && sel.rangeCount > 0){" +
+                            "        var range = sel.getRangeAt(0);" +
+                            "        range.deleteContents();" +
+                            "        range.insertNode(document.createTextNode(text));" +
+                            "        range.collapse(false);" +
+                            "        sel.removeAllRanges();" +
+                            "        sel.addRange(range);" +
+                            "      }" +
+                            "      el.dispatchEvent(new Event('input', {bubbles:true}));" +
+                            "      el.dispatchEvent(new Event('change', {bubbles:true}));" +
+                            "      console.log('[PASTE_JS] paste to contenteditable ok');" +
+                            "    }" +
+                            "    AndroidBridge.syncProxyIme(el.value||el.textContent||'');" +
+                            "  }catch(e){ console.log('[PASTE_JS] error: ' + e.message); }" +
+                            "})()", null);
             Log.d(TAG, "Pasted text into WebView via bridge");
         } catch (Exception e) {
             Log.e(TAG, "Paste failed", e);
         }
     }
-    
+
     /**
      * 剪切输入框中的选中文本（复制到剪贴板后清除选中部分）
      */
@@ -5169,20 +5215,20 @@ public class FloatWindowService extends Service {
         // 再用 JS 清除选中部分
         String escaped = escapeJsString(text);
         aiWebView.evaluateJavascript(
-            "(function(){" +
-            "  var el = document.activeElement;" +
-            "  if(!el || (el.tagName!=='INPUT'&&el.tagName!=='TEXTAREA')) return;" +
-            "  var s = el.selectionStart, e = el.selectionEnd;" +
-            "  if(s === e) return;" +
-            "  el.value = el.value.substring(0,s) + el.value.substring(e);" +
-            "  el.selectionStart = el.selectionEnd = s;" +
-            "  el.dispatchEvent(new Event('input', {bubbles:true}));" +
-            "  el.dispatchEvent(new Event('change', {bubbles:true}));" +
-            "  AndroidBridge.syncProxyIme(el.value);" +
-            "})()", null);
+                "(function(){" +
+                        "  var el = document.activeElement;" +
+                        "  if(!el || (el.tagName!=='INPUT'&&el.tagName!=='TEXTAREA')) return;" +
+                        "  var s = el.selectionStart, e = el.selectionEnd;" +
+                        "  if(s === e) return;" +
+                        "  el.value = el.value.substring(0,s) + el.value.substring(e);" +
+                        "  el.selectionStart = el.selectionEnd = s;" +
+                        "  el.dispatchEvent(new Event('input', {bubbles:true}));" +
+                        "  el.dispatchEvent(new Event('change', {bubbles:true}));" +
+                        "  AndroidBridge.syncProxyIme(el.value);" +
+                        "})()", null);
         Log.d(TAG, "Cut text from input: " + text);
     }
-    
+
     /**
      * 移除 TextWatcher、清除文本、隐藏代理
      */
@@ -5209,39 +5255,39 @@ public class FloatWindowService extends Service {
         // 如果不 blur，用户再次点击同一输入框时不会触发 focus 事件，IME 无法弹出
         if (aiWebView != null) {
             aiWebView.evaluateJavascript(
-                "(function(){" +
-                "  var el = window._imeTarget;" +
-                "  if(el && document.activeElement === el){" +
-                "    el.blur();" +
-                "  }" +
-                "  window._imeTarget = null;" +
-                "})()", null);
+                    "(function(){" +
+                            "  var el = window._imeTarget;" +
+                            "  if(el && document.activeElement === el){" +
+                            "    el.blur();" +
+                            "  }" +
+                            "  window._imeTarget = null;" +
+                            "})()", null);
         }
     }
-    
+
     /**
      * 设置输入法可见性检测监听器
      * 使用 OnGlobalLayoutListener 检测屏幕可见区域变化来推断输入法状态
      */
     private void setupKeyboardListener(final View rootView) {
         if (rootView == null) return;
-        
+
         keyboardLayoutListener = new ViewTreeObserver.OnGlobalLayoutListener() {
             private int lastKeyboardHeight = 0;
-            
+
             @Override
             public void onGlobalLayout() {
                 android.graphics.Rect r = new android.graphics.Rect();
                 rootView.getWindowVisibleDisplayFrame(r);
                 int screenHeight = rootView.getRootView().getHeight();
                 int keyboardHeight = screenHeight - r.bottom;
-                
+
                 // 去抖：变化量小于 20px 忽略
                 if (Math.abs(keyboardHeight - lastKeyboardHeight) < 20) return;
                 lastKeyboardHeight = keyboardHeight;
-                
+
                 boolean shown = keyboardHeight > screenHeight * 0.12f;
-                
+
                 if (shown && !isKeyboardVisible) {
                     isKeyboardVisible = true;
                     animateForKeyboard(true, keyboardHeight);
@@ -5265,7 +5311,7 @@ public class FloatWindowService extends Service {
         rootView.getViewTreeObserver().addOnGlobalLayoutListener(keyboardLayoutListener);
         Log.d(TAG, "Keyboard listener set up");
     }
-    
+
     /**
      * 移除输入法检测监听器
      */
@@ -5281,20 +5327,22 @@ public class FloatWindowService extends Service {
         }
         keyboardLayoutListener = null;
     }
-    
+
     /**
      * 输入法出现/消失时的平移动画
-     * @param show true=输入法出现（窗口上移），false=输入法消失（窗口恢复）
+     *
+     * @param show           true=输入法出现（窗口上移），false=输入法消失（窗口恢复）
      * @param detectedHeight 检测到的输入法高度（像素）
      */
     private void animateForKeyboard(final boolean show, final int detectedHeight) {
         if (barContainer == null || barContainer.getChildCount() == 0) return;
-        
+
         final View rootView = barContainer.getChildAt(0);
-        if (!(rootView instanceof FrameLayout) || ((FrameLayout) rootView).getChildCount() < 1) return;
-        
+        if (!(rootView instanceof FrameLayout) || ((FrameLayout) rootView).getChildCount() < 1)
+            return;
+
         final View content = ((FrameLayout) rootView).getChildAt(0);
-        
+
         final float startTranslationY = content.getTranslationY();
         int offset = keyboardOffset;
         if (detectedHeight > offset) {
@@ -5303,14 +5351,14 @@ public class FloatWindowService extends Service {
         // 在 Gravity.CENTER 下，topMargin 改变 d 像素等价于视觉移动 2*d 像素
         // 因此 translationY 的变化量也需要用 2*offset，以保持相同的避让幅度
         final float targetTranslationY = show ? (-2f * offset) : 0f;
-        
+
         // 如果已在目标位置，无需动画
         if (startTranslationY == targetTranslationY) return;
-        
-        Log.d(TAG, "Keyboard anim: show=" + show + " startTranslationY=" + startTranslationY 
-              + " targetTranslationY=" + targetTranslationY + " offset=" + offset 
-              + " detectedHeight=" + detectedHeight);
-        
+
+        Log.d(TAG, "Keyboard anim: show=" + show + " startTranslationY=" + startTranslationY
+                + " targetTranslationY=" + targetTranslationY + " offset=" + offset
+                + " detectedHeight=" + detectedHeight);
+
         isKeyboardAnimating = true;
         final long startTime = System.nanoTime();
         final int duration = keyboardAnimDuration;
@@ -5321,10 +5369,10 @@ public class FloatWindowService extends Service {
                     long elapsed = (frameTimeNanos - startTime) / 1000000; // ns -> ms
                     float progress = Math.min((float) elapsed / duration, 1.0f);
                     float easedProgress = easeOutCubic(progress);
-                    
+
                     float currentTranslationY = startTranslationY + (targetTranslationY - startTranslationY) * easedProgress;
                     content.setTranslationY(currentTranslationY);
-                    
+
                     if (progress < 1.0f) {
                         Choreographer.getInstance().postFrameCallback(this);
                     } else {
@@ -5338,7 +5386,7 @@ public class FloatWindowService extends Service {
             }
         });
     }
-    
+
     /**
      * 安全兜底：直接恢复窗口位置
      * 在 restoreNotFocusableFlag 之后调用，确保键盘避让动画即使被干扰也能恢复
@@ -5363,7 +5411,7 @@ public class FloatWindowService extends Service {
         }
         isKeyboardAnimating = false;
     }
-    
+
     /**
      * 启动输入法隐藏检测器
      * 使用反射调用 getInputMethodWindowVisibleHeight() (API 25+) 直接检测 IME 窗口高度
@@ -5386,9 +5434,9 @@ public class FloatWindowService extends Service {
                     new Handler(Looper.getMainLooper()).postDelayed(this, 200);
                     return;
                 }
-                
+
                 boolean imeHidden = isImeHidden(imm);
-                
+
                 if (imeHidden) {
                     Log.d(TAG, "Keyboard hide detector: IME window hidden");
                     cleanupProxyIme();
@@ -5412,7 +5460,7 @@ public class FloatWindowService extends Service {
         };
         new Handler(Looper.getMainLooper()).postDelayed(keyboardHideDetector, 200);
     }
-    
+
     /**
      * 检测输入法窗口是否隐藏
      * API 25+: 反射调用 getInputMethodWindowVisibleHeight() 获取 IME 窗口可见高度
@@ -5434,14 +5482,14 @@ public class FloatWindowService extends Service {
         }
         return !imm.isActive(proxyIme);
     }
-    
+
     /**
      * 停止输入法隐藏检测器
      */
     private void stopKeyboardHideDetector() {
         keyboardHideDetector = null; // Runnable 下次执行时自动退出
     }
-    
+
     /**
      * 延迟兜底：在键盘隐藏后多次确保窗口位置恢复
      * 解决 finishActivity、布局重排等异步操作可能导致的复位干扰
@@ -5459,9 +5507,9 @@ public class FloatWindowService extends Service {
             }, delay);
         }
     }
-    
+
     // ==================== 动画辅助方法 ====================
-    
+
     /**
      * Animate contentContainer shrinking from current size to 0, then run onComplete
      */
@@ -5469,7 +5517,7 @@ public class FloatWindowService extends Service {
         final int startWidth = content.getLayoutParams().width;
         final int startHeight = content.getLayoutParams().height;
         final long startTime = System.currentTimeMillis();
-        
+
         final Handler handler = new Handler(Looper.getMainLooper());
         handler.post(new Runnable() {
             @Override
@@ -5477,15 +5525,15 @@ public class FloatWindowService extends Service {
                 long elapsed = System.currentTimeMillis() - startTime;
                 float progress = Math.min((float) elapsed / animationDuration, 1.0f);
                 float easedProgress = easeInCubic(progress);
-                
+
                 int currentW = (int) (startWidth * (1 - easedProgress));
                 int currentH = (int) (startHeight * (1 - easedProgress));
-                
+
                 FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) content.getLayoutParams();
                 lp.width = Math.max(currentW, 1);
                 lp.height = Math.max(currentH, 1);
                 content.setLayoutParams(lp);
-                
+
                 if (progress < 1.0f) {
                     handler.postDelayed(this, FRAME_INTERVAL);
                 } else {
@@ -5494,7 +5542,7 @@ public class FloatWindowService extends Service {
             }
         });
     }
-    
+
     /**
      * 收起动画：通过 contentContainer 的 scaleX/scaleY/translationY 变换实现
      * barContainer 保持全屏，避免 updateViewLayout 逐帧重排导致的掉帧
@@ -5503,37 +5551,32 @@ public class FloatWindowService extends Service {
             final View contentContainer,
             final float endScaleX, final float endScaleY,
             final float endTranslationX, final float endTranslationY,
-            final int startCornerPx, final int targetCornerPx,
             final Runnable onComplete) {
         if (barContainer == null || barLayoutParams == null) {
             if (onComplete != null) onComplete.run();
             return;
         }
-        
-        Log.d(TAG, "收起动画 - scale: 1x1"
-                + " -> " + endScaleX + "x" + endScaleY
-                + " translationY: 0 -> " + endTranslationY
-                + " corner: " + startCornerPx + "px -> " + targetCornerPx + "px");
-        
+
+
         // 动画期间启用硬件层
         contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-        
-        final GradientDrawable contentBg = (GradientDrawable) contentContainer.getBackground();
-        final android.graphics.drawable.Drawable foreground = contentContainer.getForeground();
-        
+
+//        final GradientDrawable contentBg = (GradientDrawable) contentContainer.getBackground();
+//        final android.graphics.drawable.Drawable foreground = contentContainer.getForeground();
+
         // 立即记录开始时间，避免首帧被跳过
         final long adjustedStartTime = System.nanoTime();
-        
+
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             private int frameCount = 0;
             private long prevFrameTime = 0;
-            
+
             @Override
             public void doFrame(long frameTimeNanos) {
                 if (prevFrameTime == 0) {
                     prevFrameTime = frameTimeNanos;
                 }
-                
+
                 frameCount++;
                 long intervalNs = frameTimeNanos - prevFrameTime;
                 prevFrameTime = frameTimeNanos;
@@ -5541,7 +5584,7 @@ public class FloatWindowService extends Service {
                 float timeProgress = (float) (frameTimeNanos - adjustedStartTime) / 1000000f / animationDuration;
                 float progress = Math.min(timeProgress, 1.0f);
                 float easedProgress = animInterpolator.getInterpolation(progress);
-                
+
                 // WebView 透明度：前一半从 1 渐变为 0，后一半保持 0
                 if (aiWebView != null) {
                     if (progress < 0.5f) {
@@ -5551,39 +5594,35 @@ public class FloatWindowService extends Service {
                         aiWebView.setAlpha(0f);
                     }
                 }
-                
+
                 // 插值 scaleX/scaleY/translationX/translationY
                 float curScaleX = 1f + (endScaleX - 1f) * easedProgress;
                 float curScaleY = 1f + (endScaleY - 1f) * easedProgress;
                 float curTranslationX = endTranslationX * easedProgress;
                 float curTranslationY = endTranslationY * easedProgress;
-                
+
                 try {
                     // 圆角动画：前一半保持窗口圆角不变，后一半从窗口圆角过渡到提示条圆角
-                    int currentCornerPx;
-                    if (progress < 0.5f) {
-                        currentCornerPx = startCornerPx;
-                    } else {
-                        float cornerSubProgress = (progress - 0.5f) * 2f;
-                        float easedCornerProgress = easeOutCubic(cornerSubProgress);
-                        currentCornerPx = Math.round(startCornerPx + (targetCornerPx - startCornerPx) * easedCornerProgress);
-                    }
-                    contentBg.setCornerRadius(currentCornerPx);
-                    if (foreground instanceof GradientDrawable) {
-                        ((GradientDrawable) foreground).setCornerRadius(currentCornerPx);
-                    }
-                    contentContainer.invalidateOutline();
-                    
+//                    int currentCornerPx;
+//                    if (progress < 0.5f) {
+//                        currentCornerPx = startCornerPx;
+//                    } else {
+//                        float cornerSubProgress = (progress - 0.5f) * 2f;
+//                        float easedCornerProgress = easeOutCubic(cornerSubProgress);
+//                        currentCornerPx = Math.round(startCornerPx + (targetCornerPx - startCornerPx) * easedCornerProgress);
+//                    }
+//                    contentBg.setCornerRadius(currentCornerPx);
+//                    if (foreground instanceof GradientDrawable) {
+//                        ((GradientDrawable) foreground).setCornerRadius(currentCornerPx);
+//                    }
+//                    contentContainer.invalidateOutline();
+
                     // 应用变换（只改 View 属性，不触发 updateViewLayout）
                     contentContainer.setScaleX(curScaleX);
                     contentContainer.setScaleY(curScaleY);
                     contentContainer.setTranslationX(curTranslationX);
                     contentContainer.setTranslationY(curTranslationY);
-                    
-                    Log.d(TAG, "[COLLAPSE_TRACE] 第" + frameCount + "帧: tp=" + timeProgress + " p=" + progress + " ez=" + easedProgress
-                            + " scale=" + curScaleX + "x" + curScaleY
-                            + " trans=(" + curTranslationX + "," + curTranslationY + ")"
-                            + " corner=" + currentCornerPx);
+
 
                     if (progress < 1.0f) {
                         Choreographer.getInstance().postFrameCallback(this);
@@ -5604,7 +5643,7 @@ public class FloatWindowService extends Service {
             }
         });
     }
-    
+
     /**
      * 执行收起动画（旧版本，保留以防需要）
      */
@@ -5612,24 +5651,24 @@ public class FloatWindowService extends Service {
         if (aiWindowContainer == null || aiWindowParams == null) {
             return;
         }
-        
+
         final int startWidth = aiWindowParams.width;
         final int startHeight = aiWindowParams.height;
         final long startTime = System.currentTimeMillis();
-        
+
         final Handler handler = new Handler(Looper.getMainLooper());
         handler.post(new Runnable() {
             @Override
             public void run() {
                 long elapsed = System.currentTimeMillis() - startTime;
                 float progress = Math.min((float) elapsed / animationDuration, 1.0f);
-                
+
                 // 使用缓入函数
                 float easedProgress = easeInCubic(progress);
-                
+
                 int currentWidth = (int) (startWidth * (1 - easedProgress));
                 int currentHeight = (int) (startHeight * (1 - easedProgress));
-                
+
                 try {
                     aiWindowParams.width = Math.max(currentWidth, 0);
                     aiWindowParams.height = Math.max(currentHeight, 0);
@@ -5637,7 +5676,7 @@ public class FloatWindowService extends Service {
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-                
+
                 if (progress < 1.0f) {
                     handler.postDelayed(this, FRAME_INTERVAL); // 8ms = 120fps
                 } else {
@@ -5649,7 +5688,7 @@ public class FloatWindowService extends Service {
             }
         });
     }
-    
+
     /**
      * 移除 AI 窗口
      */
@@ -5661,11 +5700,11 @@ public class FloatWindowService extends Service {
                 e.printStackTrace();
             }
         }
-        
+
         // 销毁 WebView
         destroyWebView();
     }
-    
+
     /**
      * 重新显示底部提示条
      */
@@ -5680,7 +5719,7 @@ public class FloatWindowService extends Service {
             }
         }
     }
-    
+
     /**
      * 销毁 WebView（防止内存泄漏）
      */
@@ -5700,16 +5739,17 @@ public class FloatWindowService extends Service {
             }
         }
     }
-    
+
     /**
      * 更新 AI 窗口大小
-     * @param width 宽度（像素）
+     *
+     * @param width  宽度（像素）
      * @param height 高度（像素）
      */
     public void updateWindowSize(int width, int height) {
         aiWindowWidth = width;
         aiWindowHeight = height;
-        
+
         new Handler(Looper.getMainLooper()).post(new Runnable() {
             @Override
             public void run() {
@@ -5726,16 +5766,17 @@ public class FloatWindowService extends Service {
             }
         });
     }
-    
+
     /**
      * 更新 AI 窗口位置
+     *
      * @param posX X 偏移
      * @param posY Y 偏移
      */
     public void updateWindowPosition(int posX, int posY) {
         windowPositionX = posX;
         windowPositionY = posY;
-        
+
         new Handler(Looper.getMainLooper()).post(new Runnable() {
             @Override
             public void run() {
@@ -5751,7 +5792,7 @@ public class FloatWindowService extends Service {
                             lp.rightMargin = -windowPositionX;
                             lp.bottomMargin = -windowPositionY;
                             content.setLayoutParams(lp);
-                            
+
                             // 关键修复：确保 Surface 缓冲区足够大以容纳新位置的内容
                             // 当 windowPositionY 增大时，content 在 CENTER 坐标下的中心点下移
                             // 底部可能超出 barContainer 当前的 Surface 缓冲区边界，被 SurfaceFlinger 裁切
@@ -5775,7 +5816,7 @@ public class FloatWindowService extends Service {
                                 Log.d(TAG, "barContainer surface 已扩大: w=" + requiredWidth
                                         + " h=" + requiredHeight);
                             }
-                            
+
                             Log.d(TAG, "AI 窗口位置已更新(通过margins): (" + posX + ", " + posY + ")");
                         }
                     } catch (Exception e) {
@@ -5785,7 +5826,7 @@ public class FloatWindowService extends Service {
             }
         });
     }
-    
+
     /**
      * 更新遮罩窗口外观
      */
@@ -5804,34 +5845,35 @@ public class FloatWindowService extends Service {
             }
         }
     }
-    
+
     /**
      * 缓出立方函数
      */
     private float easeOutCubic(float t) {
         return 1 - (float) Math.pow(1 - t, 3);
     }
-    
+
     /**
      * 缓入立方函数
      */
     private float easeInCubic(float t) {
         return (float) Math.pow(t, 3);
     }
-    
+
     /**
      * 更新 AI URL
+     *
      * @param url 新的 AI 网页 URL
      */
     public void updateAiUrl(String url) {
         if (url == null || url.isEmpty()) {
             return;
         }
-        
+
         // 关键修复：保存 URL 到成员变量，下次打开时使用
         currentAiUrl = url;
         Log.d(TAG, "AI URL 已保存到变量: " + currentAiUrl);
-        
+
         new Handler(Looper.getMainLooper()).post(new Runnable() {
             @Override
             public void run() {
@@ -5850,14 +5892,14 @@ public class FloatWindowService extends Service {
             }
         });
     }
-    
+
     /**
      * 从 SharedPreferences 加载保存的设置
      */
     private void loadSettings() {
         try {
             android.content.SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
-            
+
             // 加载提示条样式
             currentWidth = prefs.getInt("bar_width", currentWidth);
             currentHeight = prefs.getInt("bar_height", currentHeight);
@@ -5867,60 +5909,60 @@ public class FloatWindowService extends Service {
             barPositionX = prefs.getInt("bar_position_x", barPositionX);
             barPositionY = prefs.getInt("bar_position_y", barPositionY);
             longPressDuration = prefs.getInt("long_press_duration", longPressDuration);
-            
+
             // 加载 AI 窗口设置
             int windowWidth = prefs.getInt("window_width", 350);
             int windowHeight = prefs.getInt("window_height", 600);
             windowPositionX = prefs.getInt("window_position_x", windowPositionX);
             windowPositionY = prefs.getInt("window_position_y", windowPositionY);
-            
+
             // 转换窗口尺寸为像素
             aiWindowWidth = dpToPx(windowWidth);
             aiWindowHeight = dpToPx(windowHeight);
-            
+
             // 加载 AI URL（用户通过设置修改的 URL）
             String savedUrl = prefs.getString("ai_url", null);
             if (savedUrl != null) {
                 currentAiUrl = savedUrl;
             }
-            
+
             // 加载边框和阴影设置
             borderWidth = prefs.getInt("border_width", borderWidth);
             borderColor = prefs.getString("border_color", borderColor);
             // 关键修复：SettingsActivity 以 int(0~100) 保存
-            borderAlpha = prefs.getInt("border_alpha", (int)(borderAlpha * 100)) / 100.0f;
+            borderAlpha = prefs.getInt("border_alpha", (int) (borderAlpha * 100)) / 100.0f;
             shadowWidth = prefs.getInt("shadow_width", shadowWidth);
             shadowColor = prefs.getString("shadow_color", shadowColor);
             // 关键修复：SettingsActivity 以 int(0~100) 保存
-            shadowAlpha = prefs.getInt("shadow_alpha", (int)(shadowAlpha * 100)) / 100.0f;
-            
+            shadowAlpha = prefs.getInt("shadow_alpha", (int) (shadowAlpha * 100)) / 100.0f;
+
             // 加载窗口圆角半径
             cornerRadius = prefs.getInt("corner_radius", cornerRadius);
-            
+
             // 加载关闭按钮显示设置
             showCloseButton = prefs.getBoolean("show_close_button", showCloseButton);
-            
+
             // 加载显示刷新按钮设置
             showRefreshButton = prefs.getBoolean("show_refresh_button", showRefreshButton);
-            
+
             // 加载显示后退按钮设置
             showBackButton = prefs.getBoolean("show_back_button", showBackButton);
-            
+
             // 加载输入法避让设置
             keyboardOffset = prefs.getInt("keyboard_offset", keyboardOffset);
             keyboardAnimDuration = prefs.getInt("keyboard_anim_duration", keyboardAnimDuration);
-            
+
             // 加载点击窗口外关闭窗口设置
             closeOnOutsideClick = prefs.getBoolean("close_on_outside_click", true);
-            
+
             // 加载侧边返回手势设置
             backPrioritizeWebview = prefs.getBoolean("back_prioritize_webview", true);
-            
+
             // 加载单击提示条打开的应用设置
             clickAppPackage = prefs.getString("click_app_package", "");
             clickAppName = prefs.getString("click_app_name", "");
             clickAppClass = prefs.getString("click_app_class", "");
-            
+
             // ===== 加载触发行为配置 =====
             clickAction = prefs.getString("click_action", "");
             // 向后兼容：如果 clickAction 未设置
@@ -5929,21 +5971,21 @@ public class FloatWindowService extends Service {
             }
             doubleClickAction = prefs.getString("double_click_action", ACTION_SHORTCUT);
             longPressAction = prefs.getString("long_press_action", ACTION_AI);
-            
+
             // 加载双击打开的应用
             doubleClickAppPackage = prefs.getString("double_click_app_package", "");
             doubleClickAppName = prefs.getString("double_click_app_name", "");
             doubleClickAppClass = prefs.getString("double_click_app_class", "");
-            
+
             // 加载长按打开的应用
             longPressAppPackage = prefs.getString("long_press_app_package", "");
             longPressAppName = prefs.getString("long_press_app_name", "");
             longPressAppClass = prefs.getString("long_press_app_class", "");
-            
+
             // 加载动画速度
             animationDuration = prefs.getInt("anim_duration", animationDuration);
             overlayAnimDuration = prefs.getInt("overlay_anim_duration", overlayAnimDuration);
-            
+
             // 加载按下状态样式
             pressedBarEnabled = prefs.getBoolean("pressed_bar_enabled", pressedBarEnabled);
             pressedBarColor = prefs.getString("pressed_bar_color", pressedBarColor);
@@ -5953,14 +5995,14 @@ public class FloatWindowService extends Service {
             pressedBarCorner = prefs.getInt("pressed_bar_corner", pressedBarCorner);
             pressedBarFeatherWidth = prefs.getInt("pressed_bar_feather_width", pressedBarFeatherWidth);
             pressedBarPositionY = prefs.getInt("pressed_bar_position_y", pressedBarPositionY);
-            
+
             // 加载背景遮罩设置
             overlayColor = prefs.getString("overlay_color", overlayColor);
             overlayAlpha = prefs.getInt("overlay_alpha", overlayAlpha);
-            
+
             // 加载遮罩渐变时长
             overlayAnimDuration = prefs.getInt("overlay_anim_duration", overlayAnimDuration);
-            
+
             // 加载快捷方式窗口设置
             shortcutWindowWidth = prefs.getInt("shortcut_window_width", shortcutWindowWidth);
             shortcutWindowHeight = prefs.getInt("shortcut_window_height", shortcutWindowHeight);
@@ -5968,21 +6010,21 @@ public class FloatWindowService extends Service {
             shortcutBorderWidth = prefs.getInt("shortcut_border_width", shortcutBorderWidth);
             shortcutCornerRadius = prefs.getInt("shortcut_corner_radius", shortcutCornerRadius);
             shortcutBorderColor = prefs.getString("shortcut_border_color", shortcutBorderColor);
-            shortcutBorderAlpha = prefs.getInt("shortcut_border_alpha", (int)(shortcutBorderAlpha * 100)) / 100.0f;
+            shortcutBorderAlpha = prefs.getInt("shortcut_border_alpha", (int) (shortcutBorderAlpha * 100)) / 100.0f;
             shortcutIconSize = prefs.getInt("shortcut_icon_size", shortcutIconSize);
-            
-            Log.d(TAG, "设置已加载 - 提示条: 宽=" + currentWidth + ", 高=" + currentHeight + 
-                  ", 圆角=" + currentCornerRadius + ", 透明度=" + currentAlpha +
-                  ", 位置X=" + barPositionX + ", 位置Y=" + barPositionY);
-            Log.d(TAG, "设置已加载 - AI窗口: 宽=" + windowWidth + "dp, 高=" + windowHeight + 
-                  "dp, 位置X=" + windowPositionX + ", 位置Y=" + windowPositionY);
+
+            Log.d(TAG, "设置已加载 - 提示条: 宽=" + currentWidth + ", 高=" + currentHeight +
+                    ", 圆角=" + currentCornerRadius + ", 透明度=" + currentAlpha +
+                    ", 位置X=" + barPositionX + ", 位置Y=" + barPositionY);
+            Log.d(TAG, "设置已加载 - AI窗口: 宽=" + windowWidth + "dp, 高=" + windowHeight +
+                    "dp, 位置X=" + windowPositionX + ", 位置Y=" + windowPositionY);
             Log.d(TAG, "设置已加载 - 按下样式: 颜色=" + pressedBarColor + ", 透明度=" + pressedBarAlpha +
-                  ", 宽=" + pressedBarWidth + "dp, 高=" + pressedBarHeight + "dp, 圆角=" + pressedBarCorner + "dp, 羽化宽度=" + pressedBarFeatherWidth + "dp, Y=" + pressedBarPositionY + "dp");
+                    ", 宽=" + pressedBarWidth + "dp, 高=" + pressedBarHeight + "dp, 圆角=" + pressedBarCorner + "dp, 羽化宽度=" + pressedBarFeatherWidth + "dp, Y=" + pressedBarPositionY + "dp");
         } catch (Exception e) {
             Log.e(TAG, "加载设置失败", e);
         }
     }
-    
+
     /**
      * dp转px
      */
@@ -5994,6 +6036,7 @@ public class FloatWindowService extends Service {
     /**
      * 获取系统导航栏高度（像素）
      * 通过系统资源 ID 获取，适用于有虚拟导航栏或手势导航条的场景
+     *
      * @return 导航栏高度（px），若不存在则返回 0
      */
     private int getNavigationBarHeight() {
@@ -6008,13 +6051,13 @@ public class FloatWindowService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        
+
         // 关闭自定义上下文菜单
         dismissContextMenu();
-        
+
         // 销毁 WebView
         destroyWebView();
-        
+
         // 移除底部提示条
         if (barContainer != null && windowManager != null) {
             try {
@@ -6023,7 +6066,7 @@ public class FloatWindowService extends Service {
                 e.printStackTrace();
             }
         }
-        
+
         // 移除 AI 窗口
         if (aiWindowContainer != null && windowManager != null) {
             try {
@@ -6032,8 +6075,8 @@ public class FloatWindowService extends Service {
                 e.printStackTrace();
             }
         }
-        
-        
+
+
         // 移除背景遮罩窗口
         if (overlayView != null && windowManager != null) {
             try {
@@ -6044,16 +6087,16 @@ public class FloatWindowService extends Service {
             overlayView = null;
             overlayLayoutParams = null;
         }
-        
+
         Log.d(TAG, "服务已销毁，所有资源已清理");
     }
-    
+
     // ========== 自定义 View：Canvas + PorterDuff 边缘羽化 ==========
-    
+
     /**
      * 自定义 FrameLayout，重写 onDraw 使用 PorterDuff.Mode.DST_OUT 蒙版
      * 实现四周向内渐变透明（真正的边缘羽化淡出效果）
-     *
+     * <p>
      * 原理：
      * 1. saveLayer 创建带 Alpha 透明图层
      * 2. 先由父类 FrameLayout 绘制背景（圆角实色）
@@ -6068,7 +6111,7 @@ public class FloatWindowService extends Service {
         private int featherColor;
         private int featherCornerDp;
         private int featherWidthDp = 15; // 各边统一羽化宽度 (dp)，可通过设置调节
-        
+
         public FeatheredFrameLayout(Context context) {
             super(context);
             maskPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -6076,11 +6119,12 @@ public class FloatWindowService extends Service {
             setWillNotDraw(false);
             setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         }
-        
+
         /**
          * 启用/禁用边缘羽化效果
-         * @param enabled 是否启用
-         * @param color 背景色
+         *
+         * @param enabled        是否启用
+         * @param color          背景色
          * @param cornerRadiusDp 圆角半径 (dp)
          * @param featherWidthDp 羽化宽度 (dp)
          */
@@ -6092,7 +6136,7 @@ public class FloatWindowService extends Service {
             needsMaskUpdate = true;
             invalidate();
         }
-        
+
         /**
          * 更新 4 个线性渐变蒙版（上/下/左/右各一条边）
          * 每条边从边缘向中心由不透明过渡到透明，再用 DST_OUT 擦除边缘像素
@@ -6102,63 +6146,63 @@ public class FloatWindowService extends Service {
             int w = getWidth();
             int h = getHeight();
             if (w <= 0 || h <= 0) return;
-            
+
             int fw = dpToPx(featherWidthDp);
             int fh = dpToPx(featherWidthDp);
             // 羽化宽度不能超过视图尺寸的一半
             if (fw > w / 2) fw = w / 2;
             if (fh > h / 2) fh = h / 2;
-            
+
             // 每条边从边缘(alpha=255,不透明)向中心(alpha=0,透明)渐变
             // DST_OUT: 不透明处完全擦除内容，透明处完全保留
             // 实现从边缘向内逐渐淡出的效果
-            
+
             // 上边：顶部(不透明) -> 向下 fh 像素(透明)
-            topMask = new LinearGradient(0f, 0f, 0f, (float)fh,
-                0xFF000000, 0x00000000, Shader.TileMode.CLAMP);
+            topMask = new LinearGradient(0f, 0f, 0f, (float) fh,
+                    0xFF000000, 0x00000000, Shader.TileMode.CLAMP);
             // 下边：底部(不透明) -> 向上 fh 像素(透明)
-            bottomMask = new LinearGradient(0f, (float)h, 0f, (float)(h - fh),
-                0xFF000000, 0x00000000, Shader.TileMode.CLAMP);
+            bottomMask = new LinearGradient(0f, (float) h, 0f, (float) (h - fh),
+                    0xFF000000, 0x00000000, Shader.TileMode.CLAMP);
             // 左边：左边缘(不透明) -> 向右 fw 像素(透明)
-            leftMask = new LinearGradient(0f, 0f, (float)fw, 0f,
-                0xFF000000, 0x00000000, Shader.TileMode.CLAMP);
+            leftMask = new LinearGradient(0f, 0f, (float) fw, 0f,
+                    0xFF000000, 0x00000000, Shader.TileMode.CLAMP);
             // 右边：右边缘(不透明) -> 向左 fw 像素(透明)
-            rightMask = new LinearGradient((float)w, 0f, (float)(w - fw), 0f,
-                0xFF000000, 0x00000000, Shader.TileMode.CLAMP);
-            
+            rightMask = new LinearGradient((float) w, 0f, (float) (w - fw), 0f,
+                    0xFF000000, 0x00000000, Shader.TileMode.CLAMP);
+
             needsMaskUpdate = false;
         }
-        
+
         @Override
         public void draw(Canvas canvas) {
             if (!featherEnabled) {
                 super.draw(canvas);
                 return;
             }
-            
+
             int w = getWidth();
             int h = getHeight();
             if (w <= 0 || h <= 0) {
                 super.draw(canvas);
                 return;
             }
-            
+
             // 更新蒙版（首次绘制或尺寸变化后）
             if (needsMaskUpdate || topMask == null) {
                 updateMasks();
             }
-            
+
             // 1. saveLayer 创建离屏缓冲区
             int saved = canvas.saveLayer(0, 0, w, h, null);
-            
+
             // 2. 绘制所有内容（背景、onDraw、子 View）
             super.draw(canvas);
-            
+
             // 3. 依次用 DST_OUT 蒙版擦除四条边的边缘像素
             //    使用同一个 maskPaint，只需在每次 drawRect 前切换 shader
             int fw = dpToPx(featherWidthDp);
             int fh = dpToPx(featherWidthDp);
-            
+
             // 上边羽化
             maskPaint.setShader(topMask);
             canvas.drawRect(0, 0, w, fh, maskPaint);
@@ -6171,15 +6215,143 @@ public class FloatWindowService extends Service {
             // 右边羽化
             maskPaint.setShader(rightMask);
             canvas.drawRect(w - fw, 0, w, h, maskPaint);
-            
+
             // 4. 合并图层
             canvas.restoreToCount(saved);
         }
-        
+
         @Override
         protected void onSizeChanged(int w, int h, int oldw, int oldh) {
             super.onSizeChanged(w, h, oldw, oldh);
             needsMaskUpdate = true;
+        }
+    }
+
+
+    /**
+     * 连续曲率圆角 Drawable（使用三次贝塞尔曲线，形状接近普通圆角矩形，拐角平滑）
+     * 圆角半径由外部设置控制，平滑度固定为0.65（接近 iOS 风格）
+     */
+    private static class ContinuousRoundRectDrawable extends Drawable {
+        private Paint fillPaint;
+        private Paint strokePaint;
+        private Path path;
+        private float cornerRadius;
+        private int width, height;
+        private float strokeWidth;
+
+        // 控制平滑度的因子，0.5~0.8，0.65 为推荐值（iOS 风格）
+        private static final float SMOOTH_FACTOR = 0.65f;
+
+        public ContinuousRoundRectDrawable(int fillColor, float cornerRadiusPx) {
+            fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            fillPaint.setColor(fillColor);
+            fillPaint.setStyle(Paint.Style.FILL);
+
+            strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            strokePaint.setStyle(Paint.Style.STROKE);
+            strokePaint.setColor(Color.TRANSPARENT);
+            strokePaint.setStrokeWidth(0);
+
+            this.cornerRadius = cornerRadiusPx;
+            path = new Path();
+        }
+
+        /**
+         * 设置边框（描边）
+         */
+        public void setStroke(int widthPx, int color) {
+            this.strokeWidth = widthPx;
+            strokePaint.setStrokeWidth(widthPx);
+            strokePaint.setColor(color);
+            invalidateSelf();
+        }
+
+        /**
+         * 更新填充颜色（用于深色模式切换）
+         */
+        public void setFillColor(int color) {
+            fillPaint.setColor(color);
+            invalidateSelf();
+        }
+
+        /**
+         * 更新圆角半径
+         */
+        public void setCornerRadius(float radiusPx) {
+            this.cornerRadius = radiusPx;
+            buildPath();
+            invalidateSelf();
+        }
+
+        @Override
+        protected void onBoundsChange(Rect bounds) {
+            super.onBoundsChange(bounds);
+            this.width = bounds.width();
+            this.height = bounds.height();
+            buildPath();
+        }
+
+        private void buildPath() {
+            path.reset();
+            if (width <= 0 || height <= 0) return;
+
+            float r = Math.min(cornerRadius, Math.min(width, height) / 2f);
+            if (r <= 0) {
+                path.addRect(0, 0, width, height, Path.Direction.CW);
+                return;
+            }
+
+            float c = r * SMOOTH_FACTOR; // 控制点偏移量
+            float w = width;
+            float h = height;
+
+            // 从左上角的上边起点 (r, 0) 开始
+            path.moveTo(r, 0);
+            // 上边直线到右上角起点 (w - r, 0)
+            path.lineTo(w - r, 0);
+            // 右上角：从 (w-r, 0) 到 (w, r)
+            path.cubicTo(w - r + c, 0, w, r - c, w, r);
+            // 右边直线到右下角起点 (w, h - r)
+            path.lineTo(w, h - r);
+            // 右下角：从 (w, h-r) 到 (w-r, h)
+            path.cubicTo(w, h - r + c, w - r + c, h, w - r, h);
+            // 下边直线到左下角起点 (r, h)
+            path.lineTo(r, h);
+            // 左下角：从 (r, h) 到 (0, h-r)
+            path.cubicTo(r - c, h, 0, h - r + c, 0, h - r);
+            // 左边直线到左上角起点 (0, r)
+            path.lineTo(0, r);
+            // 左上角：从 (0, r) 到 (r, 0)
+            path.cubicTo(0, r - c, r - c, 0, r, 0);
+            path.close();
+        }
+
+        @Override
+        public void draw(Canvas canvas) {
+            if (fillPaint.getColor() != Color.TRANSPARENT || fillPaint.getAlpha() > 0) {
+                canvas.drawPath(path, fillPaint);
+            }
+            if (strokePaint.getStrokeWidth() > 0 && strokePaint.getColor() != Color.TRANSPARENT) {
+                canvas.drawPath(path, strokePaint);
+            }
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            fillPaint.setAlpha(alpha);
+            strokePaint.setAlpha(alpha);
+        }
+
+        @Override
+        public void setColorFilter(ColorFilter colorFilter) {
+            fillPaint.setColorFilter(colorFilter);
+            strokePaint.setColorFilter(colorFilter);
+        }
+
+        @Override
+        public int getOpacity() {
+            return PixelFormat.TRANSLUCENT;
         }
     }
 }
