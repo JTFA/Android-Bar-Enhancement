@@ -859,13 +859,6 @@
             android:textColor="#333333"
             android:layout_marginBottom="8dp" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="双击提示条打开快捷方式窗口，设置其外观样式"
-            android:textSize="12sp"
-            android:textColor="#999999"
-            android:layout_marginBottom="16dp" />
 
         <!-- 快捷窗口宽度 -->
         <TextView
@@ -1000,26 +993,6 @@
             android:progress="10"
             android:layout_marginBottom="16dp" />
 
-        <!-- 快捷窗口背景颜色 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="窗口背景颜色 (RGB)"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <EditText
-            android:id="@+id/edit_shortcut_bg_color"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="格式：#RRGGBB，默认 #FFFFFF"
-            android:inputType="text"
-            android:padding="12dp"
-            android:background="@android:drawable/edit_text"
-            android:textSize="14sp"
-            android:text="#FFFFFF"
-            android:layout_marginBottom="16dp" />
 
         <!-- 快捷窗口过渡动画时长 -->
         <TextView

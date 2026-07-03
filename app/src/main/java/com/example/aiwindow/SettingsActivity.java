@@ -119,7 +119,6 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_SHORTCUT_CORNER_RADIUS = "shortcut_corner_radius";
     private static final String KEY_SHORTCUT_BORDER_COLOR = "shortcut_border_color";
     private static final String KEY_SHORTCUT_BORDER_ALPHA = "shortcut_border_alpha";
-    private static final String KEY_SHORTCUT_BG_COLOR = "shortcut_bg_color";
     private static final String KEY_SHORTCUT_ANIM_DURATION = "shortcut_anim_duration";
     private static final String KEY_SHORTCUT_ICON_SIZE = "shortcut_icon_size";
     
@@ -213,7 +212,7 @@ public class SettingsActivity extends AppCompatActivity {
     private SeekBar seekShortcutBorderWidth, seekShortcutCornerRadius, seekShortcutBorderAlpha;
     private TextView textShortcutBorderWidth, textShortcutCornerRadius, textShortcutBorderAlpha;
     private EditText editShortcutBorderColor;
-    private EditText editShortcutBgColor;
+
     private SeekBar seekShortcutAnimDuration;
     private TextView textShortcutAnimDuration;
     private Button btnEditShortcuts;
@@ -368,7 +367,6 @@ public class SettingsActivity extends AppCompatActivity {
         textShortcutCornerRadius = findViewById(R.id.text_shortcut_corner_radius);
         textShortcutBorderAlpha = findViewById(R.id.text_shortcut_border_alpha);
         editShortcutBorderColor = findViewById(R.id.edit_shortcut_border_color);
-        editShortcutBgColor = findViewById(R.id.edit_shortcut_bg_color);
         seekShortcutAnimDuration = findViewById(R.id.seek_shortcut_anim_duration);
         textShortcutAnimDuration = findViewById(R.id.text_shortcut_anim_duration);
         seekShortcutIconSize = findViewById(R.id.seek_shortcut_icon_size);
@@ -612,9 +610,6 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutBorderAlpha.setProgress(shortcutBAlpha);
         textShortcutBorderAlpha.setText("快捷边框透明度: " + String.format("%.2f", shortcutBAlpha / 100.0f));
         
-        String shortcutBgColor = preferences.getString(KEY_SHORTCUT_BG_COLOR, "#FFFFFF");
-        editShortcutBgColor.setText(shortcutBgColor);
-        
         int shortcutAnim = preferences.getInt(KEY_SHORTCUT_ANIM_DURATION, 350);
         seekShortcutAnimDuration.setProgress(shortcutAnim);
         textShortcutAnimDuration.setText("快捷动画时长: " + shortcutAnim + "ms");
@@ -771,11 +766,6 @@ public class SettingsActivity extends AppCompatActivity {
         }
         editor.putString(KEY_SHORTCUT_BORDER_COLOR, scBorderColor);
         editor.putInt(KEY_SHORTCUT_BORDER_ALPHA, seekShortcutBorderAlpha.getProgress());
-        String scBgColor = editShortcutBgColor.getText().toString().trim();
-        if (TextUtils.isEmpty(scBgColor) || !scBgColor.startsWith("#")) {
-            scBgColor = "#FFFFFF";
-        }
-        editor.putString(KEY_SHORTCUT_BG_COLOR, scBgColor);
         editor.putInt(KEY_SHORTCUT_ANIM_DURATION, seekShortcutAnimDuration.getProgress());
         editor.putInt(KEY_SHORTCUT_ICON_SIZE, seekShortcutIconSize.getProgress());
         
@@ -903,11 +893,6 @@ public class SettingsActivity extends AppCompatActivity {
         }
         shortcutIntent.putExtra("shortcut_border_color", scBorderColor);
         shortcutIntent.putExtra("shortcut_border_alpha", seekShortcutBorderAlpha.getProgress() / 100.0f);
-        String scBgColor = editShortcutBgColor.getText().toString().trim();
-        if (TextUtils.isEmpty(scBgColor) || !scBgColor.startsWith("#")) {
-            scBgColor = "#FFFFFF";
-        }
-        shortcutIntent.putExtra("shortcut_bg_color", scBgColor);
         shortcutIntent.putExtra("shortcut_anim_duration", seekShortcutAnimDuration.getProgress());
         shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
         startService(shortcutIntent);
@@ -1529,11 +1514,6 @@ public class SettingsActivity extends AppCompatActivity {
         }
         shortcutIntent.putExtra("shortcut_border_color", scBorderColor);
         shortcutIntent.putExtra("shortcut_border_alpha", seekShortcutBorderAlpha.getProgress() / 100.0f);
-        String scBgColor = editShortcutBgColor.getText().toString().trim();
-        if (TextUtils.isEmpty(scBgColor) || !scBgColor.startsWith("#")) {
-            scBgColor = "#FFFFFF";
-        }
-        shortcutIntent.putExtra("shortcut_bg_color", scBgColor);
         shortcutIntent.putExtra("shortcut_anim_duration", seekShortcutAnimDuration.getProgress());
         shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
         startService(shortcutIntent);

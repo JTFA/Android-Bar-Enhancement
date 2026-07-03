@@ -556,8 +556,6 @@ public class FloatWindowService extends Service {
             String sBorderColor = intent.getStringExtra("shortcut_border_color");
             if (sBorderColor != null) shortcutBorderColor = sBorderColor;
             shortcutBorderAlpha = intent.getFloatExtra("shortcut_border_alpha", shortcutBorderAlpha);
-            String sBgColor = intent.getStringExtra("shortcut_bg_color");
-            if (sBgColor != null) shortcutBgColor = sBgColor;
             shortcutAnimDuration = intent.getIntExtra("shortcut_anim_duration", shortcutAnimDuration);
             shortcutIconSize = intent.getIntExtra("shortcut_icon_size", shortcutIconSize);
             
@@ -3548,6 +3546,7 @@ public class FloatWindowService extends Service {
             barLayoutParams.y = 0;
             barLayoutParams.width = requiredWidth;
             barLayoutParams.height = requiredHeight;
+
             windowManager.updateViewLayout(barContainer, barLayoutParams);
             Log.d(TAG, "[SHORTCUT_EXPAND_DEBUG] barContainer 全屏: w=" + requiredWidth + " h=" + requiredHeight);
             
@@ -3833,13 +3832,8 @@ public class FloatWindowService extends Service {
         contentContainer.setLayoutParams(containerParams);
         
         // 背景色
-        int bgColorInt;
-        try {
-            bgColorInt = Color.parseColor(shortcutBgColor);
-        } catch (Exception e) {
-            bgColorInt = Color.WHITE;
-        }
-        
+        int bgColorInt = getWindowBgColor();
+
         GradientDrawable background = new GradientDrawable();
         background.setShape(GradientDrawable.RECTANGLE);
         background.setCornerRadius(dpToPx(shortcutCornerRadius));
@@ -5981,7 +5975,6 @@ public class FloatWindowService extends Service {
             shortcutCornerRadius = prefs.getInt("shortcut_corner_radius", shortcutCornerRadius);
             shortcutBorderColor = prefs.getString("shortcut_border_color", shortcutBorderColor);
             shortcutBorderAlpha = prefs.getInt("shortcut_border_alpha", (int)(shortcutBorderAlpha * 100)) / 100.0f;
-            shortcutBgColor = prefs.getString("shortcut_bg_color", shortcutBgColor);
             shortcutAnimDuration = prefs.getInt("shortcut_anim_duration", shortcutAnimDuration);
             shortcutIconSize = prefs.getInt("shortcut_icon_size", shortcutIconSize);
             
