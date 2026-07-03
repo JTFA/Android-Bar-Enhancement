@@ -994,25 +994,6 @@
             android:layout_marginBottom="16dp" />
 
 
-        <!-- 快捷窗口过渡动画时长 -->
-        <TextView
-            android:id="@+id/text_shortcut_anim_duration"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="过渡动画时长: 350ms"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_shortcut_anim_duration"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="50"
-            android:max="800"
-            android:progress="350"
-            android:layout_marginBottom="16dp" />
-
         <!-- 图标大小 -->
         <TextView
             android:id="@+id/text_shortcut_icon_size"

@@ -143,7 +143,6 @@ public class FloatWindowService extends Service {
     private String shortcutBorderColor = "#000000";
     private float shortcutBorderAlpha = 0.1f;
     private String shortcutBgColor = "#FFFFFF";
-    private int shortcutAnimDuration = 350; // ms
     private int shortcutIconSize = 100; // 图标大小百分比 50-150，默认 100%
     
     // 双击检测相关
@@ -556,13 +555,8 @@ public class FloatWindowService extends Service {
             String sBorderColor = intent.getStringExtra("shortcut_border_color");
             if (sBorderColor != null) shortcutBorderColor = sBorderColor;
             shortcutBorderAlpha = intent.getFloatExtra("shortcut_border_alpha", shortcutBorderAlpha);
-            shortcutAnimDuration = intent.getIntExtra("shortcut_anim_duration", shortcutAnimDuration);
             shortcutIconSize = intent.getIntExtra("shortcut_icon_size", shortcutIconSize);
-            
-            Log.d(TAG, "快捷方式窗口设置已更新: 宽=" + shortcutWindowWidth + " 高=" + shortcutWindowHeight
-                    + " Y=" + shortcutWindowPositionY + " 边框=" + shortcutBorderWidth
-                    + " 圆角=" + shortcutCornerRadius + " 动画=" + shortcutAnimDuration
-                    + " 图标大小=" + shortcutIconSize + "%");
+
             
             // 如果窗口已展开，需要重建
             if (isShortcutWindowExpanded) {
@@ -5975,7 +5969,6 @@ public class FloatWindowService extends Service {
             shortcutCornerRadius = prefs.getInt("shortcut_corner_radius", shortcutCornerRadius);
             shortcutBorderColor = prefs.getString("shortcut_border_color", shortcutBorderColor);
             shortcutBorderAlpha = prefs.getInt("shortcut_border_alpha", (int)(shortcutBorderAlpha * 100)) / 100.0f;
-            shortcutAnimDuration = prefs.getInt("shortcut_anim_duration", shortcutAnimDuration);
             shortcutIconSize = prefs.getInt("shortcut_icon_size", shortcutIconSize);
             
             Log.d(TAG, "设置已加载 - 提示条: 宽=" + currentWidth + ", 高=" + currentHeight + 

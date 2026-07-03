@@ -119,7 +119,6 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_SHORTCUT_CORNER_RADIUS = "shortcut_corner_radius";
     private static final String KEY_SHORTCUT_BORDER_COLOR = "shortcut_border_color";
     private static final String KEY_SHORTCUT_BORDER_ALPHA = "shortcut_border_alpha";
-    private static final String KEY_SHORTCUT_ANIM_DURATION = "shortcut_anim_duration";
     private static final String KEY_SHORTCUT_ICON_SIZE = "shortcut_icon_size";
     
     // AI URL 输入框
@@ -212,9 +211,6 @@ public class SettingsActivity extends AppCompatActivity {
     private SeekBar seekShortcutBorderWidth, seekShortcutCornerRadius, seekShortcutBorderAlpha;
     private TextView textShortcutBorderWidth, textShortcutCornerRadius, textShortcutBorderAlpha;
     private EditText editShortcutBorderColor;
-
-    private SeekBar seekShortcutAnimDuration;
-    private TextView textShortcutAnimDuration;
     private Button btnEditShortcuts;
     private SeekBar seekShortcutIconSize;
     private TextView textShortcutIconSize;
@@ -367,8 +363,6 @@ public class SettingsActivity extends AppCompatActivity {
         textShortcutCornerRadius = findViewById(R.id.text_shortcut_corner_radius);
         textShortcutBorderAlpha = findViewById(R.id.text_shortcut_border_alpha);
         editShortcutBorderColor = findViewById(R.id.edit_shortcut_border_color);
-        seekShortcutAnimDuration = findViewById(R.id.seek_shortcut_anim_duration);
-        textShortcutAnimDuration = findViewById(R.id.text_shortcut_anim_duration);
         seekShortcutIconSize = findViewById(R.id.seek_shortcut_icon_size);
         textShortcutIconSize = findViewById(R.id.text_shortcut_icon_size);
         btnEditShortcuts = findViewById(R.id.btn_edit_shortcuts);
@@ -610,10 +604,6 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutBorderAlpha.setProgress(shortcutBAlpha);
         textShortcutBorderAlpha.setText("快捷边框透明度: " + String.format("%.2f", shortcutBAlpha / 100.0f));
         
-        int shortcutAnim = preferences.getInt(KEY_SHORTCUT_ANIM_DURATION, 350);
-        seekShortcutAnimDuration.setProgress(shortcutAnim);
-        textShortcutAnimDuration.setText("快捷动画时长: " + shortcutAnim + "ms");
-        
         int shortcutIconSize = preferences.getInt(KEY_SHORTCUT_ICON_SIZE, 100);
         seekShortcutIconSize.setProgress(shortcutIconSize);
         textShortcutIconSize.setText("图标大小: " + shortcutIconSize + "%");
@@ -766,7 +756,6 @@ public class SettingsActivity extends AppCompatActivity {
         }
         editor.putString(KEY_SHORTCUT_BORDER_COLOR, scBorderColor);
         editor.putInt(KEY_SHORTCUT_BORDER_ALPHA, seekShortcutBorderAlpha.getProgress());
-        editor.putInt(KEY_SHORTCUT_ANIM_DURATION, seekShortcutAnimDuration.getProgress());
         editor.putInt(KEY_SHORTCUT_ICON_SIZE, seekShortcutIconSize.getProgress());
         
         // 提交保存
@@ -893,7 +882,6 @@ public class SettingsActivity extends AppCompatActivity {
         }
         shortcutIntent.putExtra("shortcut_border_color", scBorderColor);
         shortcutIntent.putExtra("shortcut_border_alpha", seekShortcutBorderAlpha.getProgress() / 100.0f);
-        shortcutIntent.putExtra("shortcut_anim_duration", seekShortcutAnimDuration.getProgress());
         shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
         startService(shortcutIntent);
     }
@@ -1278,17 +1266,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
-        
-        // 快捷方式动画时长 - 实时更新
-        seekShortcutAnimDuration.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                textShortcutAnimDuration.setText("快捷动画时长: " + progress + "ms");
-                applyCurrentSettings();
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-        });
+
         
         // 快捷方式图标大小 - 实时更新
         seekShortcutIconSize.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -1514,7 +1492,6 @@ public class SettingsActivity extends AppCompatActivity {
         }
         shortcutIntent.putExtra("shortcut_border_color", scBorderColor);
         shortcutIntent.putExtra("shortcut_border_alpha", seekShortcutBorderAlpha.getProgress() / 100.0f);
-        shortcutIntent.putExtra("shortcut_anim_duration", seekShortcutAnimDuration.getProgress());
         shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
         startService(shortcutIntent);
     }
