@@ -3995,13 +3995,26 @@ public class FloatWindowService extends Service {
         }
 
         // 名称
+        // 名称
         TextView nameView = new TextView(this);
         nameView.setText(item.getName());
-        nameView.setTextSize(Math.max(8, Math.round(11 * iconScale)));
-        nameView.setTextColor(0xFF666666);
+        nameView.setTextSize(Math.max(10, Math.round(11 * iconScale)));
+        nameView.setTypeface(Typeface.DEFAULT_BOLD);
+        // 根据系统深色模式设置文字颜色
+        if (isDarkMode()) {
+            nameView.setTextColor(0xFFCCCCCC); // 深色模式使用浅灰色
+        } else {
+            nameView.setTextColor(0xFF222222); // 浅色模式使用深灰色
+        }
         nameView.setGravity(Gravity.CENTER);
         nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         nameView.setMaxLines(1);
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        nameParams.topMargin = dpToPx(4);
+        nameView.setLayoutParams(nameParams);
         cell.addView(nameView);
 
         cell.setOnClickListener(v -> launchShortcutApp(item));
