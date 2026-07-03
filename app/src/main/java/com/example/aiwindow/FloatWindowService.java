@@ -91,6 +91,8 @@ public class FloatWindowService extends Service {
     private View floatView;
     private WindowManager.LayoutParams layoutParams;
 
+    public static final float SMOOTH_FACTOR = 0.65f;
+
     // 底部提示条相关
     private FrameLayout barContainer;
     private View bottomBar;
@@ -1775,6 +1777,7 @@ public class FloatWindowService extends Service {
 // 注意：连续曲率 Path 无法通过 setClipToOutline 裁剪，所以去掉这行
 // contentContainer.setClipToOutline(true); // 删除或注释掉
 
+
         if (borderWidth > 0) {
             try {
                 int borderColorWithAlpha = parseColorWithAlpha(borderColor, borderAlpha);
@@ -1819,14 +1822,25 @@ public class FloatWindowService extends Service {
         aiWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         // 为 WebView 设置圆角裁剪，使其与 contentContainer 的圆角一致
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            final float radius = dpToPx(cornerRadius);
-            aiWebView.setOutlineProvider(new ViewOutlineProvider() {
+            // 延迟到布局完成后设置 Outline，确保宽高已确定
+            aiWebView.post(new Runnable() {
                 @Override
-                public void getOutline(View view, Outline outline) {
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+                public void run() {
+                    int w = aiWebView.getWidth();
+                    int h = aiWebView.getHeight();
+                    if (w > 0 && h > 0) {
+                        final Path path = buildContinuousRoundRectPath(w, h, dpToPx(cornerRadius));
+                        aiWebView.setOutlineProvider(new ViewOutlineProvider() {
+                            @Override
+                            public void getOutline(View view, Outline outline) {
+                                outline.setConvexPath(path);
+                            }
+                        });
+                        aiWebView.setClipToOutline(true);
+                        aiWebView.invalidate();
+                    }
                 }
             });
-            aiWebView.setClipToOutline(true);
         }
         contentContainer.addView(aiWebView);
 
@@ -6227,7 +6241,29 @@ public class FloatWindowService extends Service {
         }
     }
 
-
+    private Path buildContinuousRoundRectPath(int width, int height, float cornerRadiusPx) {
+        Path path = new Path();
+        if (width <= 0 || height <= 0) return path;
+        float r = Math.min(cornerRadiusPx, Math.min(width, height) / 2f);
+        if (r <= 0) {
+            path.addRect(0, 0, width, height, Path.Direction.CW);
+            return path;
+        }
+        float c = r * ContinuousRoundRectDrawable.SMOOTH_FACTOR;
+        float w = width;
+        float h = height;
+        path.moveTo(r, 0);
+        path.lineTo(w - r, 0);
+        path.cubicTo(w - r + c, 0, w, r - c, w, r);
+        path.lineTo(w, h - r);
+        path.cubicTo(w, h - r + c, w - r + c, h, w - r, h);
+        path.lineTo(r, h);
+        path.cubicTo(r - c, h, 0, h - r + c, 0, h - r);
+        path.lineTo(0, r);
+        path.cubicTo(0, r - c, r - c, 0, r, 0);
+        path.close();
+        return path;
+    }
     /**
      * 连续曲率圆角 Drawable（使用三次贝塞尔曲线，形状接近普通圆角矩形，拐角平滑）
      * 圆角半径由外部设置控制，平滑度固定为0.65（接近 iOS 风格）
