@@ -41,6 +41,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
@@ -144,6 +145,13 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private boolean isCollapsing = false;
     private BroadcastReceiver restoreBarReceiver;
 
+    // ─── 输入法避让相关 ───
+    private ViewTreeObserver.OnGlobalLayoutListener keyboardLayoutListener;
+    private boolean isKeyboardVisible = false;
+    private int keyboardOffset = 397; // 默认上移距离（px），从 SharedPreferences 加载
+    private int keyboardAnimDuration = 250; // 平移动画时长（ms）
+    private boolean isKeyboardAnimating = false;
+
     // ─── 动画初始值 ───
     private float initScaleX, initScaleY;
     private float initTranslationX, initTranslationY;
@@ -204,19 +212,23 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         // 9. 布局完成后执行展开动画
         contentContainer.post(this::performExpandAnimation);
+        
+        // 10. 设置输入法检测监听器
+        setupKeyboardListener(rootLayout);
     }
 
     @Override
     protected void onDestroy() {
         // 通知下层模糊窗口关闭
         BlurWindowActivity.finishIfAlive();
+        // 移除键盘监听器
+        removeKeyboardListener();
         if (restoreBarReceiver != null) {
             try { unregisterReceiver(restoreBarReceiver); } catch (Exception ignored) {}
         }
-        if (webView != null) {
-            webView.destroy();
-            webView = null;
-        }
+        // 关键修复：不在 onDestroy 中销毁 WebView，以便 Activity 重建时能保留状态
+        // webView.destroy();
+        // webView = null;
         super.onDestroy();
     }
 
@@ -286,11 +298,28 @@ public class OverlayWindowActivity extends AppCompatActivity {
             aiStyle = intent.getIntExtra(EXTRA_AI_STYLE, 0);
             aiBlurRadius = intent.getIntExtra(EXTRA_AI_BLUR_RADIUS, 25);
             aiOverlayAlpha = intent.getIntExtra(EXTRA_AI_OVERLAY_ALPHA, 204);
+            
+            // 加载输入法避让设置
+            loadKeyboardSettings();
         } else {
             shortcutIconSize = intent.getIntExtra(EXTRA_SHORTCUT_ICON_SIZE, 100);
             shortcutStyle = intent.getIntExtra(EXTRA_SHORTCUT_STYLE, 0);
             shortcutBlurRadius = intent.getIntExtra(EXTRA_SHORTCUT_BLUR_RADIUS, 20);
             shortcutOverlayAlpha = intent.getIntExtra(EXTRA_SHORTCUT_OVERLAY_ALPHA, 180);
+        }
+    }
+    
+    /**
+     * 从 SharedPreferences 加载输入法避让设置
+     */
+    private void loadKeyboardSettings() {
+        try {
+            SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
+            keyboardOffset = prefs.getInt("keyboard_offset", 397);
+            keyboardAnimDuration = prefs.getInt("keyboard_anim_duration", 250);
+            Log.d(TAG, "已加载输入法设置: offset=" + keyboardOffset + "px, duration=" + keyboardAnimDuration + "ms");
+        } catch (Exception e) {
+            Log.e(TAG, "加载输入法设置失败", e);
         }
     }
 
@@ -417,10 +446,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
     @SuppressLint("SetJavaScriptEnabled")
     private void addAiContent(FrameLayout container) {
-        webView = new WebView(this);
-        webView.setLayoutParams(new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
+        // 关键修复：检查是否已有 WebView（Activity 被重建时），如果是则复用
+        boolean isNewWebView = (webView == null);
+        
+        if (isNewWebView) {
+            webView = new WebView(this);
+            webView.setLayoutParams(new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
+        }
 
         // Activity 中的 WebView 可以正常接收输入法输入，无需 IME 代理
         WebSettings settings = webView.getSettings();
@@ -468,6 +502,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 updateBackButtonState();
+                // 注入 JavaScript 检测输入框聚焦
+                injectInputFocusScript(view);
             }
 
             @Override
@@ -508,6 +544,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             float alpha = aiOverlayAlpha / 255.0f;
             webView.setAlpha(alpha);
         }
+
+        // 添加触摸监听器检测输入框聚焦
+        setupWebViewInputDetection(webView);
 
         container.addView(webView);
         webView.loadUrl(aiUrl);
@@ -1156,6 +1195,21 @@ public class OverlayWindowActivity extends AppCompatActivity {
             Log.e(TAG, "发送模糊窗口渐变消失广播失败", e);
         }
     }
+    
+    /**
+     * 发送模糊层平移广播（让 BlurWindowActivity 同步移动）
+     * @param translationY 内容窗口的 Y 方向平移量
+     */
+    private void sendBlurWindowTranslateBroadcast(float translationY) {
+        try {
+            Intent intent = new Intent("BLUR_WINDOW_TRANSLATE");
+            intent.setPackage(getPackageName());
+            intent.putExtra("translation_y", translationY);
+            sendBroadcast(intent);
+        } catch (Exception e) {
+            Log.e(TAG, "发送模糊窗口平移广播失败", e);
+        }
+    }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     private void registerRestoreReceiver() {
@@ -1329,5 +1383,237 @@ public class OverlayWindowActivity extends AppCompatActivity {
         public int getOpacity() {
             return PixelFormat.TRANSLUCENT;
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 输入法避让功能
+    // ═══════════════════════════════════════════════════════════
+
+    /**
+     * 输入法出现/消失时的平移动画（参照 FloatWindowService 实现）
+     *
+     * @param show           true=输入法出现（窗口上移），false=输入法消失（窗口恢复）
+     * @param detectedHeight 检测到的输入法高度（像素）- 仅用于判断是否显示，不用于计算偏移
+     */
+    private void animateForKeyboard(final boolean show, final int detectedHeight) {
+        if (contentContainer == null) return;
+
+        final float startTranslationY = contentContainer.getTranslationY();
+        // 始终使用设置项中的固定避让高度，不根据检测到的键盘高度动态调整
+        final int offset = keyboardOffset;
+        // 在 Gravity.CENTER 下，topMargin 改变 d 像素等价于视觉移动 2*d 像素
+        // 因此 translationY 的变化量也需要用 2*offset，以保持相同的避让幅度
+        final float targetTranslationY = show ? (-2f * offset) : 0f;
+
+        // 如果已在目标位置，无需动画
+        if (startTranslationY == targetTranslationY) return;
+
+        Log.d(TAG, "Keyboard anim: show=" + show + " startTranslationY=" + startTranslationY
+                + " targetTranslationY=" + targetTranslationY + " offset=" + offset
+                + " detectedHeight=" + detectedHeight);
+
+        isKeyboardAnimating = true;
+        final long startTime = System.nanoTime();
+        final int duration = keyboardAnimDuration;
+        Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+            @Override
+            public void doFrame(long frameTimeNanos) {
+                try {
+                    long elapsed = (frameTimeNanos - startTime) / 1000000; // ns -> ms
+                    float progress = Math.min((float) elapsed / duration, 1.0f);
+                    float easedProgress = easeOutCubic(progress);
+
+                    float currentTranslationY = startTranslationY + (targetTranslationY - startTranslationY) * easedProgress;
+                    contentContainer.setTranslationY(currentTranslationY);
+                    
+                    // 同步通知模糊层平移
+                    sendBlurWindowTranslateBroadcast(currentTranslationY);
+
+                    if (progress < 1.0f) {
+                        Choreographer.getInstance().postFrameCallback(this);
+                    } else {
+                        isKeyboardAnimating = false;
+                        Log.d(TAG, "Keyboard anim complete: translationY=" + currentTranslationY);
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Keyboard anim frame error", e);
+                    isKeyboardAnimating = false;
+                }
+            }
+        });
+    }
+
+    /**
+     * 安全兜底：直接恢复窗口位置
+     */
+    private void resetKeyboardOffset() {
+        // 正在执行键盘动画时不要打断
+        if (isKeyboardAnimating) {
+            return;
+        }
+        if (contentContainer == null) return;
+        try {
+            if (contentContainer.getTranslationY() != 0f) {
+                contentContainer.setTranslationY(0f);
+                Log.d(TAG, "resetKeyboardOffset: translationY -> 0");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "resetKeyboardOffset failed", e);
+        }
+        isKeyboardAnimating = false;
+    }
+
+    /**
+     * 设置 WebView 输入框检测（参照 FloatWindowService）
+     */
+    private void setupWebViewInputDetection(WebView webView) {
+        webView.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    // 用户点击 WebView 时，可能是输入框聚焦
+                    // 延迟检测，让 WebView 先处理点击事件
+                    webView.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            // 检查 WebView 是否有焦点
+                            if (webView.hasFocus()) {
+                                Log.d(TAG, "WebView gained focus after touch");
+                                onWebViewFocusedChanged(true);
+                            }
+                        }
+                    }, 50);
+                }
+                return false;
+            }
+        });
+    }
+
+    /**
+     * WebView 焦点变化时的处理
+     */
+    private void onWebViewFocusedChanged(boolean focused) {
+        if (focused && !isKeyboardVisible) {
+            isKeyboardVisible = true;
+            // 弹出输入法并触发送避动画
+            try {
+                android.view.inputmethod.InputMethodManager imm = 
+                    (android.view.inputmethod.InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) {
+                    imm.toggleSoftInput(android.view.inputmethod.InputMethodManager.SHOW_FORCED, 0);
+                    Log.d(TAG, "IME shown forcibly");
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to show IME", e);
+            }
+            animateForKeyboard(true, 0);
+        } else if (!focused && isKeyboardVisible) {
+            // WebView 失焦，恢复窗口位置
+            Log.d(TAG, "WebView lost focus");
+            onWebViewFocusedChanged(false, true);
+        }
+    }
+
+    /**
+     * WebView 焦点变化处理（可控制是否隐藏键盘）
+     */
+    private void onWebViewFocusedChanged(boolean focused, boolean hideKeyboard) {
+        if (!focused && hideKeyboard) {
+            isKeyboardVisible = false;
+            // 隐藏输入法
+            try {
+                android.view.inputmethod.InputMethodManager imm = 
+                    (android.view.inputmethod.InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) {
+                    imm.hideSoftInputFromWindow(webView.getWindowToken(), 0);
+                    Log.d(TAG, "IME hidden");
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to hide IME", e);
+            }
+            animateForKeyboard(false, 0);
+            resetKeyboardOffset();
+        }
+    }
+
+    /**
+     * 使用 OnGlobalLayoutListener 检测屏幕可见区域变化来推断输入法状态
+     */
+    private void setupKeyboardListener(View rootView) {
+        if (rootView == null) return;
+        
+        keyboardLayoutListener = new ViewTreeObserver.OnGlobalLayoutListener() {
+            private int lastKeyboardHeight = -1; // 初始值设为 -1，表示尚未初始化
+            
+            @Override
+            public void onGlobalLayout() {
+                android.graphics.Rect r = new android.graphics.Rect();
+                rootView.getWindowVisibleDisplayFrame(r);
+                int screenHeight = rootView.getRootView().getHeight();
+                int keyboardHeight = screenHeight - r.bottom;
+                
+                // 首次初始化：记录初始高度但不触发动画
+                if (lastKeyboardHeight == -1) {
+                    lastKeyboardHeight = keyboardHeight;
+                    Log.d(TAG, "Keyboard listener initialized: initial height=" + keyboardHeight);
+                    return;
+                }
+                
+                // 去抖：变化量小于 50px 忽略
+                if (Math.abs(keyboardHeight - lastKeyboardHeight) < 50) return;
+                lastKeyboardHeight = keyboardHeight;
+                
+                boolean shown = keyboardHeight > screenHeight * 0.15f;
+                
+                if (shown && !isKeyboardVisible) {
+                    Log.d(TAG, "Keyboard shown: height=" + keyboardHeight);
+                    isKeyboardVisible = true;
+                    animateForKeyboard(true, keyboardHeight);
+                } else if (!shown && isKeyboardVisible) {
+                    Log.d(TAG, "Keyboard hidden detected");
+                    isKeyboardVisible = false;
+                    animateForKeyboard(false, 0);
+                }
+            }
+        };
+        
+        rootView.getViewTreeObserver().addOnGlobalLayoutListener(keyboardLayoutListener);
+        Log.d(TAG, "Keyboard listener set up");
+    }
+    
+    /**
+     * 移除输入法检测监听器
+     */
+    private void removeKeyboardListener() {
+        if (keyboardLayoutListener != null && rootLayout != null) {
+            try {
+                rootLayout.getViewTreeObserver().removeOnGlobalLayoutListener(keyboardLayoutListener);
+                Log.d(TAG, "Keyboard listener removed");
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to remove keyboard listener", e);
+            }
+        }
+        keyboardLayoutListener = null;
+    }
+
+    /**
+     * 注入 JavaScript 检测输入框聚焦事件
+     */
+    private void injectInputFocusScript(WebView webView) {
+        String js = "(function(){" +
+                "var inputs = document.querySelectorAll('input, textarea, [contenteditable]');" +
+                "for(var i=0;i<inputs.length;i++){" +
+                "  (function(el){" +
+                "    el.addEventListener('focus', function() {" +
+                "      if(window.AndroidBridge) AndroidBridge.onInputFocus();" +
+                "    });" +
+                "    el.addEventListener('blur', function() {" +
+                "      if(window.AndroidBridge) AndroidBridge.onInputBlur();" +
+                "    });" +
+                "  })(inputs[i]);" +
+                "}" +
+                "})()";
+        webView.evaluateJavascript(js, null);
+        Log.d(TAG, "Injected input focus script");
     }
 }

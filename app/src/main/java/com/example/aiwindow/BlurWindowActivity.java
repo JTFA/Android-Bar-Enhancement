@@ -31,6 +31,7 @@ public class BlurWindowActivity extends Activity {
     
     private BroadcastReceiver sizeUpdateReceiver;
     private int originalBlurRadius = 25;
+    private int originalY = 0; // 保存原始 Y 位置
     private FrameLayout root;
 
     public static final String EXTRA_BLUR_X = "blur_x";
@@ -109,6 +110,9 @@ public class BlurWindowActivity extends Activity {
 
         Log.d(TAG, "窗口位置: (" + blurX + "," + blurY + ") 尺寸: " + blurWidth + "x" + blurHeight);
         
+        // 保存原始 Y 位置
+        originalY = blurY;
+        
         // 注册广播接收器，用于接收快捷窗口的模糊窗口大小更新
         sizeUpdateReceiver = new BroadcastReceiver() {
             @Override
@@ -143,6 +147,15 @@ public class BlurWindowActivity extends Activity {
                     // 收到渐变消失通知，执行透明度动画
                     Log.d(TAG, "收到 BLUR_WINDOW_FADE_OUT 广播，开始渐变消失");
                     fadeOutAndFinish();
+                } else if ("BLUR_WINDOW_TRANSLATE".equals(intent.getAction())) {
+                    // 收到平移通知，同步移动窗口位置
+                    float translationY = intent.getFloatExtra("translation_y", 0f);
+                    WindowManager.LayoutParams params = getWindow().getAttributes();
+                    // translationY 是 contentContainer 相对于原始位置的偏移量
+                    // 所以新的 y = originalY + translationY
+                    params.y = originalY + (int)translationY;
+                    getWindow().setAttributes(params);
+                    Log.d(TAG, "模糊窗口平移: translationY=" + translationY + ", newY=" + params.y);
                 }
             }
         };
@@ -161,7 +174,15 @@ public class BlurWindowActivity extends Activity {
             registerReceiver(sizeUpdateReceiver, fadeOutFilter);
         }
         
-        Log.d(TAG, "已注册模糊窗口大小更新和渐变消失广播接收器");
+        // 额外注册 BLUR_WINDOW_TRANSLATE 广播
+        IntentFilter translateFilter = new IntentFilter("BLUR_WINDOW_TRANSLATE");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(sizeUpdateReceiver, translateFilter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(sizeUpdateReceiver, translateFilter);
+        }
+        
+        Log.d(TAG, "已注册模糊窗口大小更新、渐变消失和平移广播接收器");
 
         // 窗口级背景模糊（API 31+）：模糊窗口背后那小块桌面内容
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
