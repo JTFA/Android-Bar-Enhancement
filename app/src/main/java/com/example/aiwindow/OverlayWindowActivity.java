@@ -1467,49 +1467,34 @@ public class OverlayWindowActivity extends AppCompatActivity {
      * 设置 WebView 输入框检测（参照 FloatWindowService）
      */
     private void setupWebViewInputDetection(WebView webView) {
-        webView.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                    // 用户点击 WebView 时，可能是输入框聚焦
-                    // 延迟检测，让 WebView 先处理点击事件
-                    webView.postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            // 检查 WebView 是否有焦点
-                            if (webView.hasFocus()) {
-                                Log.d(TAG, "WebView gained focus after touch");
-                                onWebViewFocusedChanged(true);
-                            }
-                        }
-                    }, 50);
-                }
-                return false;
-            }
-        });
+        // 不需要 OnTouchListener，由 JavaScript 注入的 focus/blur 事件来处理
+        // 移除原有的触摸监听器，避免每次点击都触发输入法切换
+        Log.d(TAG, "WebView input detection: using JS injection only");
     }
 
     /**
      * WebView 焦点变化时的处理
+     * 注意：这个方法只应该由 JavaScript 注入的 focus/blur 事件调用，不应该由触摸事件触发
      */
     private void onWebViewFocusedChanged(boolean focused) {
         if (focused && !isKeyboardVisible) {
+            // 输入框聚焦且键盘未显示时，弹出输入法
+            Log.d(TAG, "Input field focused, showing keyboard");
             isKeyboardVisible = true;
-            // 弹出输入法并触发送避动画
             try {
                 android.view.inputmethod.InputMethodManager imm = 
                     (android.view.inputmethod.InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
                 if (imm != null) {
                     imm.toggleSoftInput(android.view.inputmethod.InputMethodManager.SHOW_FORCED, 0);
-                    Log.d(TAG, "IME shown forcibly");
+                    Log.d(TAG, "IME shown");
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Failed to show IME", e);
             }
             animateForKeyboard(true, 0);
         } else if (!focused && isKeyboardVisible) {
-            // WebView 失焦，恢复窗口位置
-            Log.d(TAG, "WebView lost focus");
+            // 输入框失焦，恢复窗口位置
+            Log.d(TAG, "Input field blurred, hiding keyboard");
             onWebViewFocusedChanged(false, true);
         }
     }
