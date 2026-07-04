@@ -10,6 +10,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
@@ -204,7 +205,10 @@ public class BlurWindowActivity extends Activity {
             return;
         }
         
-        // 同时使用 View alpha 和窗口 alpha 实现渐变
+        // 先隐藏 View，防止闪烁
+        root.setVisibility(View.INVISIBLE);
+        
+        // 只使用窗口 alpha 实现渐变（模糊效果由窗口级别控制）
         final WindowManager.LayoutParams wmParams = (WindowManager.LayoutParams) getWindow().getAttributes();
         final float startWindowAlpha = wmParams.alpha;
         final long startTime = System.currentTimeMillis();
@@ -217,10 +221,8 @@ public class BlurWindowActivity extends Activity {
                 long elapsed = System.currentTimeMillis() - startTime;
                 float progress = Math.min((float) elapsed / duration, 1.0f);
                 
-                // 同步更新 View alpha 和窗口 alpha
-                float currentAlpha = 1f - progress;
-                root.setAlpha(currentAlpha);
-                wmParams.alpha = startWindowAlpha * currentAlpha;
+                // 同步更新窗口 alpha
+                wmParams.alpha = startWindowAlpha * (1f - progress);
                 getWindow().setAttributes(wmParams);
                 
                 if (progress < 1.0f) {
@@ -233,6 +235,6 @@ public class BlurWindowActivity extends Activity {
             }
         });
         
-        Log.d(TAG, "fadeoutAndFinish: 窗口+View 渐变动画已启动");
+        Log.d(TAG, "fadeoutAndFinish: 窗口渐变动画已启动");
     }
 }

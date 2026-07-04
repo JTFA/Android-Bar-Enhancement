@@ -1032,6 +1032,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 if (progress < 1.0f) {
                     Choreographer.getInstance().postFrameCallback(this);
                 } else {
+                    // 动画完成，先隐藏内容防止闪烁
+                    contentContainer.setVisibility(View.INVISIBLE);
+                    if (blurBackgroundView != null) {
+                        blurBackgroundView.setVisibility(View.INVISIBLE);
+                    }
+                    
                     contentContainer.setScaleX(1f);
                     contentContainer.setScaleY(1f);
                     contentContainer.setTranslationX(0f);
