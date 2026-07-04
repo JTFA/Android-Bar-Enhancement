@@ -1,0 +1,103 @@
+package com.example.aiwindow;
+
+import android.app.Activity;
+import android.graphics.Color;
+import android.os.Build;
+import android.os.Bundle;
+import android.util.Log;
+import android.view.Gravity;
+import android.view.WindowManager;
+import android.widget.FrameLayout;
+
+import androidx.annotation.Nullable;
+
+import java.lang.ref.WeakReference;
+
+/**
+ * 模糊子窗口 Activity
+ * 显示在 OverlayWindowActivity 下方，尺寸和位置与内容区域一致，
+ * 通过 getWindow().setBackgroundBlurRadius() 仅模糊窗口背后的桌面区域，
+ * 供上层的 OverlayWindowActivity 通过半透明底色透出模糊效果。
+ */
+public class BlurWindowActivity extends Activity {
+
+    private static final String TAG = "BlurWindowActivity";
+    private static WeakReference<BlurWindowActivity> sInstance;
+
+    public static final String EXTRA_BLUR_X = "blur_x";
+    public static final String EXTRA_BLUR_Y = "blur_y";
+    public static final String EXTRA_BLUR_WIDTH = "blur_width";
+    public static final String EXTRA_BLUR_HEIGHT = "blur_height";
+    public static final String EXTRA_BLUR_RADIUS = "blur_radius";
+
+    /**
+     * 关闭当前存活的 BlurWindowActivity（由 OverlayWindowActivity 在销毁时调用）
+     */
+    public static void finishIfAlive() {
+        BlurWindowActivity act = sInstance != null ? sInstance.get() : null;
+        if (act != null && !act.isFinishing()) {
+            Log.d(TAG, "接收到关闭信号，主动 finish");
+            act.finish();
+        }
+    }
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        sInstance = new WeakReference<>(this);
+        Log.d(TAG, "onCreate");
+
+        // 读取位置/尺寸/半径
+        int blurX = getIntent().getIntExtra(EXTRA_BLUR_X, 0);
+        int blurY = getIntent().getIntExtra(EXTRA_BLUR_Y, 0);
+        int blurWidth = getIntent().getIntExtra(EXTRA_BLUR_WIDTH, 200);
+        int blurHeight = getIntent().getIntExtra(EXTRA_BLUR_HEIGHT, 200);
+        int blurRadius = getIntent().getIntExtra(EXTRA_BLUR_RADIUS, 50);
+
+        // 配置窗口：全透明、不聚焦、不触摸（让上层 OverlayWindowActivity 接收触摸）
+        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
+
+        // 空根布局，全透明，仅用于承载窗口
+        FrameLayout root = new FrameLayout(this);
+        root.setLayoutParams(new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        root.setBackgroundColor(Color.TRANSPARENT);
+        setContentView(root);
+
+        // setContentView 之后 DecorView 已创建，此时才能设置窗口属性和模糊
+        // 设置窗口位置和尺寸（绝对坐标，TOP|START 原点在屏幕左上角）
+        WindowManager.LayoutParams wmParams = getWindow().getAttributes();
+        wmParams.gravity = Gravity.TOP | Gravity.START;
+        wmParams.x = blurX;
+        wmParams.y = blurY;
+        wmParams.width = blurWidth;
+        wmParams.height = blurHeight;
+        getWindow().setAttributes(wmParams);
+        Log.d(TAG, "窗口位置: (" + blurX + "," + blurY + ") 尺寸: " + blurWidth + "x" + blurHeight);
+
+        // 窗口级背景模糊（API 31+）：模糊窗口背后那小块桌面内容
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            getWindow().setBackgroundBlurRadius(blurRadius);
+            Log.d(TAG, "已启用窗口背景模糊，半径: " + blurRadius);
+        } else {
+            Log.d(TAG, "API < 31，跳过模糊");
+        }
+
+        Log.d(TAG, "BlurWindowActivity 创建完成");
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        Log.d(TAG, "onDestroy");
+        if (sInstance != null && sInstance.get() == this) {
+            sInstance = null;
+        }
+    }
+}
