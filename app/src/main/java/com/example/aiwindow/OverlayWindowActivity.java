@@ -134,6 +134,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     
     // AI 窗口模糊效果
     private int aiStyle, aiBlurRadius, aiOverlayAlpha;
+    private String customCss; // 自定义 CSS
 
     // ─── 视图 ───
     private FrameLayout rootLayout;
@@ -312,6 +313,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             
             // 加载输入法避让设置
             loadKeyboardSettings();
+            
+            // 加载自定义 CSS
+            loadCustomCss();
         } else {
             shortcutIconSize = intent.getIntExtra(EXTRA_SHORTCUT_ICON_SIZE, 100);
             shortcutStyle = intent.getIntExtra(EXTRA_SHORTCUT_STYLE, 0);
@@ -331,6 +335,21 @@ public class OverlayWindowActivity extends AppCompatActivity {
             Log.d(TAG, "已加载输入法设置: offset=" + keyboardOffset + "px, duration=" + keyboardAnimDuration + "ms");
         } catch (Exception e) {
             Log.e(TAG, "加载输入法设置失败", e);
+        }
+    }
+    
+    /**
+     * 从 SharedPreferences 加载自定义 CSS
+     */
+    private void loadCustomCss() {
+        try {
+            SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
+            customCss = prefs.getString("custom_css", "");
+            if (!TextUtils.isEmpty(customCss)) {
+                Log.d(TAG, "已加载自定义 CSS，长度: " + customCss.length());
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "加载自定义 CSS 失败", e);
         }
     }
 
@@ -513,6 +532,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     updateBackButtonState();
                     // 注入 JavaScript 检测输入框聚焦
                     injectInputFocusScript(view);
+                    // 如果是亚克力/液态玻璃模式，注入透明背景 CSS
+                    if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
+                        injectTransparentBackground(view);
+                    }
+                    // 始终注入自定义 CSS（无论是否透明模式）
+                    if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
+                        injectCustomCss(view);
+                    }
                 }
 
                 @Override
@@ -544,6 +571,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
             if (parent instanceof ViewGroup) {
                 ((ViewGroup) parent).removeView(sPersistentWebView);
             }
+            // 如果是亚克力/液态玻璃模式，立即注入透明背景 CSS（不需要等 onPageFinished）
+            if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
+                injectTransparentBackground(sPersistentWebView);
+            }
+            // 始终注入自定义 CSS（无论是否透明模式）
+            if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
+                injectCustomCss(sPersistentWebView);
+            }
         }
         
         webView = sPersistentWebView;
@@ -569,9 +604,13 @@ public class OverlayWindowActivity extends AppCompatActivity {
         
         // AI 窗口：应用网页透明度设置（仅当样式非不透明时）
         if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
-            float alpha = aiOverlayAlpha / 255.0f;
-            webView.setAlpha(alpha);
+            // 不再使用 webView.setAlpha()，而是通过 JS 注入让网页背景透明
+            // 这样只有背景透明，文字、图片等元素保持 100% 不透明
+            Log.d(TAG, "启用亚克力/液态玻璃模式，将通过 JS 注入透明背景");
         }
+        
+        // WebView 始终设置为完全透明背景
+        webView.setBackgroundColor(Color.TRANSPARENT);
 
         container.addView(webView);
     }
@@ -1624,5 +1663,79 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 "})()";
         webView.evaluateJavascript(js, null);
         Log.d(TAG, "Injected input focus script");
+    }
+    
+    /**
+     * 注入透明背景 CSS（仅用于亚克力/液态玻璃模式）
+     * 让网页背景透明，但保持所有元素（文字、图片等）100% 不透明
+     */
+    private void injectTransparentBackground(WebView webView) {
+        // 强大的 CSS：先清除所有元素背景，再恢复内容元素
+        String css = "/* 第一步：清除所有元素背景 */" +
+                "* {" +
+                "  background-color: transparent !important;" +
+                "  background-image: none !important;" +
+                "  background: none !important;" +
+                "}" +
+                "/* 第二步：恢复 html/body 基本样式 */" +
+                "html, body {" +
+                "  background: transparent !important;" +
+                "}";
+        
+        // 如果有自定义 CSS，追加到后面
+        if (!TextUtils.isEmpty(customCss)) {
+            css += "\n/* 自定义 CSS */\n" + customCss;
+        }
+        
+        String js = "(function(){" +
+                // 注入 CSS
+                "var style = document.createElement('style');" +
+                "style.id = 'transparent-bg-style';" +
+                "style.textContent = '" + css.replace("'", "\\'") + "';" +
+                "if (document.head) {" +
+                "  document.head.appendChild(style);" +
+                "} else {" +
+                "  document.documentElement.appendChild(style);" +
+                "}" +
+                
+                "console.log('Transparent background CSS injected');" +
+                "return 'CSS injection complete';" +
+                "})()";
+        
+        webView.evaluateJavascript(js, new android.webkit.ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String value) {
+                Log.d(TAG, "Transparent background injection result: " + value);
+            }
+        });
+        Log.d(TAG, "Injected transparent background CSS with wildcard selector");
+    }
+    
+    /**
+     * 注入自定义 CSS（无论是否透明模式都注入）
+     */
+    private void injectCustomCss(WebView webView) {
+        if (TextUtils.isEmpty(customCss)) return;
+        
+        String js = "(function(){" +
+                "var style = document.createElement('style');" +
+                "style.id = 'custom-css-style';" +
+                "style.textContent = '" + customCss.replace("'", "\\'") + "';" +
+                "if (document.head) {" +
+                "  document.head.appendChild(style);" +
+                "} else {" +
+                "  document.documentElement.appendChild(style);" +
+                "}" +
+                "console.log('Custom CSS injected');" +
+                "return 'Custom CSS injection complete';" +
+                "})()";
+        
+        webView.evaluateJavascript(js, new android.webkit.ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String value) {
+                Log.d(TAG, "Custom CSS injection result: " + value);
+            }
+        });
+        Log.d(TAG, "Injected custom CSS");
     }
 }

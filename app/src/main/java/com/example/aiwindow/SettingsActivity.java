@@ -131,6 +131,7 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_AI_STYLE = "ai_style";
     private static final String KEY_AI_BLUR_RADIUS = "ai_blur_radius";
     private static final String KEY_AI_OVERLAY_ALPHA = "ai_overlay_alpha";
+    private static final String KEY_CUSTOM_CSS = "custom_css"; // 自定义 CSS
     
     // AI URL 输入框
     private EditText editAiUrl;
@@ -234,6 +235,7 @@ public class SettingsActivity extends AppCompatActivity {
     private Spinner spinnerAiStyle;
     private SeekBar seekAiBlurRadius, seekAiOverlayAlpha;
     private TextView textAiBlurRadius, textAiOverlayAlpha;
+    private EditText editCustomCss; // 自定义 CSS
     
     // 保存按钮
     private Button btnSave;
@@ -396,6 +398,7 @@ public class SettingsActivity extends AppCompatActivity {
         seekAiOverlayAlpha = findViewById(R.id.seek_ai_overlay_alpha);
         textAiBlurRadius = findViewById(R.id.text_ai_blur_radius);
         textAiOverlayAlpha = findViewById(R.id.text_ai_overlay_alpha);
+        editCustomCss = findViewById(R.id.edit_custom_css);
         
         // 保存按钮
         btnSave = findViewById(R.id.btn_save_apply);
@@ -655,6 +658,10 @@ public class SettingsActivity extends AppCompatActivity {
             seekAiOverlayAlpha.setProgress(aiOverlayAlpha);
         }
         textAiOverlayAlpha.setText("网页透明度: " + (aiOverlayAlpha * 100 / 255) + "%");
+        
+        // 加载自定义 CSS
+        String customCss = preferences.getString(KEY_CUSTOM_CSS, "");
+        editCustomCss.setText(customCss);
     }
     
     /**
@@ -813,6 +820,10 @@ public class SettingsActivity extends AppCompatActivity {
         
         editor.putInt(KEY_AI_BLUR_RADIUS, seekAiBlurRadius.getProgress());
         editor.putInt(KEY_AI_OVERLAY_ALPHA, aiOverlayAlphaToSave);
+        
+        // 保存自定义 CSS
+        String customCss = editCustomCss.getText().toString().trim();
+        editor.putString(KEY_CUSTOM_CSS, customCss);
         
         // 提交保存
         editor.apply();

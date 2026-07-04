@@ -1118,6 +1118,31 @@
             android:layout_height="wrap_content"
             android:max="255"
             android:progress="204"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 自定义 CSS -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="自定义 CSS（注入到网页）"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/edit_custom_css"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="例如：* { background-color: transparent !important; }"
+            android:inputType="textMultiLine"
+            android:minLines="3"
+            android:maxLines="6"
+            android:gravity="top|start"
+            android:padding="12dp"
+            android:background="@android:drawable/edit_text"
+            android:textSize="12sp"
+            android:typeface="monospace"
+            android:scrollbars="vertical"
             android:layout_marginBottom="24dp" />
 
 
