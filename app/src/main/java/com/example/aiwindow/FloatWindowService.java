@@ -1653,7 +1653,7 @@ public class FloatWindowService extends Service {
      * 启动下层模糊窗口 BlurWindowActivity
      * 尺寸/位置和 OverlayWindowActivity 的内容区域对齐
      */
-    private void startBlurWindow(int targetWidth, int targetHeight, int targetPosX, int targetPosY) {
+    private void startBlurWindow(int targetWidth, int targetHeight, int targetPosX, int targetPosY, float cornerRadiusDp) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             Log.d(TAG, "API < 31，跳过模糊窗口");
             return;
@@ -1679,9 +1679,10 @@ public class FloatWindowService extends Service {
             blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_WIDTH, targetWidth);
             blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_HEIGHT, targetHeight);
             blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_RADIUS, 25);
+            blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_CORNER_RADIUS, dpToPx((int) cornerRadiusDp));
             blurIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(blurIntent);
-            Log.d(TAG, "已启动模糊窗口: 位置(" + blurX + "," + blurY + ") 尺寸" + targetWidth + "x" + targetHeight);
+            Log.d(TAG, "已启动模糊窗口: 位置(" + blurX + "," + blurY + ") 尺寸" + targetWidth + "x" + targetHeight + " 圆角" + dpToPx((int)cornerRadiusDp) + "px");
         } catch (Exception e) {
             Log.e(TAG, "启动模糊窗口失败", e);
         }
@@ -1689,7 +1690,7 @@ public class FloatWindowService extends Service {
 
     private void launchAiWindow() {
         // 先启动下层模糊窗口
-        startBlurWindow(aiWindowWidth, aiWindowHeight, windowPositionX, windowPositionY);
+        startBlurWindow(aiWindowWidth, aiWindowHeight, windowPositionX, windowPositionY, cornerRadius);
 
         Intent intent = new Intent(this, OverlayWindowActivity.class);
         intent.putExtra(OverlayWindowActivity.EXTRA_WINDOW_TYPE, OverlayWindowActivity.WINDOW_TYPE_AI);
@@ -1724,7 +1725,7 @@ public class FloatWindowService extends Service {
         // 注意：快捷窗口的高度需要根据实际图标行数动态计算
         // 这里先传一个估计值（shortcutWindowHeight 是 dp 单位）
         int sTargetHeight = dpToPx(shortcutWindowHeight);  // 最大高度
-        startBlurWindow(sTargetWidth, sTargetHeight, 0, shortcutWindowPositionY);
+        startBlurWindow(sTargetWidth, sTargetHeight, 0, shortcutWindowPositionY, shortcutCornerRadius);
 
         Intent intent = new Intent(this, OverlayWindowActivity.class);
         intent.putExtra(OverlayWindowActivity.EXTRA_WINDOW_TYPE, OverlayWindowActivity.WINDOW_TYPE_SHORTCUT);

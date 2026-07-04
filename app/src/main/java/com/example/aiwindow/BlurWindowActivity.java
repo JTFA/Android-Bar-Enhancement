@@ -30,12 +30,14 @@ public class BlurWindowActivity extends Activity {
     
     private BroadcastReceiver sizeUpdateReceiver;
     private int originalBlurRadius = 25;
+    private FrameLayout root;
 
     public static final String EXTRA_BLUR_X = "blur_x";
     public static final String EXTRA_BLUR_Y = "blur_y";
     public static final String EXTRA_BLUR_WIDTH = "blur_width";
     public static final String EXTRA_BLUR_HEIGHT = "blur_height";
     public static final String EXTRA_BLUR_RADIUS = "blur_radius";
+    public static final String EXTRA_BLUR_CORNER_RADIUS = "blur_corner_radius";
 
     /**
      * 关闭当前存活的 BlurWindowActivity（由 OverlayWindowActivity 在销毁时调用）
@@ -60,21 +62,37 @@ public class BlurWindowActivity extends Activity {
         int blurWidth = getIntent().getIntExtra(EXTRA_BLUR_WIDTH, 200);
         int blurHeight = getIntent().getIntExtra(EXTRA_BLUR_HEIGHT, 200);
         originalBlurRadius = getIntent().getIntExtra(EXTRA_BLUR_RADIUS, 50);
+        int cornerRadius = getIntent().getIntExtra(EXTRA_BLUR_CORNER_RADIUS, 0);
 
         // 配置窗口：全透明、不聚焦、不触摸（让上层 OverlayWindowActivity 接收触摸）
-        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                 | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                 | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
+        
+        // 关键：设置窗口背景为圆角矩形（半透明或完全透明）
+        // 这样模糊效果会透过这个圆角背景显示出来
+        if (cornerRadius > 0) {
+            android.graphics.drawable.GradientDrawable windowBackground = new android.graphics.drawable.GradientDrawable();
+            windowBackground.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+            windowBackground.setCornerRadius(cornerRadius);
+            // 使用完全透明的颜色，让模糊效果穿透显示
+            windowBackground.setColor(Color.TRANSPARENT);
+            getWindow().setBackgroundDrawable(windowBackground);
+            Log.d(TAG, "已设置窗口圆角背景: " + cornerRadius + "px");
+        } else {
+            // 没有圆角时使用默认透明背景
+            getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
 
         // 空根布局，全透明，仅用于承载窗口
-        FrameLayout root = new FrameLayout(this);
+        root = new FrameLayout(this);
         root.setLayoutParams(new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         root.setBackgroundColor(Color.TRANSPARENT);
+        
         setContentView(root);
 
         // setContentView 之后 DecorView 已创建，此时才能设置窗口属性和模糊
@@ -85,7 +103,9 @@ public class BlurWindowActivity extends Activity {
         wmParams.y = blurY;
         wmParams.width = blurWidth;
         wmParams.height = blurHeight;
+
         getWindow().setAttributes(wmParams);
+
         Log.d(TAG, "窗口位置: (" + blurX + "," + blurY + ") 尺寸: " + blurWidth + "x" + blurHeight);
         
         // 注册广播接收器，用于接收快捷窗口的模糊窗口大小更新
@@ -97,6 +117,7 @@ public class BlurWindowActivity extends Activity {
                     int newBlurY = intent.getIntExtra("blur_y", 0);
                     int newBlurWidth = intent.getIntExtra("blur_width", 200);
                     int newBlurHeight = intent.getIntExtra("blur_height", 400);
+                    int newCornerRadius = intent.getIntExtra("blur_corner_radius", 0);
                     
                     WindowManager.LayoutParams params = getWindow().getAttributes();
                     params.x = newBlurX;
@@ -104,6 +125,17 @@ public class BlurWindowActivity extends Activity {
                     params.width = newBlurWidth;
                     params.height = newBlurHeight;
                     getWindow().setAttributes(params);
+                    
+                    // 更新窗口圆角背景
+                    if (newCornerRadius > 0) {
+                        android.graphics.drawable.GradientDrawable windowBackground = new android.graphics.drawable.GradientDrawable();
+                        windowBackground.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+                        windowBackground.setCornerRadius(newCornerRadius);
+                        windowBackground.setColor(Color.TRANSPARENT);
+                        getWindow().setBackgroundDrawable(windowBackground);
+                        Log.d(TAG, "模糊窗口圆角已更新: " + newCornerRadius + "px");
+                    }
+                    
                     Log.d(TAG, "模糊窗口已更新: (" + newBlurX + "," + newBlurY + ") " 
                             + newBlurWidth + "x" + newBlurHeight);
                 }

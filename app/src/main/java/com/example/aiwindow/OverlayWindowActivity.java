@@ -534,9 +534,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 updateIntent.putExtra("blur_y", blurY);
                 updateIntent.putExtra("blur_width", blurWidth);
                 updateIntent.putExtra("blur_height", blurHeight);
+                updateIntent.putExtra("blur_corner_radius", dpToPx(cornerRadius));
                 sendBroadcast(updateIntent);
                 Log.d(TAG, "已发送快捷窗口模糊更新: x=" + blurX + " y=" + blurY
-                        + " w=" + blurWidth + " h=" + blurHeight);
+                        + " w=" + blurWidth + " h=" + blurHeight + " 圆角=" + cornerRadius + "dp");
             } catch (Exception e) {
                 Log.e(TAG, "发送模糊窗口更新失败", e);
             }
