@@ -1205,6 +1205,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 contentContainer.setScaleY(curScaleY);
                 contentContainer.setTranslationX(curTransX);
                 contentContainer.setTranslationY(curTransY);
+                
+                // 背景遮罩同步渐入（与窗口动画同时）
+                if (overlayView != null) {
+                    float targetAlpha = overlayAlpha / 100.0f;
+                    overlayView.setAlpha(targetAlpha * eased);
+                }
 
                 // blurBackgroundView 同步动画
                 if (blurBackgroundView != null) {
@@ -1254,9 +1260,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         }
                         webView.invalidate();
                     }
-                    
-                    // 展开完成后显示背景遮罩
-                    showBackgroundOverlay();
                 }
             }
         });
@@ -1270,9 +1273,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
         if (!isExpanded || isCollapsing) return;
         isCollapsing = true;
         isExpanded = false;
-        
-        // 先隐藏背景遮罩
-        hideBackgroundOverlay();
         
         // 通知模糊窗口开始渐变消失（在动画开始前立即发送）
         sendBlurWindowFadeOutBroadcast();
@@ -1305,6 +1305,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     containerAlpha = 1.0f - easeOutCubic(fadeProgress);
                 }
                 contentContainer.setAlpha(containerAlpha);
+                
+                // 背景遮罩同步渐出（与窗口动画同时）
+                if (overlayView != null) {
+                    float targetAlpha = overlayAlpha / 100.0f;
+                    overlayView.setAlpha(targetAlpha * (1.0f - eased));
+                }
 
                 contentContainer.setScaleX(curScaleX);
                 contentContainer.setScaleY(curScaleY);
