@@ -4,11 +4,13 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.graphics.*;
 import android.graphics.drawable.BitmapDrawable;
@@ -256,6 +258,18 @@ public class FloatWindowService extends Service {
         }
     };
 
+    private BroadcastReceiver restoreBarReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if ("com.example.aiwindow.RESTORE_BAR".equals(intent.getAction())) {
+                // 恢复底部提示条透明度
+                if (bottomBar != null) {
+                    bottomBar.animate().alpha(1f).setDuration(150).start();
+                }
+            }
+        }
+    };
+
     // 动画相关
     private int animationDuration = 385; // 毫秒（展开/收起动画时长，可从设置调节）
     private int overlayAnimDuration = 100; // 毫秒（背景遮罩透明度渐变动画时长）
@@ -376,6 +390,14 @@ public class FloatWindowService extends Service {
 
             initBottomBar();
             Log.d(TAG, "底部提示条初始化完成");
+
+            // 注册广播接收器，用于接收 Activity 发送的恢复提示条通知
+            IntentFilter filter = new IntentFilter("com.example.aiwindow.RESTORE_BAR");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(restoreBarReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            } else {
+                registerReceiver(restoreBarReceiver, filter);
+            }
 
         } catch (Exception e) {
             Log.e(TAG, "❌❌❌ 服务启动失败", e);
@@ -803,11 +825,8 @@ public class FloatWindowService extends Service {
                 // 长按触发前先淡出按下覆盖层（不触发窗口恢复）
                 restoreNormalBarStyles(false);
 
-                // 关键优化：提前启动 WindowHostActivity，让 Activity 创建
-                // 在 bottomBar 淡出动画期间（150ms）完成，避免抢占展开动画帧的主线程时间
-                startWindowHostActivity();
-
-                // 淡出提示条后执行展开
+                // 淡出提示条后执行展开（Activity模式，直接启动OverlayWindowActivity）
+                // 不再需要startWindowHostActivity，由Activity自身处理返回键
                 if (bottomBar != null) {
                     bottomBar.animate().alpha(0f).setDuration(150).withEndAction(new Runnable() {
                         @Override
@@ -1355,14 +1374,14 @@ public class FloatWindowService extends Service {
                 Log.d(TAG, gesture + " 行为：未配置应用");
             }
         } else if (ACTION_SHORTCUT.equals(action)) {
-            Log.d(TAG, gesture + " 行为：打开快捷方式窗口");
+            Log.d(TAG, gesture + " 行为：打开快捷方式窗口（Activity模式）");
             if (!isShortcutWindowExpanded && !isAiWindowExpanded) {
-                expandToShortcutWindow();
+                launchShortcutWindow();
             }
         } else if (ACTION_AI.equals(action)) {
-            Log.d(TAG, gesture + " 行为：打开AI窗口");
+            Log.d(TAG, gesture + " 行为：打开AI窗口（Activity模式）");
             if (!isShortcutWindowExpanded && !isAiWindowExpanded) {
-                expandToAiWindow();
+                launchAiWindow();
             }
         }
     }
@@ -1629,6 +1648,68 @@ public class FloatWindowService extends Service {
             }
         }
     }
+
+    // 原来调用 expandToAiWindow()
+// 现在改为：
+    private void launchAiWindow() {
+        Intent intent = new Intent(this, OverlayWindowActivity.class);
+        intent.putExtra(OverlayWindowActivity.EXTRA_WINDOW_TYPE, OverlayWindowActivity.WINDOW_TYPE_AI);
+        intent.putExtra(OverlayWindowActivity.EXTRA_START_X, barPositionX);
+        intent.putExtra(OverlayWindowActivity.EXTRA_START_Y, dpToPx(barPositionY));
+        intent.putExtra(OverlayWindowActivity.EXTRA_START_WIDTH, currentWidth);
+        intent.putExtra(OverlayWindowActivity.EXTRA_START_HEIGHT, dpToPx(currentHeight));
+        intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_WIDTH, aiWindowWidth);
+        intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_HEIGHT, aiWindowHeight);
+        intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_POS_X, windowPositionX);
+        intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_POS_Y, windowPositionY);
+        intent.putExtra(OverlayWindowActivity.EXTRA_ANIM_DURATION, animationDuration);
+        intent.putExtra(OverlayWindowActivity.EXTRA_CORNER_RADIUS, cornerRadius);
+        intent.putExtra(OverlayWindowActivity.EXTRA_BORDER_WIDTH, borderWidth);
+        intent.putExtra(OverlayWindowActivity.EXTRA_BORDER_COLOR, borderColor);
+        intent.putExtra(OverlayWindowActivity.EXTRA_BORDER_ALPHA, borderAlpha);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHOW_CLOSE_BUTTON, showCloseButton);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHOW_REFRESH_BUTTON, showRefreshButton);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHOW_BACK_BUTTON, showBackButton);
+        intent.putExtra(OverlayWindowActivity.EXTRA_CLOSE_ON_OUTSIDE, closeOnOutsideClick);
+        intent.putExtra(OverlayWindowActivity.EXTRA_BACK_PRIORITIZE_WEBVIEW, backPrioritizeWebview);
+        intent.putExtra(OverlayWindowActivity.EXTRA_AI_URL, currentAiUrl);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+        // 隐藏底部提示条（透明度设为0）
+        if (bottomBar != null) bottomBar.setAlpha(0f);
+    }
+
+    private void launchShortcutWindow() {
+        Intent intent = new Intent(this, OverlayWindowActivity.class);
+        intent.putExtra(OverlayWindowActivity.EXTRA_WINDOW_TYPE, OverlayWindowActivity.WINDOW_TYPE_SHORTCUT);
+        intent.putExtra(OverlayWindowActivity.EXTRA_START_X, barPositionX);
+        intent.putExtra(OverlayWindowActivity.EXTRA_START_Y, dpToPx(barPositionY));
+        intent.putExtra(OverlayWindowActivity.EXTRA_START_WIDTH, currentWidth);
+        intent.putExtra(OverlayWindowActivity.EXTRA_START_HEIGHT, dpToPx(currentHeight));
+        intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_WIDTH, dpToPx(shortcutWindowWidth));
+        intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_HEIGHT, dpToPx(shortcutWindowHeight));
+        intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_POS_X, 0);
+        intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_POS_Y, shortcutWindowPositionY);
+        intent.putExtra(OverlayWindowActivity.EXTRA_ANIM_DURATION, animationDuration);
+        intent.putExtra(OverlayWindowActivity.EXTRA_CORNER_RADIUS, shortcutCornerRadius);
+        intent.putExtra(OverlayWindowActivity.EXTRA_BORDER_WIDTH, shortcutBorderWidth);
+        intent.putExtra(OverlayWindowActivity.EXTRA_BORDER_COLOR, shortcutBorderColor);
+        intent.putExtra(OverlayWindowActivity.EXTRA_BORDER_ALPHA, shortcutBorderAlpha);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHOW_CLOSE_BUTTON, showCloseButton);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHOW_REFRESH_BUTTON, showRefreshButton);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHOW_BACK_BUTTON, showBackButton);
+        intent.putExtra(OverlayWindowActivity.EXTRA_CLOSE_ON_OUTSIDE, closeOnOutsideClick);
+        intent.putExtra(OverlayWindowActivity.EXTRA_BACK_PRIORITIZE_WEBVIEW, backPrioritizeWebview);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_ICON_SIZE, shortcutIconSize);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_STYLE, shortcutStyle);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_BLUR_RADIUS, shortcutBlurRadius);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_OVERLAY_ALPHA, shortcutOverlayAlpha);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+        if (bottomBar != null) bottomBar.setAlpha(0f);
+    }
+
+
 
     /**
      * Animate contentContainer from start size to target size
@@ -6282,6 +6363,15 @@ public class FloatWindowService extends Service {
 
     @Override
     public void onDestroy() {
+        if (restoreBarReceiver != null) {
+            try {
+                unregisterReceiver(restoreBarReceiver);
+                restoreBarReceiver = null;
+                Log.d(TAG, "已取消注册 RESTORE_BAR 广播接收器");
+            } catch (Exception e) {
+                Log.e(TAG, "取消注册广播接收器失败", e);
+            }
+        }
         super.onDestroy();
 
         // 关闭自定义上下文菜单
@@ -6319,6 +6409,8 @@ public class FloatWindowService extends Service {
             overlayView = null;
             overlayLayoutParams = null;
         }
+
+
 
         Log.d(TAG, "服务已销毁，所有资源已清理");
     }
