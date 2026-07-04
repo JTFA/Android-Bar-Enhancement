@@ -993,6 +993,63 @@
             android:progress="10"
             android:layout_marginBottom="16dp" />
 
+        <!-- 快捷方式背景样式 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="背景样式"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp" />
+
+        <Spinner
+            android:id="@+id/spinner_shortcut_style"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:entries="@array/shortcut_style_entries"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 模糊半径（仅当样式非不透明时显示） -->
+        <TextView
+            android:id="@+id/text_shortcut_blur_radius"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="模糊半径: 20dp"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone" />
+
+        <SeekBar
+            android:id="@+id/seek_shortcut_blur_radius"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="50"
+            android:progress="20"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone" />
+
+        <!-- 叠加色透明度 -->
+        <TextView
+            android:id="@+id/text_shortcut_overlay_alpha"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="叠加色透明度: 70%"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone" />
+
+        <SeekBar
+            android:id="@+id/seek_shortcut_overlay_alpha"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="255"
+            android:progress="180"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone" />
+
 
         <!-- 图标大小 -->
         <TextView

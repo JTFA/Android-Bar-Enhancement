@@ -62,4 +62,13 @@
     <string name="action_open_ai">打开AI窗口</string>
     <string name="select_action">选择行为</string>
     <string name="select_app_for">选择要打开的应用</string>
+
+
+    <!-- 其他字符串定义... -->
+    <string-array name="shortcut_style_entries">
+        <item>不透明</item>
+        <item>亚克力透明</item>
+        <item>液态玻璃透明</item>
+    </string-array>
+
 </resources>

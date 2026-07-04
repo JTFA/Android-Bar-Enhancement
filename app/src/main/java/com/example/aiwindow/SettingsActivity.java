@@ -12,10 +12,12 @@ import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
+import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -120,6 +122,10 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_SHORTCUT_BORDER_COLOR = "shortcut_border_color";
     private static final String KEY_SHORTCUT_BORDER_ALPHA = "shortcut_border_alpha";
     private static final String KEY_SHORTCUT_ICON_SIZE = "shortcut_icon_size";
+
+    private static final String KEY_SHORTCUT_STYLE = "shortcut_style";
+    private static final String KEY_SHORTCUT_BLUR_RADIUS = "shortcut_blur_radius";
+    private static final String KEY_SHORTCUT_OVERLAY_ALPHA = "shortcut_overlay_alpha";
     
     // AI URL 输入框
     private EditText editAiUrl;
@@ -214,6 +220,10 @@ public class SettingsActivity extends AppCompatActivity {
     private Button btnEditShortcuts;
     private SeekBar seekShortcutIconSize;
     private TextView textShortcutIconSize;
+
+    private Spinner spinnerShortcutStyle;
+    private SeekBar seekShortcutBlurRadius, seekShortcutOverlayAlpha;
+    private TextView textShortcutBlurRadius, textShortcutOverlayAlpha;
     
     // 保存按钮
     private Button btnSave;
@@ -273,11 +283,7 @@ public class SettingsActivity extends AppCompatActivity {
         seekCornerRadius = findViewById(R.id.seek_corner_radius);
         textCornerRadius = findViewById(R.id.text_corner_radius);
         
-//        seekShadowWidth = findViewById(R.id.seek_shadow_width);
-//        seekShadowAlpha = findViewById(R.id.seek_shadow_alpha);
-//        editShadowColor = findViewById(R.id.edit_shadow_color);
-//        textShadowWidth = findViewById(R.id.text_shadow_width);
-//        textShadowAlpha = findViewById(R.id.text_shadow_alpha);
+
         
         // 关闭按钮显示开关
         switchShowCloseButton = findViewById(R.id.switch_show_close_button);
@@ -366,6 +372,13 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutIconSize = findViewById(R.id.seek_shortcut_icon_size);
         textShortcutIconSize = findViewById(R.id.text_shortcut_icon_size);
         btnEditShortcuts = findViewById(R.id.btn_edit_shortcuts);
+
+
+        spinnerShortcutStyle = findViewById(R.id.spinner_shortcut_style);
+        seekShortcutBlurRadius = findViewById(R.id.seek_shortcut_blur_radius);
+        seekShortcutOverlayAlpha = findViewById(R.id.seek_shortcut_overlay_alpha);
+        textShortcutBlurRadius = findViewById(R.id.text_shortcut_blur_radius);
+        textShortcutOverlayAlpha = findViewById(R.id.text_shortcut_overlay_alpha);
         
         // 保存按钮
         btnSave = findViewById(R.id.btn_save_apply);
@@ -432,18 +445,7 @@ public class SettingsActivity extends AppCompatActivity {
         int borderAlpha = preferences.getInt(KEY_BORDER_ALPHA, 10);
         seekBorderAlpha.setProgress(borderAlpha);
         textBorderAlpha.setText("边框透明度: " + String.format("%.2f", borderAlpha / 100.0f));
-        
-        // 加载阴影设置
-//        int shadowWidth = preferences.getInt(KEY_SHADOW_WIDTH, 0);
-//        seekShadowWidth.setProgress(shadowWidth);
-//        textShadowWidth.setText("阴影宽度: " + shadowWidth + "dp");
-        
-//        String shadowColor = preferences.getString(KEY_SHADOW_COLOR, "#000000");
-//        editShadowColor.setText(shadowColor);
-        
-//        int shadowAlpha = preferences.getInt(KEY_SHADOW_ALPHA, 0); // 关键修复：默认值从 30 改为 60
-//        seekShadowAlpha.setProgress(shadowAlpha);
-//        textShadowAlpha.setText("阴影透明度: " + String.format("%.2f", shadowAlpha / 100.0f));
+
         
         // 加载关闭按钮显示设置
         boolean showCloseButton = preferences.getBoolean(KEY_SHOW_CLOSE_BUTTON, true);
@@ -607,6 +609,16 @@ public class SettingsActivity extends AppCompatActivity {
         int shortcutIconSize = preferences.getInt(KEY_SHORTCUT_ICON_SIZE, 100);
         seekShortcutIconSize.setProgress(shortcutIconSize);
         textShortcutIconSize.setText("图标大小: " + shortcutIconSize + "%");
+
+        int style = preferences.getInt(KEY_SHORTCUT_STYLE, 0);
+        spinnerShortcutStyle.setSelection(style);
+        int blurRadius = preferences.getInt(KEY_SHORTCUT_BLUR_RADIUS, 20);
+        seekShortcutBlurRadius.setProgress(blurRadius);
+        textShortcutBlurRadius.setText("模糊半径: " + blurRadius + "dp");
+        int overlayAlpha1 = preferences.getInt(KEY_SHORTCUT_OVERLAY_ALPHA, 180);
+        seekShortcutOverlayAlpha.setProgress(overlayAlpha1);
+        textShortcutOverlayAlpha.setText("叠加色透明度: " + (overlayAlpha1 * 100 / 255) + "%");
+        updateShortcutStyleVisibility(style);
     }
     
     /**
@@ -665,14 +677,6 @@ public class SettingsActivity extends AppCompatActivity {
         }
         editor.putString(KEY_BORDER_COLOR, borderColor);
         editor.putInt(KEY_BORDER_ALPHA, seekBorderAlpha.getProgress());
-        
-//        editor.putInt(KEY_SHADOW_WIDTH, seekShadowWidth.getProgress());
-//        String shadowColor = editShadowColor.getText().toString().trim();
-//        if (TextUtils.isEmpty(shadowColor) || !shadowColor.startsWith("#")) {
-//            shadowColor = "#000000";
-//        }
-//        editor.putString(KEY_SHADOW_COLOR, shadowColor);
-//        editor.putInt(KEY_SHADOW_ALPHA, seekShadowAlpha.getProgress());
         
         // 保存关闭按钮显示设置
         editor.putBoolean(KEY_SHOW_CLOSE_BUTTON, switchShowCloseButton.isChecked());
@@ -757,6 +761,10 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putString(KEY_SHORTCUT_BORDER_COLOR, scBorderColor);
         editor.putInt(KEY_SHORTCUT_BORDER_ALPHA, seekShortcutBorderAlpha.getProgress());
         editor.putInt(KEY_SHORTCUT_ICON_SIZE, seekShortcutIconSize.getProgress());
+
+        editor.putInt(KEY_SHORTCUT_STYLE, spinnerShortcutStyle.getSelectedItemPosition());
+        editor.putInt(KEY_SHORTCUT_BLUR_RADIUS, seekShortcutBlurRadius.getProgress());
+        editor.putInt(KEY_SHORTCUT_OVERLAY_ALPHA, seekShortcutOverlayAlpha.getProgress());
         
         // 提交保存
         editor.apply();
@@ -883,6 +891,9 @@ public class SettingsActivity extends AppCompatActivity {
         shortcutIntent.putExtra("shortcut_border_color", scBorderColor);
         shortcutIntent.putExtra("shortcut_border_alpha", seekShortcutBorderAlpha.getProgress() / 100.0f);
         shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
+        shortcutIntent.putExtra("shortcut_style", spinnerShortcutStyle.getSelectedItemPosition());
+        shortcutIntent.putExtra("shortcut_blur_radius", seekShortcutBlurRadius.getProgress());
+        shortcutIntent.putExtra("shortcut_overlay_alpha", seekShortcutOverlayAlpha.getProgress());
         startService(shortcutIntent);
     }
 
@@ -1014,28 +1025,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
-        
-        // 阴影宽度 - 实时更新
-//        seekShadowWidth.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-//            @Override
-//            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-//                textShadowWidth.setText("阴影宽度: " + progress + "dp");
-//                applyCurrentSettings();
-//            }
-//            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-//            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-//        });
-        
-        // 阴影透明度 - 实时更新
-//        seekShadowAlpha.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-//            @Override
-//            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-//                textShadowAlpha.setText("阴影透明度: " + String.format("%.2f", progress / 100.0f));
-//                applyCurrentSettings();
-//            }
-//            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-//            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-//        });
+
         
         // 输入法上移距离 - 实时更新
         seekKeyboardOffset.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -1362,6 +1352,41 @@ public class SettingsActivity extends AppCompatActivity {
                 }
             }
         });
+
+        spinnerShortcutStyle.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                updateShortcutStyleVisibility(position);
+                applyCurrentSettings();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        seekShortcutBlurRadius.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textShortcutBlurRadius.setText("模糊半径: " + progress + "dp");
+                if (fromUser) applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
+        seekShortcutOverlayAlpha.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textShortcutOverlayAlpha.setText("叠加色透明度: " + (progress * 100 / 255) + "%");
+                if (fromUser) applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+    }
+
+    private void updateShortcutStyleVisibility(int style) {
+        boolean show = (style != 0);
+        textShortcutBlurRadius.setVisibility(show ? View.VISIBLE : View.GONE);
+        seekShortcutBlurRadius.setVisibility(show ? View.VISIBLE : View.GONE);
+        textShortcutOverlayAlpha.setVisibility(show ? View.VISIBLE : View.GONE);
+        seekShortcutOverlayAlpha.setVisibility(show ? View.VISIBLE : View.GONE);
     }
     
     /**
@@ -1493,6 +1518,9 @@ public class SettingsActivity extends AppCompatActivity {
         shortcutIntent.putExtra("shortcut_border_color", scBorderColor);
         shortcutIntent.putExtra("shortcut_border_alpha", seekShortcutBorderAlpha.getProgress() / 100.0f);
         shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
+        shortcutIntent.putExtra("shortcut_style", spinnerShortcutStyle.getSelectedItemPosition());
+        shortcutIntent.putExtra("shortcut_blur_radius", seekShortcutBlurRadius.getProgress());
+        shortcutIntent.putExtra("shortcut_overlay_alpha", seekShortcutOverlayAlpha.getProgress());
         startService(shortcutIntent);
     }
     

@@ -14,6 +14,7 @@ import android.graphics.*;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
@@ -68,6 +69,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Random;
 
 import android.app.DownloadManager;
 import android.webkit.URLUtil;
@@ -234,6 +236,12 @@ public class FloatWindowService extends Service {
     private ViewTreeObserver.OnGlobalLayoutListener keyboardLayoutListener;
     private boolean isKeyboardAnimating = false;
     private Runnable keyboardHideDetector = null;
+
+    private int shortcutStyle = 0; // 0=不透明, 1=亚克力, 2=液态玻璃
+    private int shortcutBlurRadius = 20; // dp
+    private int shortcutOverlayAlpha = 180; // 0-255
+    private View shortcutContentContainer;
+    private ContinuousRoundRectDrawable shortcutBackgroundDrawable;
 
     // IME 处理中标志（类级别），可在 cleanupProxyIme 中重置，防止死锁
     private volatile boolean isImeProcessing = false;
@@ -561,10 +569,13 @@ public class FloatWindowService extends Service {
             if (sBorderColor != null) shortcutBorderColor = sBorderColor;
             shortcutBorderAlpha = intent.getFloatExtra("shortcut_border_alpha", shortcutBorderAlpha);
             shortcutIconSize = intent.getIntExtra("shortcut_icon_size", shortcutIconSize);
-
+            shortcutStyle = intent.getIntExtra("shortcut_style", shortcutStyle);
+            shortcutBlurRadius = intent.getIntExtra("shortcut_blur_radius", shortcutBlurRadius);
+            shortcutOverlayAlpha = intent.getIntExtra("shortcut_overlay_alpha", shortcutOverlayAlpha);
 
             // 如果窗口已展开，需要重建
             if (isShortcutWindowExpanded) {
+                updateShortcutWindowStyle();
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override
                     public void run() {
@@ -3579,6 +3590,7 @@ public class FloatWindowService extends Service {
             barLayoutParams.width = requiredWidth;
             barLayoutParams.height = requiredHeight;
 
+
             windowManager.updateViewLayout(barContainer, barLayoutParams);
             Log.d(TAG, "[SHORTCUT_EXPAND_DEBUG] barContainer 全屏: w=" + requiredWidth + " h=" + requiredHeight);
 
@@ -3659,6 +3671,8 @@ public class FloatWindowService extends Service {
                                 cc.setTranslationX(initTranslationX);
                                 cc.setTranslationY(initTranslationY);
                                 cc.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+
+                                updateShortcutWindowStyle();
 
                                 // 背景遮罩先渐入完成，再执行窗口展开动画
                                 if (overlayView != null) {
@@ -3783,7 +3797,7 @@ public class FloatWindowService extends Service {
      * 高度优先以图标行数所占高度为准，超过最大高度时限制高度并启用滑动
      */
     private View createShortcutWindowView() {
-        // rootLayout: 全屏透明
+        // rootLayout: 全屏透明，用于捕获外部点击
         FrameLayout rootLayout = new FrameLayout(this);
         rootLayout.setLayoutParams(new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -3826,7 +3840,7 @@ public class FloatWindowService extends Service {
             }
         });
 
-        // 先创建 GridLayout 并添加快捷方式，以便测量实际需要的高度
+        // ===== 1. 创建 GridLayout 并添加快捷方式 =====
         android.widget.GridLayout gridLayout = new android.widget.GridLayout(this);
         gridLayout.setColumnCount(4);
         gridLayout.setRowCount(android.widget.GridLayout.UNDEFINED);
@@ -3838,7 +3852,7 @@ public class FloatWindowService extends Service {
             gridLayout.addView(cell);
         }
 
-        // 测量 GridLayout 的自然高度
+        // 测量 GridLayout 的自然高度，用于确定窗口实际高度
         int gridWidthMeasure = dpToPx(shortcutWindowWidth);
         gridLayout.measure(
                 View.MeasureSpec.makeMeasureSpec(gridWidthMeasure, View.MeasureSpec.EXACTLY),
@@ -3848,10 +3862,9 @@ public class FloatWindowService extends Service {
         int actualHeight = Math.min(contentHeight, maxHeight);
 
         // 计算调整后的Y位置，使窗口下边缘不随内容行数变化
-        // 当内容高度小于最大高度时，增大topMargin将窗口上移以保持下边缘固定
         int adjustedTopMargin = shortcutWindowPositionY + (maxHeight - actualHeight) / 4;
 
-        // contentContainer: 居中显示快捷方式，高度取实际计算值
+        // ===== 2. 最外层内容容器 =====
         FrameLayout contentContainer = new FrameLayout(this);
         FrameLayout.LayoutParams containerParams = new FrameLayout.LayoutParams(
                 dpToPx(shortcutWindowWidth),
@@ -3862,36 +3875,80 @@ public class FloatWindowService extends Service {
         containerParams.rightMargin = 0;
         containerParams.bottomMargin = -adjustedTopMargin;
         contentContainer.setLayoutParams(containerParams);
+        contentContainer.setClipChildren(false);
 
-        // 背景色
-        int bgColorInt = getWindowBgColor(); // 跟随系统深色模式
+        // ===== 3. 背景层（半透明 + 模糊） =====
+        FrameLayout bgContainer = new FrameLayout(this);
+        FrameLayout.LayoutParams bgParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT);
+        bgContainer.setLayoutParams(bgParams);
 
-        // 使用连续曲率圆角背景
-        ContinuousRoundRectDrawable background = new ContinuousRoundRectDrawable(
-                bgColorInt,
-                dpToPx(shortcutCornerRadius)
-        );
-        contentContainer.setBackground(background);
-        // 去除 setClipToOutline
-        // contentContainer.setClipToOutline(true); // 删除或注释掉
-
-        // 边框（如果有）
-        if (shortcutBorderWidth > 0) {
-            try {
-                int borderColorWithAlpha = parseColorWithAlpha(shortcutBorderColor, shortcutBorderAlpha);
-                background.setStroke(dpToPx(shortcutBorderWidth), borderColorWithAlpha);
-            } catch (Exception e) {
-                Log.e(TAG, "set shortcut border failed", e);
-            }
+        float cornerPx = dpToPx(shortcutCornerRadius);
+        // 背景颜色（半透明或不透明）
+        int bgColor = computeShortcutBgColor();
+//        if (shortcutStyle == 2) {
+//            // 液态玻璃：使用渐变 + 光晕
+//            GradientDrawable glassDrawable = new GradientDrawable(
+//                    GradientDrawable.Orientation.TL_BR,
+//                    new int[] { bgColor, adjustBrightness(bgColor, 0.8f), bgColor }
+//            );
+//            glassDrawable.setGradientType(GradientDrawable.LINEAR_GRADIENT);
+//            glassDrawable.setCornerRadius(dpToPx(shortcutCornerRadius));
+//            // 添加高光线条（通过设置 stroke 或叠加子 View）
+//            bgContainer.setBackground(glassDrawable);
+//        } else if (shortcutStyle == 1) {
+//            // 亚克力：保留 RenderEffect 模糊，但背景色改为带噪声纹理（可选）
+//            bgContainer.setBackgroundColor(bgColor);
+//            applyShortcutBlurEffect(bgContainer, true, shortcutBlurRadius);
+//        } else {
+//            bgContainer.setBackgroundColor(bgColor);
+//        }
+        if (shortcutStyle == 0) {
+            // 不透明或半透明纯色（无效果）
+            bgContainer.setBackgroundColor(bgColor);
+        } else if (shortcutStyle == 1) {
+            // 亚克力风格：半透明底色 + 噪点 + 高光
+            LayerDrawable layers = new LayerDrawable(new Drawable[] {
+                    createBaseGradient(bgColor, cornerPx),
+                    createNoiseDrawable(),
+                    createHighlightDrawable(cornerPx)
+            });
+            bgContainer.setBackground(layers);
+        } else if (shortcutStyle == 2) {
+            // 液态玻璃风格：更通透的底色 + 强高光 + 轻微阴影
+            int glassColor = adjustBrightness(bgColor, 1.2f); // 提亮
+            LayerDrawable layers = new LayerDrawable(new Drawable[] {
+                    createBaseGradient(glassColor, cornerPx),
+                    createHighlightDrawable(cornerPx)
+            });
+            bgContainer.setBackground(layers);
         }
 
-        // GridLayout 高度改为 WRAP_CONTENT，使其自然扩展
+        // 圆角裁剪（与 contentContainer 一致）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            bgContainer.setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View view, Outline outline) {
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dpToPx(shortcutCornerRadius));
+                }
+            });
+            bgContainer.setClipToOutline(true);
+        }
+
+        // 应用模糊效果（仅对背景层）
+        applyShortcutBlurEffect(bgContainer, shortcutStyle != 0, shortcutBlurRadius);
+
+        // 先添加背景层
+        contentContainer.addView(bgContainer);
+
+        // ===== 4. 内容层（GridLayout 包裹 ScrollView） =====
         FrameLayout.LayoutParams gridParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT);
         gridLayout.setLayoutParams(gridParams);
 
-        // 当内容超过最大高度时，包裹在 ScrollView 中实现滑动
+        View contentView;
         if (contentHeight > maxHeight) {
             android.widget.ScrollView scrollView = new android.widget.ScrollView(this);
             scrollView.setLayoutParams(new FrameLayout.LayoutParams(
@@ -3901,14 +3958,149 @@ public class FloatWindowService extends Service {
             scrollView.setVerticalScrollBarEnabled(false);
             scrollView.setClipToOutline(true);
             scrollView.addView(gridLayout);
-            contentContainer.addView(scrollView);
+            contentView = scrollView;
         } else {
-            contentContainer.addView(gridLayout);
+            contentView = gridLayout;
+        }
+        // 内容层透明，不遮挡背景
+        contentView.setBackgroundColor(Color.TRANSPARENT);
+
+        // 添加内容层（在背景之上）
+        contentContainer.addView(contentView);
+
+        // ===== 5. 边框（绘制在 contentContainer 的 Foreground） =====
+        if (shortcutBorderWidth > 0) {
+            try {
+                int borderColorWithAlpha = parseColorWithAlpha(shortcutBorderColor, shortcutBorderAlpha);
+                GradientDrawable borderDrawable = new GradientDrawable();
+                borderDrawable.setShape(GradientDrawable.RECTANGLE);
+                borderDrawable.setCornerRadius(dpToPx(shortcutCornerRadius));
+                borderDrawable.setColor(Color.TRANSPARENT);
+                borderDrawable.setStroke(dpToPx(shortcutBorderWidth), borderColorWithAlpha);
+                contentContainer.setForeground(borderDrawable);
+            } catch (Exception e) {
+                Log.e(TAG, "set shortcut border failed", e);
+            }
         }
 
+        // 保存引用（用于后续样式更新）
+        shortcutContentContainer = contentContainer;
+        // 为了兼容 updateShortcutWindowStyle，我们保存 bgContainer 的引用以便更新
+        // 但由于我们使用 shortcutContentContainer.getChildAt(0) 获取背景层，无需额外存储
+
+        // 将 contentContainer 添加到 rootLayout
         rootLayout.addView(contentContainer);
         return rootLayout;
     }
+
+    /**
+     * 创建渐变底色 Drawable（模拟玻璃底色）
+     * @param baseColor 基础颜色（带透明度）
+     * @param cornerPx 圆角半径（px）
+     * @return 渐变 Drawable
+     */
+    private GradientDrawable createBaseGradient(int baseColor, float cornerPx) {
+        GradientDrawable gd = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR, // 从左上到右下
+                new int[] {
+                        baseColor,
+                        adjustBrightness(baseColor, 0.85f),
+                        baseColor
+                }
+        );
+        gd.setGradientType(GradientDrawable.LINEAR_GRADIENT);
+        gd.setCornerRadius(cornerPx);
+        return gd;
+    }
+
+
+
+    /**
+     * 创建顶部高光条 Drawable（模拟玻璃反光）
+     */
+    private Drawable createHighlightDrawable(float cornerPx) {
+        GradientDrawable highlight = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] {
+                        Color.argb(80, 255, 255, 255), // 顶部白色半透明
+                        Color.argb(0, 255, 255, 255)   // 底部完全透明
+                }
+        );
+        highlight.setCornerRadius(cornerPx);
+        highlight.setGradientType(GradientDrawable.LINEAR_GRADIENT);
+        return highlight;
+    }
+
+    /**
+     * 创建噪点纹理 Drawable（可选，增加质感）
+     */
+    private Drawable createNoiseDrawable() {
+        Bitmap noiseBitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(noiseBitmap);
+        Paint paint = new Paint();
+        Random random = new Random();
+        for (int i = 0; i < 200; i++) {
+            int x = random.nextInt(64);
+            int y = random.nextInt(64);
+            int alpha = random.nextInt(30) + 10;
+            paint.setColor(Color.argb(alpha, 255, 255, 255));
+            canvas.drawRect(x, y, x + 1, y + 1, paint);
+        }
+        BitmapDrawable noiseDrawable = new BitmapDrawable(getResources(), noiseBitmap);
+        noiseDrawable.setTileModeXY(Shader.TileMode.REPEAT, Shader.TileMode.REPEAT);
+        return noiseDrawable;
+    }
+
+    private int adjustBrightness(int color, float factor) {
+        float[] hsv = new float[3];
+        Color.colorToHSV(color, hsv);
+        hsv[2] = Math.min(1.0f, hsv[2] * factor);
+        return Color.HSVToColor(Color.alpha(color), hsv);
+    }
+
+    private void updateShortcutWindowStyle() {
+        if (shortcutContentContainer == null) return;
+        View bgLayer = ((ViewGroup) shortcutContentContainer).getChildAt(0);
+        if (bgLayer != null) {
+            int bgColor = computeShortcutBgColor();
+            if (shortcutStyle == 2) {
+                // 重新生成液态玻璃 Drawable
+                GradientDrawable gd = new GradientDrawable(
+                        GradientDrawable.Orientation.TL_BR,
+                        new int[] { bgColor, adjustBrightness(bgColor, 0.8f), bgColor }
+                );
+                gd.setGradientType(GradientDrawable.LINEAR_GRADIENT);
+                gd.setCornerRadius(dpToPx(shortcutCornerRadius));
+                bgLayer.setBackground(gd);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    bgLayer.setRenderEffect(null); // 清除模糊
+                }
+            } else if (shortcutStyle == 1) {
+                bgLayer.setBackgroundColor(bgColor);
+                applyShortcutBlurEffect(bgLayer, true, shortcutBlurRadius);
+            } else {
+                bgLayer.setBackgroundColor(bgColor);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    bgLayer.setRenderEffect(null);
+                }
+            }
+            bgLayer.invalidate();
+        }
+    }
+
+    private void applyShortcutBlurEffect(View view, boolean enable, int radiusDp) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (enable && radiusDp > 0) {
+                float radiusPx = dpToPx(radiusDp);
+                RenderEffect effect = RenderEffect.createBlurEffect(radiusPx, radiusPx, Shader.TileMode.CLAMP);
+                view.setRenderEffect(effect);
+            } else {
+                view.setRenderEffect(null);
+            }
+        }
+    }
+
+
 
     /**
      * 创建单个快捷方式按钮
@@ -6039,6 +6231,9 @@ public class FloatWindowService extends Service {
             shortcutBorderColor = prefs.getString("shortcut_border_color", shortcutBorderColor);
             shortcutBorderAlpha = prefs.getInt("shortcut_border_alpha", (int) (shortcutBorderAlpha * 100)) / 100.0f;
             shortcutIconSize = prefs.getInt("shortcut_icon_size", shortcutIconSize);
+            shortcutStyle = prefs.getInt("shortcut_style", 0);
+            shortcutBlurRadius = prefs.getInt("shortcut_blur_radius", 20);
+            shortcutOverlayAlpha = prefs.getInt("shortcut_overlay_alpha", 180);
 
             Log.d(TAG, "设置已加载 - 提示条: 宽=" + currentWidth + ", 高=" + currentHeight +
                     ", 圆角=" + currentCornerRadius + ", 透明度=" + currentAlpha +
@@ -6049,6 +6244,16 @@ public class FloatWindowService extends Service {
                     ", 宽=" + pressedBarWidth + "dp, 高=" + pressedBarHeight + "dp, 圆角=" + pressedBarCorner + "dp, 羽化宽度=" + pressedBarFeatherWidth + "dp, Y=" + pressedBarPositionY + "dp");
         } catch (Exception e) {
             Log.e(TAG, "加载设置失败", e);
+        }
+    }
+
+    private int computeShortcutBgColor() {
+        if (shortcutStyle == 0) {
+            return getWindowBgColor();
+        } else {
+            int baseColor = getWindowBgColor();
+            int alpha = Math.min(255, Math.max(0, shortcutOverlayAlpha));
+            return Color.argb(alpha, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor));
         }
     }
 
