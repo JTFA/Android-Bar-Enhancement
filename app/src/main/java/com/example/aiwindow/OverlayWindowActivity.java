@@ -144,6 +144,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private boolean isExpanded = false;
     private boolean isCollapsing = false;
     private BroadcastReceiver restoreBarReceiver;
+    
+    // ─── WebView 状态保持 ───
+    private static WebView sPersistentWebView; // 静态 WebView，跨 Activity 生命周期保持
 
     // ─── 输入法避让相关 ───
     private ViewTreeObserver.OnGlobalLayoutListener keyboardLayoutListener;
@@ -226,9 +229,17 @@ public class OverlayWindowActivity extends AppCompatActivity {
         if (restoreBarReceiver != null) {
             try { unregisterReceiver(restoreBarReceiver); } catch (Exception ignored) {}
         }
-        // 关键修复：不在 onDestroy 中销毁 WebView，以便 Activity 重建时能保留状态
-        // webView.destroy();
-        // webView = null;
+        
+        // 关键修复：从父容器中移除 WebView，但不销毁它，以便下次打开时复用
+        if (webView != null && sPersistentWebView == webView) {
+            android.view.ViewParent parent = webView.getParent();
+            if (parent instanceof ViewGroup) {
+                ((ViewGroup) parent).removeView(webView);
+                Log.d(TAG, "WebView 已从父容器移除，保持状态");
+            }
+        }
+        // 不清空 webView 引用，sPersistentWebView 保持引用
+        
         super.onDestroy();
     }
 
@@ -446,76 +457,96 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
     @SuppressLint("SetJavaScriptEnabled")
     private void addAiContent(FrameLayout container) {
-        // 关键修复：检查是否已有 WebView（Activity 被重建时），如果是则复用
-        boolean isNewWebView = (webView == null);
-        
-        if (isNewWebView) {
-            webView = new WebView(this);
-            webView.setLayoutParams(new FrameLayout.LayoutParams(
+        // 检查是否有持久化的 WebView
+        if (sPersistentWebView == null) {
+            // 首次创建，新建 WebView
+            sPersistentWebView = new WebView(this.getApplicationContext());
+            sPersistentWebView.setLayoutParams(new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
-        }
+            
+            // Activity 中的 WebView 可以正常接收输入法输入，无需 IME 代理
+            WebSettings settings = sPersistentWebView.getSettings();
+            settings.setJavaScriptEnabled(true);
+            settings.setDomStorageEnabled(true);
+            settings.setLoadWithOverviewMode(true);
+            settings.setUseWideViewPort(true);
+            settings.setBuiltInZoomControls(false);
+            settings.setDisplayZoomControls(false);
+            settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+            settings.setMediaPlaybackRequiresUserGesture(false);
+            settings.setAllowFileAccess(true);
+            settings.setAllowContentAccess(true);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+                settings.setAllowFileAccessFromFileURLs(true);
+                settings.setAllowUniversalAccessFromFileURLs(true);
+            }
 
-        // Activity 中的 WebView 可以正常接收输入法输入，无需 IME 代理
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setLoadWithOverviewMode(true);
-        settings.setUseWideViewPort(true);
-        settings.setBuiltInZoomControls(false);
-        settings.setDisplayZoomControls(false);
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(true);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-            settings.setAllowFileAccessFromFileURLs(true);
-            settings.setAllowUniversalAccessFromFileURLs(true);
-        }
-
-        // 深色模式
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (isDarkMode()) {
-                settings.setForceDark(WebSettings.FORCE_DARK_ON);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    settings.setAlgorithmicDarkeningAllowed(true);
+            // 深色模式
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (isDarkMode()) {
+                    settings.setForceDark(WebSettings.FORCE_DARK_ON);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        settings.setAlgorithmicDarkeningAllowed(true);
+                    }
                 }
             }
+
+            // WebChromeClient（权限）
+            sPersistentWebView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public void onPermissionRequest(PermissionRequest request) {
+                    try { request.grant(request.getResources()); } catch (Exception ignored) {}
+                }
+            });
+
+            // WebViewClient
+            sPersistentWebView.setWebViewClient(new WebViewClient() {
+                @Override
+                public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                    super.onPageStarted(view, url, favicon);
+                }
+
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    super.onPageFinished(view, url);
+                    updateBackButtonState();
+                    // 注入 JavaScript 检测输入框聚焦
+                    injectInputFocusScript(view);
+                }
+
+                @Override
+                public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+                    super.doUpdateVisitedHistory(view, url, isReload);
+                    updateBackButtonState();
+                }
+            });
+
+            // Activity 的 WebView 可以使用原生 ActionMode，无需 JS 选中
+            sPersistentWebView.setFocusable(true);
+            sPersistentWebView.setFocusableInTouchMode(true);
+
+            // WebView 背景透明
+            sPersistentWebView.setBackgroundColor(Color.TRANSPARENT);
+            sPersistentWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+            
+            // 添加触摸监听器检测输入框聚焦
+            setupWebViewInputDetection(sPersistentWebView);
+            
+            // 首次加载 URL
+            Log.d(TAG, "首次创建 WebView，加载 URL: " + aiUrl);
+            sPersistentWebView.loadUrl(aiUrl);
+        } else {
+            // 复用已有 WebView
+            Log.d(TAG, "复用已有 WebView，当前 URL: " + sPersistentWebView.getUrl());
+            // 从父容器中移除（如果还在其他容器中）
+            android.view.ViewParent parent = sPersistentWebView.getParent();
+            if (parent instanceof ViewGroup) {
+                ((ViewGroup) parent).removeView(sPersistentWebView);
+            }
         }
-
-        // WebChromeClient（权限）
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onPermissionRequest(PermissionRequest request) {
-                try { request.grant(request.getResources()); } catch (Exception ignored) {}
-            }
-        });
-
-        // WebViewClient
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageStarted(WebView view, String url, Bitmap favicon) {
-                super.onPageStarted(view, url, favicon);
-            }
-
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
-                updateBackButtonState();
-                // 注入 JavaScript 检测输入框聚焦
-                injectInputFocusScript(view);
-            }
-
-            @Override
-            public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
-                super.doUpdateVisitedHistory(view, url, isReload);
-                updateBackButtonState();
-            }
-        });
-
-        // Activity 的 WebView 可以使用原生 ActionMode，无需 JS 选中
-        webView.setFocusable(true);
-        webView.setFocusableInTouchMode(true);
+        
+        webView = sPersistentWebView;
 
         // 设置圆角裁剪（连续曲率 Path）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -535,9 +566,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 }
             });
         }
-        // WebView 背景透明
-        webView.setBackgroundColor(Color.TRANSPARENT);
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         
         // AI 窗口：应用网页透明度设置（仅当样式非不透明时）
         if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
@@ -545,11 +573,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             webView.setAlpha(alpha);
         }
 
-        // 添加触摸监听器检测输入框聚焦
-        setupWebViewInputDetection(webView);
-
         container.addView(webView);
-        webView.loadUrl(aiUrl);
     }
 
     // ─── 快捷方式内容 ───
