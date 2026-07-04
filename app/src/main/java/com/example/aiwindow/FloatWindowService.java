@@ -248,7 +248,7 @@ public class FloatWindowService extends Service {
     // AI 窗口模糊效果设置
     private int aiStyle = 0; // 0=不透明, 1=亚克力, 2=液态玻璃
     private int aiBlurRadius = 25; // dp
-    private int aiOverlayAlpha = 204; // 0-255 (网页透明度)
+    private int aiOverlayAlpha = 204; // 0-255 (背景透明度)
 
     // IME 处理中标志（类级别），可在 cleanupProxyIme 中重置，防止死锁
     private volatile boolean isImeProcessing = false;

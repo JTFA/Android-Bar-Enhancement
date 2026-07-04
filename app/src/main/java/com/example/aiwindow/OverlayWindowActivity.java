@@ -558,7 +558,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 // 不透明样式：白色背景完全不透明
                 return isDarkMode() ? Color.parseColor("#2B2B2B") : Color.WHITE;
             } else {
-                // 亚克力/液态玻璃：使用叠加色透明度（网页透明度）
+                // 亚克力/液态玻璃：使用叠加色透明度（背景透明度）
                 int alpha = Math.min(255, Math.max(0, aiOverlayAlpha));
                 int baseColor = isDarkMode() ? 0xFF2B2B2B : 0xFFFFFFFF;
                 int r = (baseColor >> 16) & 0xFF;
@@ -643,7 +643,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     updateBackButtonState();
                     // 注入 JavaScript 检测输入框聚焦
                     injectInputFocusScript(view);
-                    // 如果是亚克力/液态玻璃模式，注入透明背景 CSS
+                    // 如果是亚克力/液态玻璃模式，注入透明背景 CSS（让网页背景透明，但元素不透明）
                     if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
                         injectTransparentBackground(view);
                     }
@@ -724,10 +724,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
         
         // AI 窗口：应用网页透明度设置（仅当样式非不透明时）
+        // aiOverlayAlpha 控制 contentContainer 背景透明度，而 injectTransparentBackground 让网页背景透明
+        // 这样设置项只影响窗口背景，不影响网页内容（文字、图片等保持100%不透明）
         if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
-            // 不再使用 webView.setAlpha()，而是通过 JS 注入让网页背景透明
-            // 这样只有背景透明，文字、图片等元素保持 100% 不透明
-            Log.d(TAG, "启用亚克力/液态玻璃模式，将通过 JS 注入透明背景");
+            Log.d(TAG, "启用亚克力/液态玻璃模式，背景透明度由 aiOverlayAlpha 控制，网页背景将通过CSS透明化");
         }
         
         // WebView 始终设置为完全透明背景
