@@ -866,6 +866,21 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * 获取系统导航栏高度（像素）
+     * 通过系统资源 ID 获取，适用于有虚拟导航栏或手势导航条的场景
+     *
+     * @return 导航栏高度（px），若不存在则返回 0
+     */
+    private int getNavigationBarHeight() {
+        android.content.res.Resources resources = getResources();
+        int resourceId = resources.getIdentifier("navigation_bar_height", "dimen", "android");
+        if (resourceId > 0) {
+            return resources.getDimensionPixelSize(resourceId);
+        }
+        return 0;
+    }
+
     // ═══════════════════════════════════════════════════════════
     // 展开动画（Choreographer 驱动）
     // ═══════════════════════════════════════════════════════════
@@ -876,7 +891,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         initScaleY = (float) startHeight / targetHeight;
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) contentContainer.getLayoutParams();
         initTranslationX = startX - 2 * lp.leftMargin;
-        initTranslationY = startY - 2 * lp.topMargin;
+        initTranslationY = startY - 2 * lp.topMargin - getNavigationBarHeight()/2;
 
         // 限制最小比例，防止除零
         if (initScaleX <= 0) initScaleX = 0.01f;
