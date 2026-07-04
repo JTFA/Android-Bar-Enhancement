@@ -208,7 +208,7 @@ public class BlurWindowActivity extends Activity {
         final WindowManager.LayoutParams wmParams = (WindowManager.LayoutParams) getWindow().getAttributes();
         final float startWindowAlpha = wmParams.alpha;
         final long startTime = System.currentTimeMillis();
-        final int duration = 300;
+        final int duration = 100;
         
         android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
         handler.post(new Runnable() {
