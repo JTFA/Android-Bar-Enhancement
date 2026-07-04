@@ -647,6 +647,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
                         injectTransparentBackground(view);
                     }
+                    // 注入深色模式 CSS（文字反色，图片不反色）
+                    injectDarkModeCSS(view);
                     // 始终注入自定义 CSS（无论是否透明模式）
                     if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
                         injectCustomCss(view);
@@ -696,6 +698,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
             if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
                 injectTransparentBackground(sPersistentWebView);
             }
+            // 注入深色模式 CSS
+            injectDarkModeCSS(sPersistentWebView);
             // 始终注入自定义 CSS（无论是否透明模式）
             if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
                 injectCustomCss(sPersistentWebView);
@@ -1868,6 +1872,42 @@ public class OverlayWindowActivity extends AppCompatActivity {
             }
         });
         Log.d(TAG, "Injected transparent background CSS with wildcard selector");
+    }
+    
+    /**
+     * 注入 CSS filter 实现深色模式
+     * 使用 filter: invert(0.85) hue-rotate(180deg) 反转页面颜色，
+     * 与硬编码颜色不同，它保留页面原有设计关系，图片双重反转保持正常显示。
+     */
+    private void injectDarkModeCSS(WebView view) {
+        String js;
+        if (isDarkMode()) {
+            // 注入 CSS filter 实现深色模式
+            js = "(function(){" +
+                    "var s=document.getElementById('__dark_mode_filter');" +
+                    "if(!s){" +
+                    "s=document.createElement('style');" +
+                    "s.id='__dark_mode_filter';" +
+                    "s.textContent='html{-webkit-filter:invert(0.85)hue-rotate(180deg);filter:invert(0.85)hue-rotate(180deg);background-color:#111!important}'+" +
+                    "'img,video,canvas,svg,[style*=\"background-image\"]{-webkit-filter:invert(0.85)hue-rotate(180deg);filter:invert(0.85)hue-rotate(180deg)}'+" +
+                    "':root{color-scheme:dark!important}';" +
+                    "var h=document.head;if(h){h.appendChild(s);}else{document.documentElement.appendChild(s);}" +
+                    "}" +
+                    "})()";
+        } else {
+            // 浅色模式：移除之前注入的深色 filter
+            js = "(function(){" +
+                    "var s=document.getElementById('__dark_mode_filter');" +
+                    "if(s){s.parentNode.removeChild(s);}" +
+                    "})()";
+        }
+
+        try {
+            view.evaluateJavascript(js, null);
+            Log.d(TAG, isDarkMode() ? "Dark mode CSS filter injected" : "Dark mode CSS filter removed");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to " + (isDarkMode() ? "inject" : "remove") + " dark mode CSS filter", e);
+        }
     }
     
     /**
