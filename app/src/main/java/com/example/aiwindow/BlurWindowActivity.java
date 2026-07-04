@@ -105,6 +105,8 @@ public class BlurWindowActivity extends Activity {
         wmParams.y = blurY;
         wmParams.width = blurWidth;
         wmParams.height = blurHeight;
+        // 初始透明度为0，等待展开动画到70%时开始渐变
+        wmParams.alpha = 0f;
 
         getWindow().setAttributes(wmParams);
 
@@ -156,6 +158,11 @@ public class BlurWindowActivity extends Activity {
                     params.y = originalY + (int)translationY;
                     getWindow().setAttributes(params);
                     Log.d(TAG, "模糊窗口平移: translationY=" + translationY + ", newY=" + params.y);
+                } else if ("BLUR_WINDOW_FADE_IN".equals(intent.getAction())) {
+                    // 收到渐变显示通知，执行透明度动画（从70%进度开始）
+                    float progress = intent.getFloatExtra("progress", 0.7f);
+                    Log.d(TAG, "收到 BLUR_WINDOW_FADE_IN 广播，progress=" + progress);
+                    fadeInFromProgress(progress);
                 }
             }
         };
@@ -182,7 +189,15 @@ public class BlurWindowActivity extends Activity {
             registerReceiver(sizeUpdateReceiver, translateFilter);
         }
         
-        Log.d(TAG, "已注册模糊窗口大小更新、渐变消失和平移广播接收器");
+        // 额外注册 BLUR_WINDOW_FADE_IN 广播
+        IntentFilter fadeInFilter = new IntentFilter("BLUR_WINDOW_FADE_IN");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(sizeUpdateReceiver, fadeInFilter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(sizeUpdateReceiver, fadeInFilter);
+        }
+        
+        Log.d(TAG, "已注册模糊窗口大小更新、渐变消失、平移和渐变显示广播接收器");
 
         // 窗口级背景模糊（API 31+）：模糊窗口背后那小块桌面内容
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -211,6 +226,50 @@ public class BlurWindowActivity extends Activity {
                 Log.e(TAG, "注销广播接收器失败", e);
             }
         }
+    }
+    
+    /**
+     * 从指定进度开始渐变显示动画
+     * @param startProgress 起始进度（0.0-1.0），通常为0.7表示从70%进度开始
+     */
+    private void fadeInFromProgress(float startProgress) {
+        Log.d(TAG, "fadeInFromProgress: 开始执行，startProgress=" + startProgress);
+        
+        if (root == null) {
+            Log.w(TAG, "fadeInFromProgress: root 为 null，直接返回");
+            return;
+        }
+        
+        // 先显示 View
+        root.setVisibility(View.VISIBLE);
+        
+        // 只使用窗口 alpha 实现渐变（模糊效果由窗口级别控制）
+        final WindowManager.LayoutParams wmParams = (WindowManager.LayoutParams) getWindow().getAttributes();
+        // 从当前 alpha（0）渐变到 1.0
+        final float startAlpha = wmParams.alpha;
+        final long startTime = System.currentTimeMillis();
+        final int duration = 100; // 100ms 完成渐变
+        
+        android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                long elapsed = System.currentTimeMillis() - startTime;
+                float progress = Math.min((float) elapsed / duration, 1.0f);
+                
+                // 同步更新窗口 alpha，从 startAlpha 渐变到 1.0
+                wmParams.alpha = startAlpha + (1.0f - startAlpha) * progress;
+                getWindow().setAttributes(wmParams);
+                
+                if (progress < 1.0f) {
+                    handler.postDelayed(this, 16); // ~60fps
+                } else {
+                    Log.d(TAG, "fadeInFromProgress: 动画完成，alpha=" + wmParams.alpha);
+                }
+            }
+        });
+        
+        Log.d(TAG, "fadeInFromProgress: 窗口渐变动画已启动");
     }
     
     /**

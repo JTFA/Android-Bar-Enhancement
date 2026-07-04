@@ -155,6 +155,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
     
     // ─── WebView 状态保持 ───
     private static WebView sPersistentWebView; // 静态 WebView，跨 Activity 生命周期保持
+    
+    // ─── 模糊窗口渐变显示标志 ───
+    private boolean blurWindowFadeInSent = false; // 标记是否已发送模糊窗口渐变显示广播
 
     // ─── 输入法避让相关 ───
     private ViewTreeObserver.OnGlobalLayoutListener keyboardLayoutListener;
@@ -1235,6 +1238,13 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         webView.setAlpha(targetAlpha * easeOutCubic(alphaProgress));
                     }
                 }
+                
+                // 当动画进度达到70%时，通知模糊窗口开始渐变显示
+                if (progress >= 0.6f && !blurWindowFadeInSent) {
+                    blurWindowFadeInSent = true;
+                    sendBlurWindowFadeInBroadcast(progress);
+                    Log.d(TAG, "展开动画进度达到70%，已发送模糊窗口渐变显示广播");
+                }
 
                 if (progress < 1.0f) {
                     Choreographer.getInstance().postFrameCallback(this);
@@ -1389,6 +1399,22 @@ public class OverlayWindowActivity extends AppCompatActivity {
             Log.d(TAG, "已发送模糊窗口渐变消失广播");
         } catch (Exception e) {
             Log.e(TAG, "发送模糊窗口渐变消失广播失败", e);
+        }
+    }
+    
+    /**
+     * 发送模糊窗口渐变显示广播
+     * @param progress 当前动画进度（0.0-1.0）
+     */
+    private void sendBlurWindowFadeInBroadcast(float progress) {
+        try {
+            Intent intent = new Intent("BLUR_WINDOW_FADE_IN");
+            intent.setPackage(getPackageName());
+            intent.putExtra("progress", progress);
+            sendBroadcast(intent);
+            Log.d(TAG, "已发送模糊窗口渐变显示广播，progress=" + progress);
+        } catch (Exception e) {
+            Log.e(TAG, "发送模糊窗口渐变显示广播失败", e);
         }
     }
     
