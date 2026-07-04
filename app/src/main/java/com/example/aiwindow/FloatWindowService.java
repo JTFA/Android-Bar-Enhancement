@@ -1649,9 +1649,43 @@ public class FloatWindowService extends Service {
         }
     }
 
-    // 原来调用 expandToAiWindow()
-// 现在改为：
+    /**
+     * 启动下层模糊窗口 BlurWindowActivity
+     * 尺寸/位置和 OverlayWindowActivity 的内容区域对齐
+     */
+    private void startBlurWindow(int targetWidth, int targetHeight, int targetPosX, int targetPosY) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            Log.d(TAG, "API < 31，跳过模糊窗口");
+            return;
+        }
+        try {
+            DisplayMetrics dm = new DisplayMetrics();
+            windowManager.getDefaultDisplay().getRealMetrics(dm);
+            int screenWidth = dm.widthPixels;
+            int screenHeight = dm.heightPixels;
+
+            // 计算内容区域在屏幕上的绝对坐标
+            int blurX = (screenWidth - targetWidth) / 2 + targetPosX;
+            int blurY = (screenHeight - targetHeight) / 2 + targetPosY;
+
+            Intent blurIntent = new Intent(this, BlurWindowActivity.class);
+            blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_X, blurX);
+            blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_Y, blurY);
+            blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_WIDTH, targetWidth);
+            blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_HEIGHT, targetHeight);
+            blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_RADIUS, 25);
+            blurIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(blurIntent);
+            Log.d(TAG, "已启动模糊窗口: 位置(" + blurX + "," + blurY + ") 尺寸" + targetWidth + "x" + targetHeight);
+        } catch (Exception e) {
+            Log.e(TAG, "启动模糊窗口失败", e);
+        }
+    }
+
     private void launchAiWindow() {
+        // 先启动下层模糊窗口
+        startBlurWindow(aiWindowWidth, aiWindowHeight, windowPositionX, windowPositionY);
+
         Intent intent = new Intent(this, OverlayWindowActivity.class);
         intent.putExtra(OverlayWindowActivity.EXTRA_WINDOW_TYPE, OverlayWindowActivity.WINDOW_TYPE_AI);
         intent.putExtra(OverlayWindowActivity.EXTRA_START_X, barPositionX);
@@ -1680,14 +1714,19 @@ public class FloatWindowService extends Service {
     }
 
     private void launchShortcutWindow() {
+        // 先启动下层模糊窗口
+        int sTargetWidth = dpToPx(shortcutWindowWidth);
+        int sTargetHeight = dpToPx(shortcutWindowHeight);
+        startBlurWindow(sTargetWidth, sTargetHeight, 0, shortcutWindowPositionY);
+
         Intent intent = new Intent(this, OverlayWindowActivity.class);
         intent.putExtra(OverlayWindowActivity.EXTRA_WINDOW_TYPE, OverlayWindowActivity.WINDOW_TYPE_SHORTCUT);
         intent.putExtra(OverlayWindowActivity.EXTRA_START_X, barPositionX);
         intent.putExtra(OverlayWindowActivity.EXTRA_START_Y, dpToPx(barPositionY));
         intent.putExtra(OverlayWindowActivity.EXTRA_START_WIDTH, currentWidth);
         intent.putExtra(OverlayWindowActivity.EXTRA_START_HEIGHT, dpToPx(currentHeight));
-        intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_WIDTH, dpToPx(shortcutWindowWidth));
-        intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_HEIGHT, dpToPx(shortcutWindowHeight));
+        intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_WIDTH, sTargetWidth);
+        intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_HEIGHT, sTargetHeight);
         intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_POS_X, 0);
         intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_POS_Y, shortcutWindowPositionY);
         intent.putExtra(OverlayWindowActivity.EXTRA_ANIM_DURATION, animationDuration);
@@ -4017,7 +4056,7 @@ public class FloatWindowService extends Service {
             bgContainer.setClipToOutline(true);
         }
 
-        // 应用模糊效果（仅对背景层）
+        // 应用模糊效果（仅对背景层，不影响上层内容清晰度）
         applyShortcutBlurEffect(bgContainer, shortcutStyle != 0, shortcutBlurRadius);
 
         // 先添加背景层
@@ -4066,8 +4105,6 @@ public class FloatWindowService extends Service {
 
         // 保存引用（用于后续样式更新）
         shortcutContentContainer = contentContainer;
-        // 为了兼容 updateShortcutWindowStyle，我们保存 bgContainer 的引用以便更新
-        // 但由于我们使用 shortcutContentContainer.getChildAt(0) 获取背景层，无需额外存储
 
         // 将 contentContainer 添加到 rootLayout
         rootLayout.addView(contentContainer);

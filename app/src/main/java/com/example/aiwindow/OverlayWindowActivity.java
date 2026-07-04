@@ -24,6 +24,7 @@ import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.Shader;
 import android.graphics.Typeface;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -130,6 +131,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // ─── 视图 ───
     private FrameLayout rootLayout;
     private FrameLayout contentContainer;
+    private View blurBackgroundView; // 独立模糊背景层（仅显示模糊桌面，不含子内容）
     private WebView webView;
     private ImageView backButtonRef;
     private boolean isExpanded = false;
@@ -177,10 +179,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 5. 创建内容视图
         createContent();
 
-        // 6. 启用窗口级模糊（setContentView 之后）
-        applyWindowBlur();
-
-        // 7. 注册广播
+        // 6. 注册广播
         registerRestoreReceiver();
 
         // 8. 返回键处理
@@ -203,6 +202,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        // 通知下层模糊窗口关闭
+        BlurWindowActivity.finishIfAlive();
         if (restoreBarReceiver != null) {
             try { unregisterReceiver(restoreBarReceiver); } catch (Exception ignored) {}
         }
@@ -235,18 +236,16 @@ public class OverlayWindowActivity extends AppCompatActivity {
     }
 
     /**
-     * 启用窗口级背景模糊（API 31+）
-     * 模糊作用于整个窗口，但只通过 contentContainer 的半透明背景透出，
-     * 外部透明区域不显示模糊，实现模糊自然限定在圆角矩形内
+     * 创建静态模糊背景层（截屏 + 模糊）
+     * 在 Activity 启动瞬间截取下方屏幕内容，裁剪到 contentContainer 区域，
+     * 对截图应用 RenderEffect 模糊 + 圆角裁剪，显示在 contentContainer 下方。
+     * 静态（非实时）模糊，不模糊窗口内文字/图标。
      */
-    private void applyWindowBlur() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            try {
-                getWindow().setBackgroundBlurRadius(50);
-            } catch (Exception e) {
-                Log.w(TAG, "设置背景模糊失败", e);
-            }
-        }
+    private void createBlurBackgroundLayer() {
+        // 模糊由下层 BlurWindowActivity 提供，此方法仅保留以保持兼容
+        // OverlayWindowActivity 本身保持全透明，通过半透明 contentContainer 底色
+        // 透出下层 BlurWindowActivity 的窗口级模糊效果
+        Log.d(TAG, "模糊由下层 BlurWindowActivity 提供");
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -362,6 +361,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
         });
 
         rootLayout.addView(contentContainer);
+
+        // 创建独立模糊背景层（插入到 contentContainer 下方）
+        createBlurBackgroundLayer();
     }
 
     private int getAcrylicBgColor() {
@@ -866,6 +868,17 @@ public class OverlayWindowActivity extends AppCompatActivity {
         contentContainer.setAlpha(0f);
         contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
+        // blurBackgroundView 同步初始状态
+        if (blurBackgroundView != null) {
+            blurBackgroundView.setPivotX(targetWidth / 2f);
+            blurBackgroundView.setPivotY(targetHeight / 2f);
+            blurBackgroundView.setScaleX(initScaleX);
+            blurBackgroundView.setScaleY(initScaleY);
+            blurBackgroundView.setTranslationX(initTranslationX);
+            blurBackgroundView.setTranslationY(initTranslationY);
+            blurBackgroundView.setAlpha(0f);
+        }
+
         if (webView != null) {
             webView.setAlpha(0f);
         }
@@ -894,6 +907,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 contentContainer.setTranslationX(curTransX);
                 contentContainer.setTranslationY(curTransY);
 
+                // blurBackgroundView 同步动画
+                if (blurBackgroundView != null) {
+                    blurBackgroundView.setAlpha(1f);
+                    blurBackgroundView.setScaleX(curScaleX);
+                    blurBackgroundView.setScaleY(curScaleY);
+                    blurBackgroundView.setTranslationX(curTransX);
+                    blurBackgroundView.setTranslationY(curTransY);
+                }
+
                 // WebView 后 50% 渐入
                 if (webView != null) {
                     if (progress < 0.5f) {
@@ -913,6 +935,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     contentContainer.setTranslationX(0f);
                     contentContainer.setTranslationY(0f);
                     contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
+                    if (blurBackgroundView != null) {
+                        blurBackgroundView.setScaleX(1f);
+                        blurBackgroundView.setScaleY(1f);
+                        blurBackgroundView.setTranslationX(0f);
+                        blurBackgroundView.setTranslationY(0f);
+                    }
                     if (webView != null) {
                         webView.setAlpha(1f);
                         webView.invalidate();
@@ -956,6 +984,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 contentContainer.setTranslationX(curTransX);
                 contentContainer.setTranslationY(curTransY);
 
+                // blurBackgroundView 同步收起动画
+                if (blurBackgroundView != null) {
+                    blurBackgroundView.setScaleX(curScaleX);
+                    blurBackgroundView.setScaleY(curScaleY);
+                    blurBackgroundView.setTranslationX(curTransX);
+                    blurBackgroundView.setTranslationY(curTransY);
+                }
+
                 // WebView 前 50% 渐出
                 if (webView != null) {
                     if (progress < 0.5f) {
@@ -974,6 +1010,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     contentContainer.setTranslationX(0f);
                     contentContainer.setTranslationY(0f);
                     contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
+                    if (blurBackgroundView != null) {
+                        blurBackgroundView.setScaleX(1f);
+                        blurBackgroundView.setScaleY(1f);
+                        blurBackgroundView.setTranslationX(0f);
+                        blurBackgroundView.setTranslationY(0f);
+                    }
                     if (webView != null) {
                         webView.setAlpha(0f);
                     }

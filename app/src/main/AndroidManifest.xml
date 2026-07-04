@@ -102,6 +102,13 @@
             android:label="编辑快捷方式" />
 
         <activity
+            android:name=".BlurWindowActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity="" />
+
+        <activity
             android:name=".OverlayWindowActivity"
             android:theme="@style/Theme.TransparentNoAnimation"
             android:excludeFromRecents="true"
