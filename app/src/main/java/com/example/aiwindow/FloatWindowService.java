@@ -1665,8 +1665,13 @@ public class FloatWindowService extends Service {
             int screenHeight = dm.heightPixels;
 
             // 计算内容区域在屏幕上的绝对坐标
-            int blurX = (screenWidth - targetWidth) / 2 + targetPosX;
-            int blurY = (screenHeight - targetHeight) / 2 + targetPosY;
+            // OverlayWindowActivity 使用 Gravity.CENTER + margin 定位，实际偏移 = 2 * margin
+            // x = centerX + leftMargin - rightMargin = centerX + targetPosX - (-targetPosX) = centerX + 2*targetPosX
+            // y = centerY + topMargin - bottomMargin = centerY + targetPosY - (-targetPosY) = centerY + 2*targetPosY
+            int centerX = (screenWidth - targetWidth) / 2;
+            int centerY = (screenHeight - targetHeight) / 2;
+            int blurX = centerX + 2 * targetPosX;
+            int blurY = centerY + 2 * targetPosY;
 
             Intent blurIntent = new Intent(this, BlurWindowActivity.class);
             blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_X, blurX);
@@ -1714,9 +1719,11 @@ public class FloatWindowService extends Service {
     }
 
     private void launchShortcutWindow() {
-        // 先启动下层模糊窗口
+        // 先计算快捷窗口的实际尺寸（用于启动模糊窗口）
         int sTargetWidth = dpToPx(shortcutWindowWidth);
-        int sTargetHeight = dpToPx(shortcutWindowHeight);
+        // 注意：快捷窗口的高度需要根据实际图标行数动态计算
+        // 这里先传一个估计值（shortcutWindowHeight 是 dp 单位）
+        int sTargetHeight = dpToPx(shortcutWindowHeight);  // 最大高度
         startBlurWindow(sTargetWidth, sTargetHeight, 0, shortcutWindowPositionY);
 
         Intent intent = new Intent(this, OverlayWindowActivity.class);
