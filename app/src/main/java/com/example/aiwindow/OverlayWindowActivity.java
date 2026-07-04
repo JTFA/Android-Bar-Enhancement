@@ -17,10 +17,12 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
+import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -159,7 +161,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         screenWidth = dm.widthPixels;
         screenHeight = dm.heightPixels;
 
-        // 3. 配置窗口（透明、模糊、全屏）
+        // 3. 配置窗口（透明、全屏）
         setupWindow();
 
         // 4. 创建根布局
@@ -169,16 +171,19 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT));
         rootLayout.setBackgroundColor(Color.TRANSPARENT);
         rootLayout.setClipChildren(false);
+        rootLayout.setClickable(true);
         setContentView(rootLayout);
-        applyWindowBlur();
 
         // 5. 创建内容视图
         createContent();
 
-        // 6. 注册广播
+        // 6. 启用窗口级模糊（setContentView 之后）
+        applyWindowBlur();
+
+        // 7. 注册广播
         registerRestoreReceiver();
 
-        // 7. 返回键处理
+        // 8. 返回键处理
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
@@ -192,7 +197,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             }
         });
 
-        // 8. 布局完成后执行展开动画
+        // 9. 布局完成后执行展开动画
         contentContainer.post(this::performExpandAnimation);
     }
 
@@ -230,12 +235,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
     }
 
     /**
-     * 在 setContentView 之后调用，设置背景模糊（API 31+）
+     * 启用窗口级背景模糊（API 31+）
+     * 模糊作用于整个窗口，但只通过 contentContainer 的半透明背景透出，
+     * 外部透明区域不显示模糊，实现模糊自然限定在圆角矩形内
      */
     private void applyWindowBlur() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
-                getWindow().setBackgroundBlurRadius(80);
+                getWindow().setBackgroundBlurRadius(50);
             } catch (Exception e) {
                 Log.w(TAG, "设置背景模糊失败", e);
             }
@@ -296,8 +303,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
         contentContainer.setClipChildren(false);
 
         // 设置连续圆角 + 半透明亚克力背景
+        final float density = getResources().getDisplayMetrics().density;
         AcrylicRoundRectDrawable bg = new AcrylicRoundRectDrawable(
-                getAcrylicBgColor(), dpToPx(cornerRadius));
+                getAcrylicBgColor(), dpToPx(cornerRadius), density);
         if (borderWidth > 0) {
             int borderColorWithAlpha = parseColorWithAlpha(borderColor, borderAlpha);
             bg.setStroke(dpToPx(borderWidth), borderColorWithAlpha);
@@ -317,20 +325,26 @@ public class OverlayWindowActivity extends AppCompatActivity {
             // 快捷窗口无按钮，点击外部关闭
         }
 
-        // 外部点击检测
+        // 外部点击检测 - 使用 contentContainer 实际布局位置判断
         rootLayout.setOnTouchListener(new View.OnTouchListener() {
             private boolean mOutsideDown = false;
             @Override
             public boolean onTouch(View v, MotionEvent event) {
+                if (!closeOnOutside) return false;
+                float x = event.getX();
+                float y = event.getY();
+                // 检测触摸是否在 contentContainer 内部
+                boolean onContent = x >= contentContainer.getLeft()
+                        && x <= contentContainer.getRight()
+                        && y >= contentContainer.getTop()
+                        && y <= contentContainer.getBottom();
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN: {
-                        Rect rect = new Rect();
-                        contentContainer.getGlobalVisibleRect(rect);
-                        mOutsideDown = !rect.contains((int) event.getRawX(), (int) event.getRawY());
+                        mOutsideDown = !onContent;
                         return mOutsideDown;
                     }
                     case MotionEvent.ACTION_UP: {
-                        if (mOutsideDown && closeOnOutside) {
+                        if (mOutsideDown) {
                             mOutsideDown = false;
                             collapseAndFinish();
                             return true;
@@ -1060,17 +1074,27 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private static class AcrylicRoundRectDrawable extends Drawable {
         private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint glassPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path path = new Path();
         private float cornerRadius;
         private int width, height;
+        private final float density;
 
-        AcrylicRoundRectDrawable(int fillColor, float cornerRadiusPx) {
+        AcrylicRoundRectDrawable(int fillColor, float cornerRadiusPx, float density) {
+            this.density = density;
             fillPaint.setColor(fillColor);
             fillPaint.setStyle(Paint.Style.FILL);
             strokePaint.setStyle(Paint.Style.STROKE);
             strokePaint.setColor(Color.TRANSPARENT);
             strokePaint.setStrokeWidth(0);
             this.cornerRadius = cornerRadiusPx;
+            int glassHeight = Math.round(80 * density);
+            // 玻璃反射渐变：顶部淡淡高光到底部透明
+            LinearGradient glassGradient = new LinearGradient(0, 0, 0, glassHeight,
+                    Color.argb(35, 255, 255, 255),
+                    Color.argb(0, 255, 255, 255),
+                    Shader.TileMode.CLAMP);
+            glassPaint.setShader(glassGradient);
         }
 
         void setStroke(int widthPx, int color) {
@@ -1113,7 +1137,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         @Override
         public void draw(@NonNull Canvas canvas) {
+            // 1. 填充半透明底色（透出模糊背景）
             canvas.drawPath(path, fillPaint);
+            // 2. 绘制玻璃反射高光
+            canvas.save();
+            canvas.clipPath(path);
+            canvas.drawRect(0, 0, width, Math.min(height, Math.round(80 * density)), glassPaint);
+            canvas.restore();
+            // 3. 绘制边框
             if (strokePaint.getStrokeWidth() > 0
                     && strokePaint.getColor() != Color.TRANSPARENT) {
                 canvas.drawPath(path, strokePaint);
@@ -1124,12 +1155,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
         public void setAlpha(int alpha) {
             fillPaint.setAlpha(alpha);
             strokePaint.setAlpha(alpha);
+            glassPaint.setAlpha(alpha);
         }
 
         @Override
         public void setColorFilter(ColorFilter colorFilter) {
             fillPaint.setColorFilter(colorFilter);
             strokePaint.setColorFilter(colorFilter);
+            glassPaint.setColorFilter(colorFilter);
         }
 
         @Override
