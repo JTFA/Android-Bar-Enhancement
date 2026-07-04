@@ -1,6 +1,10 @@
 package com.example.aiwindow;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
@@ -23,6 +27,9 @@ public class BlurWindowActivity extends Activity {
 
     private static final String TAG = "BlurWindowActivity";
     private static WeakReference<BlurWindowActivity> sInstance;
+    
+    private BroadcastReceiver sizeUpdateReceiver;
+    private int originalBlurRadius = 25;
 
     public static final String EXTRA_BLUR_X = "blur_x";
     public static final String EXTRA_BLUR_Y = "blur_y";
@@ -52,7 +59,7 @@ public class BlurWindowActivity extends Activity {
         int blurY = getIntent().getIntExtra(EXTRA_BLUR_Y, 0);
         int blurWidth = getIntent().getIntExtra(EXTRA_BLUR_WIDTH, 200);
         int blurHeight = getIntent().getIntExtra(EXTRA_BLUR_HEIGHT, 200);
-        int blurRadius = getIntent().getIntExtra(EXTRA_BLUR_RADIUS, 50);
+        originalBlurRadius = getIntent().getIntExtra(EXTRA_BLUR_RADIUS, 50);
 
         // 配置窗口：全透明、不聚焦、不触摸（让上层 OverlayWindowActivity 接收触摸）
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
@@ -80,11 +87,40 @@ public class BlurWindowActivity extends Activity {
         wmParams.height = blurHeight;
         getWindow().setAttributes(wmParams);
         Log.d(TAG, "窗口位置: (" + blurX + "," + blurY + ") 尺寸: " + blurWidth + "x" + blurHeight);
+        
+        // 注册广播接收器，用于接收快捷窗口的模糊窗口大小更新
+        sizeUpdateReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if ("UPDATE_BLUR_WINDOW_SIZE".equals(intent.getAction())) {
+                    int newBlurX = intent.getIntExtra("blur_x", 0);
+                    int newBlurY = intent.getIntExtra("blur_y", 0);
+                    int newBlurWidth = intent.getIntExtra("blur_width", 200);
+                    int newBlurHeight = intent.getIntExtra("blur_height", 400);
+                    
+                    WindowManager.LayoutParams params = getWindow().getAttributes();
+                    params.x = newBlurX;
+                    params.y = newBlurY;
+                    params.width = newBlurWidth;
+                    params.height = newBlurHeight;
+                    getWindow().setAttributes(params);
+                    Log.d(TAG, "模糊窗口已更新: (" + newBlurX + "," + newBlurY + ") " 
+                            + newBlurWidth + "x" + newBlurHeight);
+                }
+            }
+        };
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(sizeUpdateReceiver, new IntentFilter("UPDATE_BLUR_WINDOW_SIZE"), Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(sizeUpdateReceiver, new IntentFilter("UPDATE_BLUR_WINDOW_SIZE"));
+        }
+        Log.d(TAG, "已注册模糊窗口大小更新广播接收器");
 
         // 窗口级背景模糊（API 31+）：模糊窗口背后那小块桌面内容
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            getWindow().setBackgroundBlurRadius(blurRadius);
-            Log.d(TAG, "已启用窗口背景模糊，半径: " + blurRadius);
+            getWindow().setBackgroundBlurRadius(originalBlurRadius);
+            Log.d(TAG, "已启用窗口背景模糊，半径: " + originalBlurRadius);
         } else {
             Log.d(TAG, "API < 31，跳过模糊");
         }
@@ -98,6 +134,15 @@ public class BlurWindowActivity extends Activity {
         Log.d(TAG, "onDestroy");
         if (sInstance != null && sInstance.get() == this) {
             sInstance = null;
+        }
+        // 注销广播接收器
+        if (sizeUpdateReceiver != null) {
+            try {
+                unregisterReceiver(sizeUpdateReceiver);
+                Log.d(TAG, "已注销模糊窗口大小更新广播接收器");
+            } catch (Exception e) {
+                Log.e(TAG, "注销广播接收器失败", e);
+            }
         }
     }
 }

@@ -519,6 +519,28 @@ public class OverlayWindowActivity extends AppCompatActivity {
         containerLp.topMargin = adjustedTopMargin;
         containerLp.bottomMargin = -adjustedTopMargin;
         container.setLayoutParams(containerLp);
+        
+        // 【关键修复】快捷窗口需要根据实际高度和位置更新模糊窗口
+        // 等待布局完成后获取真实坐标
+        container.post(() -> {
+            int blurX = container.getLeft();
+            int blurY = container.getTop();
+            int blurWidth = container.getWidth();
+            int blurHeight = container.getHeight();
+            try {
+                Intent updateIntent = new Intent("UPDATE_BLUR_WINDOW_SIZE");
+                updateIntent.setPackage(getPackageName());
+                updateIntent.putExtra("blur_x", blurX);
+                updateIntent.putExtra("blur_y", blurY);
+                updateIntent.putExtra("blur_width", blurWidth);
+                updateIntent.putExtra("blur_height", blurHeight);
+                sendBroadcast(updateIntent);
+                Log.d(TAG, "已发送快捷窗口模糊更新: x=" + blurX + " y=" + blurY
+                        + " w=" + blurWidth + " h=" + blurHeight);
+            } catch (Exception e) {
+                Log.e(TAG, "发送模糊窗口更新失败", e);
+            }
+        });
 
         // 添加内容视图（超出最大高度时允许滚动）
         View contentView;
