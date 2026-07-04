@@ -469,31 +469,44 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         int gridPadding = dpToPx(12);
 
-        // 创建 GridLayout（与服务实现一致）
+        // 创建 GridLayout
         GridLayout grid = new GridLayout(this);
         grid.setColumnCount(4);
         grid.setRowCount(GridLayout.UNDEFINED);
         grid.setPadding(gridPadding, gridPadding, gridPadding, gridPadding);
 
         // 计算均匀分布的单元格宽度
-        int cellWidth = (container.getLayoutParams().width - gridPadding * 2) / 4;
+        int containerWidth = container.getLayoutParams().width;
+        int maxHeight = container.getLayoutParams().height;
+        int cellWidth = (containerWidth - gridPadding * 2) / 4;
 
         for (final ShortcutItem item : shortcuts) {
             View cell = createShortcutCell(item, cellWidth);
             grid.addView(cell);
         }
 
-        // 测量 grid 自然高度，限制最大高度
-        int containerWidth = container.getLayoutParams().width;
-        int maxHeight = container.getLayoutParams().height;
+        // 测量 grid 自然高度
         grid.measure(
                 View.MeasureSpec.makeMeasureSpec(containerWidth - gridPadding * 2, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         int contentHeight = grid.getMeasuredHeight();
-        int actualHeight = Math.min(contentHeight, maxHeight - dpToPx(8));
+        // actualHeight 以内容高度为准，超过 maxHeight 则锁定 maxHeight
+        int actualHeight = Math.min(contentHeight + gridPadding, maxHeight);
 
+        // 调整容器高度为实际内容高度
+        FrameLayout.LayoutParams containerLp = (FrameLayout.LayoutParams) container.getLayoutParams();
+        int originalTargetHeight = this.targetHeight;
+        this.targetHeight = actualHeight;
+        containerLp.height = actualHeight;
+        // 底部位置固定：当高度缩小时，将窗口向上偏移 (originalMaxHeight - actualHeight) / 4
+        int adjustedTopMargin = targetPosY + (originalTargetHeight - actualHeight) / 4;
+        containerLp.topMargin = adjustedTopMargin;
+        containerLp.bottomMargin = -adjustedTopMargin;
+        container.setLayoutParams(containerLp);
+
+        // 添加内容视图（超出最大高度时允许滚动）
         View contentView;
-        if (contentHeight > maxHeight - dpToPx(8)) {
+        if (contentHeight + gridPadding > maxHeight) {
             ScrollView scrollView = new ScrollView(this);
             scrollView.setLayoutParams(new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -505,7 +518,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         } else {
             FrameLayout.LayoutParams gridParams = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    actualHeight);
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
             gridParams.gravity = Gravity.CENTER;
             grid.setLayoutParams(gridParams);
             contentView = grid;
