@@ -1021,6 +1021,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 float curTransX = endTransX * eased;
                 float curTransY = endTransY * eased;
 
+                // 末尾淡出：最后 20% 进度渐隐
+                float containerAlpha = 1.0f;
+                if (progress > 0.7f) {
+                    float fadeProgress = (progress - 0.7f) / 0.3f;
+                    containerAlpha = 1.0f - easeOutCubic(fadeProgress);
+                }
+                contentContainer.setAlpha(containerAlpha);
+
                 contentContainer.setScaleX(curScaleX);
                 contentContainer.setScaleY(curScaleY);
                 contentContainer.setTranslationX(curTransX);
@@ -1028,6 +1036,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
                 // blurBackgroundView 同步收起动画
                 if (blurBackgroundView != null) {
+                    blurBackgroundView.setAlpha(containerAlpha);
                     blurBackgroundView.setScaleX(curScaleX);
                     blurBackgroundView.setScaleY(curScaleY);
                     blurBackgroundView.setTranslationX(curTransX);
@@ -1057,12 +1066,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     contentContainer.setScaleY(1f);
                     contentContainer.setTranslationX(0f);
                     contentContainer.setTranslationY(0f);
+                    contentContainer.setAlpha(1f);
                     contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
                     if (blurBackgroundView != null) {
                         blurBackgroundView.setScaleX(1f);
                         blurBackgroundView.setScaleY(1f);
                         blurBackgroundView.setTranslationX(0f);
                         blurBackgroundView.setTranslationY(0f);
+                        blurBackgroundView.setAlpha(1f);
                     }
                     if (webView != null) {
                         webView.setAlpha(0f);
