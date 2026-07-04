@@ -21,6 +21,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -28,6 +29,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Choreographer;
@@ -49,7 +51,10 @@ import android.webkit.PermissionRequest;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
@@ -305,12 +310,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 根据类型添加内容
         if (windowType == WINDOW_TYPE_AI) {
             addAiContent(contentContainer);
+            // AI 窗口添加关闭/刷新/返回按钮
+            addButtons(contentContainer);
         } else {
             addShortcutContent(contentContainer);
+            // 快捷窗口无按钮，点击外部关闭
         }
-
-        // 添加按钮
-        addButtons(contentContainer);
 
         // 外部点击检测
         rootLayout.setOnTouchListener(new View.OnTouchListener() {
@@ -463,138 +468,205 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
 
         int gridPadding = dpToPx(12);
-        int iconSizePx = dpToPx(52 * shortcutIconSize / 100);
-        int textSizeSp = 11;
 
+        // 创建 GridLayout（与服务实现一致）
         GridLayout grid = new GridLayout(this);
         grid.setColumnCount(4);
         grid.setRowCount(GridLayout.UNDEFINED);
         grid.setPadding(gridPadding, gridPadding, gridPadding, gridPadding);
 
+        // 计算均匀分布的单元格宽度
+        int cellWidth = (container.getLayoutParams().width - gridPadding * 2) / 4;
+
         for (final ShortcutItem item : shortcuts) {
-            View cell = createShortcutCell(item, iconSizePx, textSizeSp);
+            View cell = createShortcutCell(item, cellWidth);
             grid.addView(cell);
         }
 
         // 测量 grid 自然高度，限制最大高度
-        int gridWidthSpec = targetWidth - gridPadding * 2;
+        int containerWidth = container.getLayoutParams().width;
+        int maxHeight = container.getLayoutParams().height;
         grid.measure(
-                View.MeasureSpec.makeMeasureSpec(gridWidthSpec, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(containerWidth - gridPadding * 2, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int gridHeight = grid.getMeasuredHeight();
-        int maxContentHeight = targetHeight - dpToPx(16);
-        if (gridHeight > maxContentHeight) {
-            gridHeight = maxContentHeight;
+        int contentHeight = grid.getMeasuredHeight();
+        int actualHeight = Math.min(contentHeight, maxHeight - dpToPx(8));
+
+        View contentView;
+        if (contentHeight > maxHeight - dpToPx(8)) {
+            ScrollView scrollView = new ScrollView(this);
+            scrollView.setLayoutParams(new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
+            scrollView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+            scrollView.setVerticalScrollBarEnabled(false);
+            scrollView.addView(grid);
+            contentView = scrollView;
+        } else {
+            FrameLayout.LayoutParams gridParams = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    actualHeight);
+            gridParams.gravity = Gravity.CENTER;
+            grid.setLayoutParams(gridParams);
+            contentView = grid;
         }
-
-        FrameLayout.LayoutParams gridParams = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                gridHeight);
-        gridParams.gravity = Gravity.CENTER;
-        grid.setLayoutParams(gridParams);
-
-        container.addView(grid);
+        contentView.setBackgroundColor(Color.TRANSPARENT);
+        container.addView(contentView);
     }
 
-    private View createShortcutCell(final ShortcutItem item, int iconSize, int textSizeSp) {
-        FrameLayout cell = new FrameLayout(this);
-        int cellPadding = dpToPx(8);
-        int cellSize = iconSize + cellPadding * 2 + dpToPx(24); // icon + padding + text
+    private View createShortcutCell(final ShortcutItem item, int cellWidth) {
+        LinearLayout cell = new LinearLayout(this);
+        cell.setOrientation(LinearLayout.VERTICAL);
+        cell.setGravity(Gravity.CENTER);
+        cell.setPadding(dpToPx(4), dpToPx(8), dpToPx(4), dpToPx(8));
+
         GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
-        lp.width = cellSize;
+        lp.width = cellWidth;
         lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
         cell.setLayoutParams(lp);
-        cell.setPadding(cellPadding, cellPadding, cellPadding, cellPadding);
+        cell.setClickable(true);
+        cell.setFocusable(true);
 
-        // 图标
-        ImageView iconView = new ImageView(this);
-        FrameLayout.LayoutParams iconLp = new FrameLayout.LayoutParams(iconSize, iconSize);
-        iconLp.gravity = Gravity.CENTER_HORIZONTAL;
-        iconView.setLayoutParams(iconLp);
-        iconView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        // 图标大小缩放因子
+        final float iconScale = Math.max(0.5f, Math.min(1.5f, shortcutIconSize / 100.0f));
+        int iconSize = Math.round((cellWidth - dpToPx(16)) * iconScale);
 
-        // 加载图标
         if ("image".equals(item.getIconType())) {
-            if (item.getIconPath() != null && !item.getIconPath().isEmpty()) {
-                Bitmap bmp = BitmapFactory.decodeFile(item.getIconPath());
-                if (bmp != null) {
-                    iconView.setImageBitmap(bmp);
-                } else {
-                    setPlaceholderIcon(iconView, item.getId());
-                }
-            } else {
-                setPlaceholderIcon(iconView, item.getId());
-            }
-        } else {
-            // emoji 图标
-            iconView.setImageDrawable(null);
-            iconView.setBackgroundColor(Color.TRANSPARENT);
+            // ===== 图片图标（圆角矩形） =====
+            FrameLayout iconContainer = new FrameLayout(this);
+            FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(iconSize, iconSize);
+            iconParams.gravity = Gravity.CENTER;
+            iconContainer.setLayoutParams(iconParams);
 
-            // 用 TextView 显示 emoji
-            TextView emojiText = new TextView(this);
-            emojiText.setText(item.getIcon() != null ? item.getIcon() : "⚡");
-            emojiText.setTextSize(dpToPx(iconSize) / 3f);
-            emojiText.setGravity(Gravity.CENTER);
-            FrameLayout.LayoutParams etLp = new FrameLayout.LayoutParams(iconSize, iconSize);
-            etLp.gravity = Gravity.CENTER_HORIZONTAL;
-            emojiText.setLayoutParams(etLp);
-            cell.addView(emojiText);
+            // 圆角矩形背景
+            GradientDrawable iconBg = new GradientDrawable();
+            iconBg.setShape(GradientDrawable.RECTANGLE);
+            iconBg.setCornerRadius(dpToPx(12));
+
+            // 尝试加载自定义图片
+            Bitmap bitmap = loadShortcutIcon(item);
+            if (bitmap != null) {
+                ImageView imageView = new ImageView(this);
+                imageView.setLayoutParams(new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT));
+                imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                imageView.setImageBitmap(bitmap);
+                iconContainer.setBackground(iconBg);
+                iconContainer.setClipToOutline(true);
+                iconContainer.addView(imageView);
+            } else {
+                // 无自定义图片 → 显示纯色占位图
+                iconBg.setColor(getShortcutPlaceholderColor(item.getId()));
+                iconContainer.setBackground(iconBg);
+                iconContainer.setClipToOutline(true);
+
+                // 在占位图上显示名称首字符
+                TextView placeholderText = new TextView(this);
+                placeholderText.setLayoutParams(new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT));
+                placeholderText.setGravity(Gravity.CENTER);
+                String firstChar = item.getName() != null && item.getName().length() > 0
+                        ? item.getName().substring(0, 1) : "?";
+                placeholderText.setText(firstChar);
+                placeholderText.setTextColor(0xFFFFFFFF);
+                placeholderText.setTextSize(Math.round(22 * iconScale));
+                iconContainer.addView(placeholderText);
+            }
+            cell.addView(iconContainer);
+        } else {
+            // ===== Emoji 图标 =====
+            TextView iconView = new TextView(this);
+            iconView.setText(item.getIcon() != null ? item.getIcon() : "⚡");
+            iconView.setTextSize(Math.round(30 * iconScale));
+            iconView.setGravity(Gravity.CENTER);
+            iconView.setPadding(0, 0, 0, dpToPx(4));
+            cell.addView(iconView);
         }
-        cell.addView(iconView);
 
         // 名称
         TextView nameView = new TextView(this);
-        FrameLayout.LayoutParams nameLp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-        nameLp.gravity = Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM;
-        nameLp.topMargin = dpToPx(4);
-        nameView.setLayoutParams(nameLp);
-        nameView.setText(item.getName() != null ? item.getName() : "");
-        nameView.setTextSize(textSizeSp);
-        nameView.setTextColor(Color.parseColor("#DDDDDD"));
-        nameView.setMaxLines(1);
+        nameView.setText(item.getName());
+        nameView.setTextSize(Math.max(10, Math.round(11 * iconScale)));
+        nameView.setTypeface(Typeface.DEFAULT_BOLD);
+        if (isDarkMode()) {
+            nameView.setTextColor(0xFFCCCCCC);
+        } else {
+            nameView.setTextColor(0xFF222222);
+        }
+        nameView.setGravity(Gravity.CENTER);
         nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        nameView.setMaxLines(1);
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        nameParams.topMargin = dpToPx(4);
+        nameView.setLayoutParams(nameParams);
         cell.addView(nameView);
 
-        // 点击事件
+        // 点击事件（使用 ShortcutLaunchConfig 启动，与服务行为一致）
         cell.setOnClickListener(v -> {
-            // 启动对应应用
-            if (item.getPackageName() != null && !item.getPackageName().isEmpty()
-                    && item.getClassName() != null && !item.getClassName().isEmpty()) {
-                try {
-                    Intent launchIntent = new Intent(Intent.ACTION_MAIN);
-                    launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-                    launchIntent.setClassName(item.getPackageName(), item.getClassName());
-                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-                    startActivity(launchIntent);
-                } catch (Exception e) {
-                    Log.e(TAG, "启动快捷方式失败: " + item.getName(), e);
-                }
-            }
+            launchShortcutApp(item);
             collapseAndFinish();
+        });
+
+        // 按压缩放动画
+        cell.setOnTouchListener(new View.OnTouchListener() {
+            private boolean mIsPressed = false;
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        mIsPressed = true;
+                        v.animate().cancel();
+                        v.animate().scaleX(0.90f).scaleY(0.90f)
+                                .setDuration(120)
+                                .setInterpolator(new DecelerateInterpolator())
+                                .start();
+                        return false;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        if (mIsPressed) {
+                            mIsPressed = false;
+                            v.animate().scaleX(1.0f).scaleY(1.0f)
+                                    .setDuration(250)
+                                    .setInterpolator(new OvershootInterpolator(2.0f))
+                                    .start();
+                        }
+                        return false;
+                }
+                return false;
+            }
         });
 
         return cell;
     }
 
-    private void setPlaceholderIcon(ImageView imageView, String id) {
-        int color = getPlaceholderColor(id);
-        GradientDrawable d = new GradientDrawable();
-        d.setShape(GradientDrawable.OVAL);
-        d.setColor(color);
-        imageView.setBackground(d);
-        imageView.setImageDrawable(null);
-        imageView.setScaleType(ImageView.ScaleType.CENTER);
+    private Bitmap loadShortcutIcon(ShortcutItem item) {
+        if (item == null || item.getIconPath() == null || item.getIconPath().isEmpty()) {
+            return null;
+        }
+        try {
+            File file = new File(item.getIconPath());
+            if (file.exists()) {
+                return BitmapFactory.decodeFile(file.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "加载快捷方式图标失败: " + item.getName(), e);
+        }
+        return null;
     }
 
-    private int getPlaceholderColor(String id) {
+    private int getShortcutPlaceholderColor(String id) {
         if (id == null) return 0xFF1677FF;
         switch (id) {
-            case "alipay_scan": return 0xFF1677FF;
-            case "alipay_pay": return 0xFF1677FF;
-            case "wechat_scan": return 0xFF07C160;
-            case "wechat_pay": return 0xFF07C160;
+            case "alipay_scan":
+            case "alipay_pay":
+                return 0xFF1677FF;
+            case "wechat_scan":
+            case "wechat_pay":
+                return 0xFF07C160;
             default: {
                 int hash = id.hashCode();
                 int r = (hash & 0xFF) % 200 + 55;
@@ -603,6 +675,48 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 return 0xFF000000 | (r << 16) | (g << 8) | b;
             }
         }
+    }
+
+    private void launchShortcutApp(ShortcutItem item) {
+        if (item == null || TextUtils.isEmpty(item.getPackageName())
+                || TextUtils.isEmpty(item.getClassName())) {
+            Log.d(TAG, "快捷方式包名或类名为空");
+            return;
+        }
+        try {
+            Intent launchIntent = createShortcutLaunchIntent(item);
+            startActivity(launchIntent);
+            Log.d(TAG, "已打开快捷方式: " + item.getName());
+        } catch (android.content.ActivityNotFoundException e) {
+            Log.w(TAG, "URL Scheme 打开失败，尝试打开应用主界面: " + item.getName(), e);
+            try {
+                Intent fallbackIntent = new Intent(Intent.ACTION_MAIN);
+                fallbackIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+                fallbackIntent.setPackage(item.getPackageName());
+                fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(fallbackIntent);
+                Log.d(TAG, "已打开应用主界面: " + item.getName());
+            } catch (Exception e2) {
+                Log.e(TAG, "打开快捷方式失败: " + item.getName(), e2);
+                Toast.makeText(this, "打开 " + item.getName() + " 失败", Toast.LENGTH_SHORT).show();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "打开快捷方式失败: " + item.getName(), e);
+            Toast.makeText(this, "打开 " + item.getName() + " 失败", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private Intent createShortcutLaunchIntent(ShortcutItem item) {
+        SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
+        ShortcutLaunchConfig config = ShortcutLaunchConfig.load(prefs, item.getId());
+        Intent configIntent = config.buildLaunchIntent();
+        if (configIntent != null) {
+            return configIntent;
+        }
+        Intent intent = new Intent();
+        intent.setClassName(item.getPackageName(), item.getClassName());
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        return intent;
     }
 
     private ArrayList<ShortcutItem> loadShortcutList() {
