@@ -138,6 +138,10 @@ public class BlurWindowActivity extends Activity {
                     
                     Log.d(TAG, "模糊窗口已更新: (" + newBlurX + "," + newBlurY + ") " 
                             + newBlurWidth + "x" + newBlurHeight);
+                } else if ("BLUR_WINDOW_FADE_OUT".equals(intent.getAction())) {
+                    // 收到渐变消失通知，执行透明度动画
+                    Log.d(TAG, "收到 BLUR_WINDOW_FADE_OUT 广播，开始渐变消失");
+                    fadeOutAndFinish();
                 }
             }
         };
@@ -147,7 +151,16 @@ public class BlurWindowActivity extends Activity {
         } else {
             registerReceiver(sizeUpdateReceiver, new IntentFilter("UPDATE_BLUR_WINDOW_SIZE"));
         }
-        Log.d(TAG, "已注册模糊窗口大小更新广播接收器");
+        
+        // 额外注册 BLUR_WINDOW_FADE_OUT 广播
+        IntentFilter fadeOutFilter = new IntentFilter("BLUR_WINDOW_FADE_OUT");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(sizeUpdateReceiver, fadeOutFilter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(sizeUpdateReceiver, fadeOutFilter);
+        }
+        
+        Log.d(TAG, "已注册模糊窗口大小更新和渐变消失广播接收器");
 
         // 窗口级背景模糊（API 31+）：模糊窗口背后那小块桌面内容
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -176,5 +189,50 @@ public class BlurWindowActivity extends Activity {
                 Log.e(TAG, "注销广播接收器失败", e);
             }
         }
+    }
+    
+    /**
+     * 渐变消失动画
+     */
+    private void fadeOutAndFinish() {
+        Log.d(TAG, "fadeoutAndFinish: 开始执行，root=" + (root != null ? "存在" : "null"));
+        
+        if (root == null) {
+            Log.w(TAG, "fadeoutAndFinish: root 为 null，直接 finish");
+            finish();
+            overridePendingTransition(0, 0);
+            return;
+        }
+        
+        // 同时使用 View alpha 和窗口 alpha 实现渐变
+        final WindowManager.LayoutParams wmParams = (WindowManager.LayoutParams) getWindow().getAttributes();
+        final float startWindowAlpha = wmParams.alpha;
+        final long startTime = System.currentTimeMillis();
+        final int duration = 300;
+        
+        android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                long elapsed = System.currentTimeMillis() - startTime;
+                float progress = Math.min((float) elapsed / duration, 1.0f);
+                
+                // 同步更新 View alpha 和窗口 alpha
+                float currentAlpha = 1f - progress;
+                root.setAlpha(currentAlpha);
+                wmParams.alpha = startWindowAlpha * currentAlpha;
+                getWindow().setAttributes(wmParams);
+                
+                if (progress < 1.0f) {
+                    handler.postDelayed(this, 16); // ~60fps
+                } else {
+                    Log.d(TAG, "fadeoutAndFinish: 动画完成，准备 finish");
+                    finish();
+                    overridePendingTransition(0, 0);
+                }
+            }
+        });
+        
+        Log.d(TAG, "fadeoutAndFinish: 窗口+View 渐变动画已启动");
     }
 }

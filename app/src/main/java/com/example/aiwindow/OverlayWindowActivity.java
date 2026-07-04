@@ -981,6 +981,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
         if (!isExpanded || isCollapsing) return;
         isCollapsing = true;
         isExpanded = false;
+        
+        // 通知模糊窗口开始渐变消失（在动画开始前立即发送）
+        sendBlurWindowFadeOutBroadcast();
+        Log.d(TAG, "collapseAndFinish: 已发送模糊窗口渐变消失广播");
 
         final float endScaleX = initScaleX;
         final float endScaleY = initScaleY;
@@ -1060,6 +1064,17 @@ public class OverlayWindowActivity extends AppCompatActivity {
             intent.setPackage(getPackageName());
             sendBroadcast(intent);
         } catch (Exception ignored) {}
+    }
+    
+    private void sendBlurWindowFadeOutBroadcast() {
+        try {
+            Intent intent = new Intent("BLUR_WINDOW_FADE_OUT");
+            intent.setPackage(getPackageName());
+            sendBroadcast(intent);
+            Log.d(TAG, "已发送模糊窗口渐变消失广播");
+        } catch (Exception e) {
+            Log.e(TAG, "发送模糊窗口渐变消失广播失败", e);
+        }
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
