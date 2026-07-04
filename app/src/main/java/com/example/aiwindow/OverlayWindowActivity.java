@@ -136,11 +136,17 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // AI 窗口模糊效果
     private int aiStyle, aiBlurRadius, aiOverlayAlpha;
     private String customCss; // 自定义 CSS
+    
+    // 背景遮罩设置
+    private int overlayAlpha = 50; // 遮罩透明度 (0-100)
+    private String overlayColor = "#000000"; // 遮罩颜色
+    private int overlayAnimDuration = 100; // 遮罩渐变时长 (ms)
 
     // ─── 视图 ───
     private FrameLayout rootLayout;
     private FrameLayout contentContainer;
     private View blurBackgroundView; // 独立模糊背景层（仅显示模糊桌面，不含子内容）
+    private View overlayView; // 背景遮罩视图
     private WebView webView;
     private ImageView backButtonRef;
     private boolean isExpanded = false;
@@ -278,6 +284,78 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 透出下层 BlurWindowActivity 的窗口级模糊效果
         Log.d(TAG, "模糊由下层 BlurWindowActivity 提供");
     }
+    
+    /**
+     * 创建背景遮罩视图
+     * 在窗口外部设置半透明遮罩，避免窗口与外部元素混淆
+     */
+    private void createBackgroundOverlay() {
+        try {
+            overlayView = new View(this);
+            
+            // 解析颜色
+            int colorInt = Color.parseColor(overlayColor);
+            int r = (colorInt >> 16) & 0xFF;
+            int g = (colorInt >> 8) & 0xFF;
+            int b = colorInt & 0xFF;
+            // overlayAlpha 是 0-100，转换为 0-255
+            int alpha = (int)(overlayAlpha * 255.0 / 100.0);
+            
+            // 设置背景色
+            overlayView.setBackgroundColor(Color.argb(alpha, r, g, b));
+            
+            // 设置 LayoutParams 覆盖整个屏幕
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+            );
+            overlayView.setLayoutParams(params);
+            
+            // 初始状态为完全透明
+            overlayView.setAlpha(0f);
+            
+            // 插入到 rootLayout 最底层（contentContainer 之前）
+            rootLayout.addView(overlayView, 0);
+            
+            Log.d(TAG, "背景遮罩已创建 - 颜色: " + overlayColor + ", 透明度: " + overlayAlpha + "%");
+        } catch (Exception e) {
+            Log.e(TAG, "创建背景遮罩失败", e);
+            overlayView = null;
+        }
+    }
+    
+    /**
+     * 显示背景遮罩（渐变动画）
+     */
+    private void showBackgroundOverlay() {
+        if (overlayView == null) return;
+        
+        // 计算目标透明度
+        float targetAlpha = overlayAlpha / 100.0f;
+        
+        // 执行渐变动画
+        overlayView.animate()
+                .alpha(targetAlpha)
+                .setDuration(overlayAnimDuration)
+                .start();
+        
+        Log.d(TAG, "背景遮罩开始显示 - 目标透明度: " + targetAlpha);
+    }
+    
+    /**
+     * 隐藏背景遮罩（渐变动画）
+     */
+    private void hideBackgroundOverlay() {
+        if (overlayView == null) return;
+        
+        // 执行渐变动画到完全透明
+        overlayView.animate()
+                .alpha(0f)
+                .setDuration(overlayAnimDuration)
+                .start();
+        
+        Log.d(TAG, "背景遮罩开始隐藏");
+    }
 
     // ═══════════════════════════════════════════════════════════
     // 解析 Intent
@@ -323,6 +401,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             shortcutBlurRadius = intent.getIntExtra(EXTRA_SHORTCUT_BLUR_RADIUS, 20);
             shortcutOverlayAlpha = intent.getIntExtra(EXTRA_SHORTCUT_OVERLAY_ALPHA, 180);
         }
+        
+        // 加载背景遮罩设置（所有窗口类型）
+        loadOverlaySettings();
     }
     
     /**
@@ -351,6 +432,21 @@ public class OverlayWindowActivity extends AppCompatActivity {
             }
         } catch (Exception e) {
             Log.e(TAG, "加载自定义 CSS 失败", e);
+        }
+    }
+    
+    /**
+     * 从 SharedPreferences 加载背景遮罩设置
+     */
+    private void loadOverlaySettings() {
+        try {
+            SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
+            overlayAlpha = prefs.getInt("overlay_alpha", 50);
+            overlayColor = prefs.getString("overlay_color", "#000000");
+            overlayAnimDuration = prefs.getInt("overlay_anim_duration", 100);
+            Log.d(TAG, "已加载遮罩设置 - 透明度: " + overlayAlpha + "%, 颜色: " + overlayColor + ", 动画时长: " + overlayAnimDuration + "ms");
+        } catch (Exception e) {
+            Log.e(TAG, "加载遮罩设置失败", e);
         }
     }
 
@@ -433,6 +529,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         // 创建独立模糊背景层（插入到 contentContainer 下方）
         createBlurBackgroundLayer();
+        
+        // 创建背景遮罩（插入到 rootLayout 最底层）
+        createBackgroundOverlay();
     }
 
     private int getAcrylicBgColor() {
@@ -1155,6 +1254,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         }
                         webView.invalidate();
                     }
+                    
+                    // 展开完成后显示背景遮罩
+                    showBackgroundOverlay();
                 }
             }
         });
@@ -1168,6 +1270,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
         if (!isExpanded || isCollapsing) return;
         isCollapsing = true;
         isExpanded = false;
+        
+        // 先隐藏背景遮罩
+        hideBackgroundOverlay();
         
         // 通知模糊窗口开始渐变消失（在动画开始前立即发送）
         sendBlurWindowFadeOutBroadcast();
