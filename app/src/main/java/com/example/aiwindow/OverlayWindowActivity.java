@@ -52,6 +52,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.PermissionRequest;
+import android.webkit.ValueCallback;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
 import android.widget.ImageView;
@@ -511,11 +512,19 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 }
             }
 
-            // WebChromeClient（权限）
+            // WebChromeClient（权限 + 文件选择）
             sPersistentWebView.setWebChromeClient(new WebChromeClient() {
                 @Override
                 public void onPermissionRequest(PermissionRequest request) {
                     try { request.grant(request.getResources()); } catch (Exception ignored) {}
+                }
+                
+                // Android 5.0+ 文件选择
+                @Override
+                public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
+                                                 FileChooserParams fileChooserParams) {
+                    openFileChooser(filePathCallback);
+                    return true;
                 }
             });
 
@@ -552,6 +561,16 @@ public class OverlayWindowActivity extends AppCompatActivity {
             // Activity 的 WebView 可以使用原生 ActionMode，无需 JS 选中
             sPersistentWebView.setFocusable(true);
             sPersistentWebView.setFocusableInTouchMode(true);
+            
+            // 添加 JavaScript 桥接接口用于 blob 下载
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+                sPersistentWebView.addJavascriptInterface(new Object() {
+                    @android.webkit.JavascriptInterface
+                    public void downloadFile(String base64Data, String mimetype) {
+                        runOnUiThread(() -> saveBlobFile(base64Data, mimetype));
+                    }
+                }, "AndroidBridge");
+            }
 
             // WebView 背景透明
             sPersistentWebView.setBackgroundColor(Color.TRANSPARENT);
@@ -611,6 +630,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
         
         // WebView 始终设置为完全透明背景
         webView.setBackgroundColor(Color.TRANSPARENT);
+        
+        // 设置下载监听器
+        setupDownloadListener();
 
         container.addView(webView);
     }
@@ -1737,5 +1759,188 @@ public class OverlayWindowActivity extends AppCompatActivity {
             }
         });
         Log.d(TAG, "Injected custom CSS");
+    }
+    
+    /**
+     * 设置下载监听器
+     */
+    private void setupDownloadListener() {
+        webView.setDownloadListener(new android.webkit.DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String userAgent, String contentDisposition,
+                                        String mimetype, long contentLength) {
+                try {
+                    // 检查是否为 blob URL
+                    if (url.startsWith("blob:")) {
+                        // 对于 blob URL，需要通过 JavaScript 下载
+                        downloadBlobUrl(url, contentDisposition, mimetype);
+                        return;
+                    }
+                    
+                    // 普通 HTTP/HTTPS URL 使用 DownloadManager
+                    android.net.Uri uri = android.net.Uri.parse(url);
+                    String fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimetype);
+                    
+                    android.app.DownloadManager.Request request = new android.app.DownloadManager.Request(uri);
+                    request.setTitle(fileName);
+                    request.setDescription("正在下载..." );
+                    request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                    request.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, fileName);
+                    request.setAllowedOverMetered(true);
+                    request.setAllowedOverRoaming(true);
+                    
+                    // 设置 MIME 类型
+                    if (mimetype != null && !mimetype.isEmpty()) {
+                        request.setMimeType(mimetype);
+                    }
+                    
+                    // 添加 HTTP headers
+                    request.addRequestHeader("User-Agent", userAgent);
+                    
+                    android.app.DownloadManager downloadManager = 
+                        (android.app.DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                    downloadManager.enqueue(request);
+                    
+                    Toast.makeText(OverlayWindowActivity.this, 
+                        "开始下载: " + fileName, Toast.LENGTH_SHORT).show();
+                    Log.d(TAG, "Download started: " + fileName);
+                } catch (Exception e) {
+                    Log.e(TAG, "Download failed", e);
+                    Toast.makeText(OverlayWindowActivity.this, 
+                        "下载失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                }
+            }
+        });
+    }
+    
+    /**
+     * 下载 blob URL 文件
+     */
+    private void downloadBlobUrl(String blobUrl, String contentDisposition, String mimetype) {
+        String js = "(function() {" +
+                "fetch('" + blobUrl.replace("'", "\\'") + "')" +
+                ".then(response => response.blob())" +
+                ".then(blob => {" +
+                "  const reader = new FileReader();" +
+                "  reader.onload = function() {" +
+                "    const base64Data = reader.result.split(',')[1];" +
+                "    AndroidBridge.downloadFile(base64Data, '" + mimetype + "');" +
+                "  };" +
+                "  reader.readAsDataURL(blob);" +
+                "})" +
+                ".catch(err => console.error('Blob download failed:', err));" +
+                "})()";
+        
+        webView.evaluateJavascript(js, null);
+        Toast.makeText(this, "正在处理 Blob 下载...", Toast.LENGTH_SHORT).show();
+    }
+    
+    /**
+     * 保存 blob 数据为文件
+     */
+    private void saveBlobFile(String base64Data, String mimetype) {
+        try {
+            // 解码 base64 数据
+            byte[] data = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
+            
+            // 根据 MIME 类型生成文件名
+            String extension = getFileExtensionFromMimeType(mimetype);
+            String fileName = "blob_" + System.currentTimeMillis() + "." + extension;
+            
+            // 保存到 Downloads 目录
+            java.io.File downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
+                    android.os.Environment.DIRECTORY_DOWNLOADS);
+            java.io.File file = new java.io.File(downloadsDir, fileName);
+            
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(file);
+            fos.write(data);
+            fos.close();
+            
+            // 更新媒体库
+            android.media.MediaScannerConnection.scanFile(
+                    this, new String[]{file.getAbsolutePath()}, null, null);
+            
+            runOnUiThread(() -> {
+                Toast.makeText(this, "已保存: " + fileName, Toast.LENGTH_LONG).show();
+            });
+            
+            Log.d(TAG, "Blob file saved: " + fileName);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to save blob file", e);
+            runOnUiThread(() -> {
+                Toast.makeText(this, "保存失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            });
+        }
+    }
+    
+    /**
+     * 根据 MIME 类型获取文件扩展名
+     */
+    private String getFileExtensionFromMimeType(String mimetype) {
+        if (mimetype == null || mimetype.isEmpty()) return "bin";
+        
+        switch (mimetype.toLowerCase()) {
+            case "application/pdf": return "pdf";
+            case "image/jpeg": return "jpg";
+            case "image/png": return "png";
+            case "image/gif": return "gif";
+            case "text/plain": return "txt";
+            case "application/zip": return "zip";
+            case "application/x-zip-compressed": return "zip";
+            case "application/msword": return "doc";
+            case "application/vnd.openxmlformats-officedocument.wordprocessingml.document": return "docx";
+            case "application/vnd.ms-excel": return "xls";
+            case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": return "xlsx";
+            default:
+                // 从 MIME 类型中提取扩展名
+                String[] parts = mimetype.split("/");
+                return parts.length > 1 ? parts[1] : "bin";
+        }
+    }
+    
+    // 文件选择回调
+    private ValueCallback<Uri[]> mFilePathCallback;
+    private static final int FILE_CHOOSER_REQUEST_CODE = 1001;
+    
+    /**
+     * 打开文件选择器
+     */
+    private void openFileChooser(ValueCallback<Uri[]> filePathCallback) {
+        mFilePathCallback = filePathCallback;
+        
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        
+        try {
+            startActivityForResult(Intent.createChooser(intent, "选择文件"), FILE_CHOOSER_REQUEST_CODE);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to open file chooser", e);
+            if (mFilePathCallback != null) {
+                mFilePathCallback.onReceiveValue(null);
+                mFilePathCallback = null;
+            }
+        }
+    }
+    
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        
+        if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
+            if (mFilePathCallback == null) return;
+            
+            Uri[] results = null;
+            
+            if (resultCode == RESULT_OK && data != null) {
+                String dataString = data.getDataString();
+                if (dataString != null) {
+                    results = new Uri[]{Uri.parse(dataString)};
+                }
+            }
+            
+            mFilePathCallback.onReceiveValue(results);
+            mFilePathCallback = null;
+        }
     }
 }
