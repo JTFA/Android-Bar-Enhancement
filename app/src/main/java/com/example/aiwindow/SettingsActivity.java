@@ -127,6 +127,10 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_SHORTCUT_BLUR_RADIUS = "shortcut_blur_radius";
     private static final String KEY_SHORTCUT_OVERLAY_ALPHA = "shortcut_overlay_alpha";
     
+    // AI 窗口模糊效果设置
+    private static final String KEY_AI_BLUR_RADIUS = "ai_blur_radius";
+    private static final String KEY_AI_OVERLAY_ALPHA = "ai_overlay_alpha";
+    
     // AI URL 输入框
     private EditText editAiUrl;
     
@@ -224,6 +228,10 @@ public class SettingsActivity extends AppCompatActivity {
     private Spinner spinnerShortcutStyle;
     private SeekBar seekShortcutBlurRadius, seekShortcutOverlayAlpha;
     private TextView textShortcutBlurRadius, textShortcutOverlayAlpha;
+    
+    // AI 窗口模糊效果控件
+    private SeekBar seekAiBlurRadius, seekAiOverlayAlpha;
+    private TextView textAiBlurRadius, textAiOverlayAlpha;
     
     // 保存按钮
     private Button btnSave;
@@ -379,6 +387,12 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutOverlayAlpha = findViewById(R.id.seek_shortcut_overlay_alpha);
         textShortcutBlurRadius = findViewById(R.id.text_shortcut_blur_radius);
         textShortcutOverlayAlpha = findViewById(R.id.text_shortcut_overlay_alpha);
+        
+        // AI 窗口模糊效果控件
+        seekAiBlurRadius = findViewById(R.id.seek_ai_blur_radius);
+        seekAiOverlayAlpha = findViewById(R.id.seek_ai_overlay_alpha);
+        textAiBlurRadius = findViewById(R.id.text_ai_blur_radius);
+        textAiOverlayAlpha = findViewById(R.id.text_ai_overlay_alpha);
         
         // 保存按钮
         btnSave = findViewById(R.id.btn_save_apply);
@@ -619,6 +633,14 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutOverlayAlpha.setProgress(overlayAlpha1);
         textShortcutOverlayAlpha.setText("叠加色透明度: " + (overlayAlpha1 * 100 / 255) + "%");
         updateShortcutStyleVisibility(style);
+        
+        // 加载 AI 窗口模糊效果设置
+        int aiBlurRadius = preferences.getInt(KEY_AI_BLUR_RADIUS, 25);
+        seekAiBlurRadius.setProgress(aiBlurRadius);
+        textAiBlurRadius.setText("AI 窗口模糊半径: " + aiBlurRadius + "dp");
+        int aiOverlayAlpha = preferences.getInt(KEY_AI_OVERLAY_ALPHA, 204);
+        seekAiOverlayAlpha.setProgress(aiOverlayAlpha);
+        textAiOverlayAlpha.setText("网页透明度: " + (aiOverlayAlpha * 100 / 255) + "%");
     }
     
     /**
@@ -766,6 +788,10 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putInt(KEY_SHORTCUT_BLUR_RADIUS, seekShortcutBlurRadius.getProgress());
         editor.putInt(KEY_SHORTCUT_OVERLAY_ALPHA, seekShortcutOverlayAlpha.getProgress());
         
+        // 保存 AI 窗口模糊效果设置
+        editor.putInt(KEY_AI_BLUR_RADIUS, seekAiBlurRadius.getProgress());
+        editor.putInt(KEY_AI_OVERLAY_ALPHA, seekAiOverlayAlpha.getProgress());
+        
         // 提交保存
         editor.apply();
         
@@ -895,6 +921,13 @@ public class SettingsActivity extends AppCompatActivity {
         shortcutIntent.putExtra("shortcut_blur_radius", seekShortcutBlurRadius.getProgress());
         shortcutIntent.putExtra("shortcut_overlay_alpha", seekShortcutOverlayAlpha.getProgress());
         startService(shortcutIntent);
+        
+        // 更新 AI 窗口模糊效果设置
+        Intent aiBlurIntent = new Intent(this, FloatWindowService.class);
+        aiBlurIntent.setAction("UPDATE_AI_BLUR_SETTINGS");
+        aiBlurIntent.putExtra("ai_blur_radius", seekAiBlurRadius.getProgress());
+        aiBlurIntent.putExtra("ai_overlay_alpha", seekAiOverlayAlpha.getProgress());
+        startService(aiBlurIntent);
     }
 
     /**
@@ -1374,6 +1407,25 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutOverlayAlpha.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutOverlayAlpha.setText("叠加色透明度: " + (progress * 100 / 255) + "%");
+                if (fromUser) applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        
+        // AI 窗口模糊效果监听器
+        seekAiBlurRadius.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textAiBlurRadius.setText("AI 窗口模糊半径: " + progress + "dp");
+                if (fromUser) applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
+        seekAiOverlayAlpha.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textAiOverlayAlpha.setText("网页透明度: " + (progress * 100 / 255) + "%");
                 if (fromUser) applyCurrentSettings();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}

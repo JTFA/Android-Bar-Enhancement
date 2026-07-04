@@ -244,6 +244,10 @@ public class FloatWindowService extends Service {
     private int shortcutOverlayAlpha = 180; // 0-255
     private View shortcutContentContainer;
     private ContinuousRoundRectDrawable shortcutBackgroundDrawable;
+    
+    // AI 窗口模糊效果设置
+    private int aiBlurRadius = 25; // dp
+    private int aiOverlayAlpha = 204; // 0-255 (网页透明度)
 
     // IME 处理中标志（类级别），可在 cleanupProxyIme 中重置，防止死锁
     private volatile boolean isImeProcessing = false;
@@ -610,6 +614,12 @@ public class FloatWindowService extends Service {
         else if (intent != null && "UPDATE_AI_URL".equals(intent.getAction())) {
             String aiUrl = intent.getStringExtra("ai_url");
             updateAiUrl(aiUrl);
+        }
+        // 处理 AI 窗口模糊效果设置更新
+        else if (intent != null && "UPDATE_AI_BLUR_SETTINGS".equals(intent.getAction())) {
+            aiBlurRadius = intent.getIntExtra("ai_blur_radius", aiBlurRadius);
+            aiOverlayAlpha = intent.getIntExtra("ai_overlay_alpha", aiOverlayAlpha);
+            Log.d(TAG, "AI 窗口模糊效果已更新: blurRadius=" + aiBlurRadius + ", overlayAlpha=" + aiOverlayAlpha);
         }
         // 处理单击打开应用设置更新
         else if (intent != null && "UPDATE_CLICK_APP".equals(intent.getAction())) {
@@ -1654,6 +1664,10 @@ public class FloatWindowService extends Service {
      * 尺寸/位置和 OverlayWindowActivity 的内容区域对齐
      */
     private void startBlurWindow(int targetWidth, int targetHeight, int targetPosX, int targetPosY, float cornerRadiusDp) {
+        startBlurWindow(targetWidth, targetHeight, targetPosX, targetPosY, cornerRadiusDp, 25);
+    }
+    
+    private void startBlurWindow(int targetWidth, int targetHeight, int targetPosX, int targetPosY, float cornerRadiusDp, int blurRadius) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             Log.d(TAG, "API < 31，跳过模糊窗口");
             return;
@@ -1678,7 +1692,7 @@ public class FloatWindowService extends Service {
             blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_Y, blurY);
             blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_WIDTH, targetWidth);
             blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_HEIGHT, targetHeight);
-            blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_RADIUS, 25);
+            blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_RADIUS, blurRadius);
             blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_CORNER_RADIUS, dpToPx((int) cornerRadiusDp));
             blurIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(blurIntent);
@@ -1689,8 +1703,8 @@ public class FloatWindowService extends Service {
     }
 
     private void launchAiWindow() {
-        // 先启动下层模糊窗口
-        startBlurWindow(aiWindowWidth, aiWindowHeight, windowPositionX, windowPositionY, cornerRadius);
+        // AI 窗口始终启动模糊窗口
+        startBlurWindow(aiWindowWidth, aiWindowHeight, windowPositionX, windowPositionY, cornerRadius, aiBlurRadius);
 
         Intent intent = new Intent(this, OverlayWindowActivity.class);
         intent.putExtra(OverlayWindowActivity.EXTRA_WINDOW_TYPE, OverlayWindowActivity.WINDOW_TYPE_AI);
@@ -1713,6 +1727,8 @@ public class FloatWindowService extends Service {
         intent.putExtra(OverlayWindowActivity.EXTRA_CLOSE_ON_OUTSIDE, closeOnOutsideClick);
         intent.putExtra(OverlayWindowActivity.EXTRA_BACK_PRIORITIZE_WEBVIEW, backPrioritizeWebview);
         intent.putExtra(OverlayWindowActivity.EXTRA_AI_URL, currentAiUrl);
+        intent.putExtra(OverlayWindowActivity.EXTRA_AI_BLUR_RADIUS, aiBlurRadius);
+        intent.putExtra(OverlayWindowActivity.EXTRA_AI_OVERLAY_ALPHA, aiOverlayAlpha);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent);
         // 隐藏底部提示条（透明度设为0）
@@ -1720,12 +1736,14 @@ public class FloatWindowService extends Service {
     }
 
     private void launchShortcutWindow() {
-        // 先计算快捷窗口的实际尺寸（用于启动模糊窗口）
+        // 根据背景样式决定是否启动模糊窗口
         int sTargetWidth = dpToPx(shortcutWindowWidth);
-        // 注意：快捷窗口的高度需要根据实际图标行数动态计算
-        // 这里先传一个估计值（shortcutWindowHeight 是 dp 单位）
         int sTargetHeight = dpToPx(shortcutWindowHeight);  // 最大高度
-        startBlurWindow(sTargetWidth, sTargetHeight, 0, shortcutWindowPositionY, shortcutCornerRadius);
+        
+        // 样式=0（不透明）时不启动模糊窗口
+        if (shortcutStyle != 0) {
+            startBlurWindow(sTargetWidth, sTargetHeight, 0, shortcutWindowPositionY, shortcutCornerRadius, shortcutBlurRadius);
+        }
 
         Intent intent = new Intent(this, OverlayWindowActivity.class);
         intent.putExtra(OverlayWindowActivity.EXTRA_WINDOW_TYPE, OverlayWindowActivity.WINDOW_TYPE_SHORTCUT);
@@ -6360,6 +6378,10 @@ public class FloatWindowService extends Service {
             shortcutStyle = prefs.getInt("shortcut_style", 0);
             shortcutBlurRadius = prefs.getInt("shortcut_blur_radius", 20);
             shortcutOverlayAlpha = prefs.getInt("shortcut_overlay_alpha", 180);
+            
+            // 加载 AI 窗口模糊效果设置
+            aiBlurRadius = prefs.getInt("ai_blur_radius", 25);
+            aiOverlayAlpha = prefs.getInt("ai_overlay_alpha", 204);
 
             Log.d(TAG, "设置已加载 - 提示条: 宽=" + currentWidth + ", 高=" + currentHeight +
                     ", 圆角=" + currentCornerRadius + ", 透明度=" + currentAlpha +

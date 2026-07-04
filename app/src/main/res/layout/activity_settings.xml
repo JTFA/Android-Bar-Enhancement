@@ -1025,7 +1025,7 @@
             android:id="@+id/seek_shortcut_blur_radius"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="50"
+            android:max="100"
             android:progress="20"
             android:layout_marginBottom="16dp"
             android:visibility="gone" />
@@ -1049,6 +1049,60 @@
             android:progress="180"
             android:layout_marginBottom="16dp"
             android:visibility="gone" />
+
+        <!-- 分隔线 -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#DDDDDD"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="16dp" />
+
+        <!-- ===== AI 窗口模糊效果设置 ===== -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="AI 窗口模糊效果"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:layout_marginBottom="16dp" />
+
+        <!-- AI 窗口模糊半径 -->
+        <TextView
+            android:id="@+id/text_ai_blur_radius"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="AI 窗口模糊半径: 25dp"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <SeekBar
+            android:id="@+id/seek_ai_blur_radius"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progress="25"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 网页透明度 -->
+        <TextView
+            android:id="@+id/text_ai_overlay_alpha"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="网页透明度: 80%"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <SeekBar
+            android:id="@+id/seek_ai_overlay_alpha"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="255"
+            android:progress="204"
+            android:layout_marginBottom="24dp" />
 
 
         <!-- 图标大小 -->
