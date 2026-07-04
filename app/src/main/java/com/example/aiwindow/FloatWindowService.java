@@ -246,6 +246,7 @@ public class FloatWindowService extends Service {
     private ContinuousRoundRectDrawable shortcutBackgroundDrawable;
     
     // AI 窗口模糊效果设置
+    private int aiStyle = 0; // 0=不透明, 1=亚克力, 2=液态玻璃
     private int aiBlurRadius = 25; // dp
     private int aiOverlayAlpha = 204; // 0-255 (网页透明度)
 
@@ -617,9 +618,16 @@ public class FloatWindowService extends Service {
         }
         // 处理 AI 窗口模糊效果设置更新
         else if (intent != null && "UPDATE_AI_BLUR_SETTINGS".equals(intent.getAction())) {
+            aiStyle = intent.getIntExtra("ai_style", aiStyle);
             aiBlurRadius = intent.getIntExtra("ai_blur_radius", aiBlurRadius);
             aiOverlayAlpha = intent.getIntExtra("ai_overlay_alpha", aiOverlayAlpha);
-            Log.d(TAG, "AI 窗口模糊效果已更新: blurRadius=" + aiBlurRadius + ", overlayAlpha=" + aiOverlayAlpha);
+            
+            // 当样式为不透明时，强制网页透明度为 100%
+            if (aiStyle == 0) {
+                aiOverlayAlpha = 255;
+            }
+            
+            Log.d(TAG, "AI 窗口模糊效果已更新: style=" + aiStyle + ", blurRadius=" + aiBlurRadius + ", overlayAlpha=" + aiOverlayAlpha);
         }
         // 处理单击打开应用设置更新
         else if (intent != null && "UPDATE_CLICK_APP".equals(intent.getAction())) {
@@ -1703,8 +1711,10 @@ public class FloatWindowService extends Service {
     }
 
     private void launchAiWindow() {
-        // AI 窗口始终启动模糊窗口
-        startBlurWindow(aiWindowWidth, aiWindowHeight, windowPositionX, windowPositionY, cornerRadius, aiBlurRadius);
+        // 根据背景样式决定是否启动模糊窗口
+        if (aiStyle != 0) {
+            startBlurWindow(aiWindowWidth, aiWindowHeight, windowPositionX, windowPositionY, cornerRadius, aiBlurRadius);
+        }
 
         Intent intent = new Intent(this, OverlayWindowActivity.class);
         intent.putExtra(OverlayWindowActivity.EXTRA_WINDOW_TYPE, OverlayWindowActivity.WINDOW_TYPE_AI);
@@ -1727,6 +1737,7 @@ public class FloatWindowService extends Service {
         intent.putExtra(OverlayWindowActivity.EXTRA_CLOSE_ON_OUTSIDE, closeOnOutsideClick);
         intent.putExtra(OverlayWindowActivity.EXTRA_BACK_PRIORITIZE_WEBVIEW, backPrioritizeWebview);
         intent.putExtra(OverlayWindowActivity.EXTRA_AI_URL, currentAiUrl);
+        intent.putExtra(OverlayWindowActivity.EXTRA_AI_STYLE, aiStyle);
         intent.putExtra(OverlayWindowActivity.EXTRA_AI_BLUR_RADIUS, aiBlurRadius);
         intent.putExtra(OverlayWindowActivity.EXTRA_AI_OVERLAY_ALPHA, aiOverlayAlpha);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -6380,6 +6391,7 @@ public class FloatWindowService extends Service {
             shortcutOverlayAlpha = prefs.getInt("shortcut_overlay_alpha", 180);
             
             // 加载 AI 窗口模糊效果设置
+            aiStyle = prefs.getInt("ai_style", 0);
             aiBlurRadius = prefs.getInt("ai_blur_radius", 25);
             aiOverlayAlpha = prefs.getInt("ai_overlay_alpha", 204);
 

@@ -100,6 +100,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
     // AI 窗口
     public static final String EXTRA_AI_URL = "ai_url";
+    public static final String EXTRA_AI_STYLE = "ai_style";
     public static final String EXTRA_AI_BLUR_RADIUS = "ai_blur_radius";
     public static final String EXTRA_AI_OVERLAY_ALPHA = "ai_overlay_alpha";
     // 快捷方式
@@ -131,7 +132,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private int shortcutIconSize, shortcutStyle, shortcutBlurRadius, shortcutOverlayAlpha;
     
     // AI 窗口模糊效果
-    private int aiBlurRadius, aiOverlayAlpha;
+    private int aiStyle, aiBlurRadius, aiOverlayAlpha;
 
     // ─── 视图 ───
     private FrameLayout rootLayout;
@@ -282,6 +283,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         if (windowType == WINDOW_TYPE_AI) {
             aiUrl = intent.getStringExtra(EXTRA_AI_URL);
             if (aiUrl == null) aiUrl = "https://www.doubao.com";
+            aiStyle = intent.getIntExtra(EXTRA_AI_STYLE, 0);
             aiBlurRadius = intent.getIntExtra(EXTRA_AI_BLUR_RADIUS, 25);
             aiOverlayAlpha = intent.getIntExtra(EXTRA_AI_OVERLAY_ALPHA, 204);
         } else {
@@ -389,12 +391,18 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 return Color.argb(alpha, r, g, b);
             }
         } else {
-            // AI 窗口：始终使用半透明底色透出模糊背景
-            // 叠加色透明度用于调节网页透明度（在 WebView 中应用）
-            if (isDarkMode()) {
-                return Color.parseColor("#CC2B2B2B");
+            // AI 窗口：根据样式决定背景透明度
+            if (aiStyle == 0) {
+                // 不透明样式：白色背景完全不透明
+                return isDarkMode() ? Color.parseColor("#2B2B2B") : Color.WHITE;
             } else {
-                return Color.parseColor("#CCFFFFFF");
+                // 亚克力/液态玻璃：使用叠加色透明度（网页透明度）
+                int alpha = Math.min(255, Math.max(0, aiOverlayAlpha));
+                int baseColor = isDarkMode() ? 0xFF2B2B2B : 0xFFFFFFFF;
+                int r = (baseColor >> 16) & 0xFF;
+                int g = (baseColor >> 8) & 0xFF;
+                int b = baseColor & 0xFF;
+                return Color.argb(alpha, r, g, b);
             }
         }
     }
@@ -495,8 +503,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
         webView.setBackgroundColor(Color.TRANSPARENT);
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         
-        // AI 窗口：应用网页透明度设置
-        if (aiOverlayAlpha < 255) {
+        // AI 窗口：应用网页透明度设置（仅当样式非不透明时）
+        if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
             float alpha = aiOverlayAlpha / 255.0f;
             webView.setAlpha(alpha);
         }
@@ -990,9 +998,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         webView.setAlpha(0f);
                     } else {
                         float alphaProgress = (progress - 0.5f) * 2f;
-                        // AI 窗口：最终透明度为 aiOverlayAlpha 设置的值
-                        float targetAlpha = (windowType == WINDOW_TYPE_AI && aiOverlayAlpha < 255) 
-                                ? (aiOverlayAlpha / 255.0f) : 1.0f;
+                        // AI 窗口：最终透明度为 aiOverlayAlpha 设置的值（仅当样式非不透明时）
+                        float targetAlpha = 1.0f;
+                        if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
+                            targetAlpha = aiOverlayAlpha / 255.0f;
+                        }
                         webView.setAlpha(targetAlpha * easeOutCubic(alphaProgress));
                     }
                 }
@@ -1013,8 +1023,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         blurBackgroundView.setTranslationY(0f);
                     }
                     if (webView != null) {
-                        // AI 窗口：应用网页透明度设置
-                        if (windowType == WINDOW_TYPE_AI && aiOverlayAlpha < 255) {
+                        // AI 窗口：应用网页透明度设置（仅当样式非不透明时）
+                        if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
                             webView.setAlpha(aiOverlayAlpha / 255.0f);
                         } else {
                             webView.setAlpha(1f);

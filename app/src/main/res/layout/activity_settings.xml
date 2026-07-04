@@ -1068,6 +1068,22 @@
             android:textColor="#333333"
             android:layout_marginBottom="16dp" />
 
+        <!-- AI 窗口背景样式 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="背景样式"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <Spinner
+            android:id="@+id/spinner_ai_style"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:entries="@array/shortcut_style_entries"
+            android:layout_marginBottom="16dp" />
+
         <!-- AI 窗口模糊半径 -->
         <TextView
             android:id="@+id/text_ai_blur_radius"
