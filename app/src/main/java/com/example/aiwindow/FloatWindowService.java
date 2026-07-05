@@ -3783,7 +3783,7 @@ public class FloatWindowService extends Service {
                         + " trans=(" + curTranslationX + "," + curTranslationY + ")");
 
                 // 当动画进度达到 60% 时，通知模糊窗口开始渐变显示
-                if (progress >= 0.6f && !blurWindowFadeInSent) {
+                if (progress >= 0.4f && !blurWindowFadeInSent) {
                     blurWindowFadeInSent = true;
                     sendBlurWindowFadeInBroadcast(progress);
                     Log.d(TAG, "AI窗口展开动画进度达到60%，已发送模糊窗口渐变显示广播");
@@ -4738,6 +4738,10 @@ public class FloatWindowService extends Service {
 
         Log.d(TAG, "收起快捷方式窗口: " + android.util.Log.getStackTraceString(new Throwable()));
 
+        // ===== 关键修复：收起动画开始时立即通知模糊窗口执行渐隐动画 =====
+        sendBlurWindowFadeOutBroadcast();
+        Log.d(TAG, "已发送快捷窗口模糊渐隐广播");
+
         // 动画期间在视图层拦截所有触摸
         barContainer.setOnTouchListener(new View.OnTouchListener() {
             @Override
@@ -4866,8 +4870,8 @@ public class FloatWindowService extends Service {
             // 关闭代理 Activity
             finishWindowHostActivity();
             
-            // ===== 关键修复：关闭快捷窗口时同时关闭模糊层 =====
-            closeBlurWindow();
+            // 注意：blurWindow 已在收起动画开始时通过 sendBlurWindowFadeOutBroadcast 关闭
+            // 此处不再重复调用 closeBlurWindow()
             
             Log.d(TAG, "快捷方式窗口已收起");
         } catch (Exception e) {
@@ -4965,6 +4969,10 @@ public class FloatWindowService extends Service {
             }
         });
         Log.d(TAG, "[COLLAPSE_DEBUG] 收起动画开始，视图层拦截触摸");
+        
+        // ===== 关键修复：收起动画开始时立即通知模糊窗口执行渐隐动画 =====
+        sendBlurWindowFadeOutBroadcast();
+        Log.d(TAG, "[COLLAPSE_DEBUG] 已发送模糊窗口渐隐广播");
 
         // 直接计算 CENTER 重力下的目标位置，避免从动画结束值反算（需在 try 外声明，catch 中也用到）
         final int targetBtmX = barPositionX;
@@ -5144,8 +5152,8 @@ public class FloatWindowService extends Service {
             // Finish proxy Activity
             finishWindowHostActivity();
             
-            // ===== 关键修复：关闭窗口时同时关闭模糊层 =====
-            closeBlurWindow();
+            // 注意：blurWindow 已在收起动画开始时通过 sendBlurWindowFadeOutBroadcast 关闭
+            // 此处不再重复调用 closeBlurWindow()
             
             Log.d(TAG, "Collapse to bottom bar complete");
         } catch (Exception e) {
@@ -5256,6 +5264,20 @@ public class FloatWindowService extends Service {
             Log.d(TAG, "已发送模糊窗口渐变显示广播，progress=" + progress);
         } catch (Exception e) {
             Log.e(TAG, "发送模糊窗口渐变显示广播失败", e);
+        }
+    }
+    
+    /**
+     * 发送模糊窗口渐隐消失广播
+     */
+    private void sendBlurWindowFadeOutBroadcast() {
+        try {
+            Intent intent = new Intent("BLUR_WINDOW_FADE_OUT");
+            intent.setPackage(getPackageName());
+            sendBroadcast(intent);
+            Log.d(TAG, "已发送模糊窗口渐隐消失广播");
+        } catch (Exception e) {
+            Log.e(TAG, "发送模糊窗口渐隐消失广播失败", e);
         }
     }
     
