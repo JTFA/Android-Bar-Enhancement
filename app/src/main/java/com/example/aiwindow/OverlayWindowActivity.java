@@ -4,6 +4,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.UiModeManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -27,11 +28,13 @@ import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.icu.util.Calendar;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -777,16 +780,16 @@ public class OverlayWindowActivity extends AppCompatActivity {
             });
         }
         
-        // AI 窗口：应用网页透明度设置
-        // 当开启"网页背景透明"时，aiOverlayAlpha 仅控制 contentContainer 背景透明度
-        // 当关闭"网页背景透明"时，aiOverlayAlpha 同时控制 contentContainer 和 WebView 透明度
-        if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
-            if (webpageBgTransparent) {
-                Log.d(TAG, "启用亚克力/液态玻璃模式 + 网页背景透明，aiOverlayAlpha 仅控制窗口背景透明度");
-            } else {
-                Log.d(TAG, "启用亚克力/液态玻璃模式，aiOverlayAlpha 同时控制窗口背景和 WebView 透明度");
-            }
-        }
+//        // AI 窗口：应用网页透明度设置
+//        // 当开启"网页背景透明"时，aiOverlayAlpha 仅控制 contentContainer 背景透明度
+//        // 当关闭"网页背景透明"时，aiOverlayAlpha 同时控制 contentContainer 和 WebView 透明度
+//        if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
+//            if (webpageBgTransparent) {
+//                Log.d(TAG, "启用亚克力/液态玻璃模式 + 网页背景透明，aiOverlayAlpha 仅控制窗口背景透明度");
+//            } else {
+//                Log.d(TAG, "启用亚克力/液态玻璃模式，aiOverlayAlpha 同时控制窗口背景和 WebView 透明度");
+//            }
+//        }
         
         // WebView 背景透明度处理
         // 如果开启了"网页背景透明"，WebView 始终保持透明（网页背景通过CSS透明化）
@@ -1154,6 +1157,18 @@ public class OverlayWindowActivity extends AppCompatActivity {
             refreshBtn.setOnClickListener(v -> {
                 if (webView != null) {
                     webView.reload();
+                    // 如果是亚克力/液态玻璃模式且开启了网页背景透明，立即注入透明背景 CSS
+                    if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
+                        injectTransparentBackground(webView);
+                    }else{
+                        removeTransparentBackground(webView);
+                    }
+                    // 注入自定义 CSS
+                    if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
+                        injectCustomCss(webView);
+                    }
+                    // 最后注入深色模式 CSS（确保不被覆盖）
+                    injectDarkModeCSS(webView);
                 }
             });
             container.addView(refreshBtn);
@@ -1934,11 +1949,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 "html, body {" +
                 "  background: transparent !important;" +
                 "}";
-        
-//        // 如果有自定义 CSS，追加到后面
-//        if (!TextUtils.isEmpty(customCss)) {
-//            css += "\n/* 自定义 CSS */\n" + customCss;
-//        }
+
         
         String js = "(function(){" +
                 // 注入 CSS
