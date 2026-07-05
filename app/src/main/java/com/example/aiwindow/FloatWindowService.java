@@ -2690,8 +2690,44 @@ public class FloatWindowService extends Service {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 Log.d(TAG, "Page loaded: " + url);
-                injectInputFocusScript(view);
+                
+                // 页面加载完成后按顺序注入所有 CSS（确保 DOM 已准备好）
+                // 1. 根据"网页背景透明"设置决定是否注入透明背景 CSS
+                if (webpageBgTransparent && aiStyle != 0) {
+                    injectTransparentBackground(view);
+                } else {
+                    removeTransparentBackground(view);
+                }
+                
+                // 2. 注入深色模式 CSS（文字反色，图片不反色）- 必须最后注入确保不被覆盖
                 injectDarkModeCSS(view);
+                
+                // 3. 注入自定义 CSS
+                if (!TextUtils.isEmpty(customCss)) {
+                    injectCustomCss(view);
+                }
+                
+                // 注入 JavaScript 检测输入框聚焦
+                injectInputFocusScript(view);
+                
+                // 等待 CSS 生效后设置 WebView 背景
+                // 如果开启了"网页背景透明"，WebView 保持透明
+                // 否则根据 aiOverlayAlpha 决定透明度
+                if (webpageBgTransparent) {
+                    view.setBackgroundColor(Color.TRANSPARENT);
+                    Log.d(TAG, "页面加载完成，网页背景透明已启用，WebView 背景设为透明");
+                } else {
+                    // 未开启网页背景透明，WebView 背景跟随 aiOverlayAlpha
+                    if (aiStyle != 0 && aiOverlayAlpha < 255) {
+                        int alpha = (int)(aiOverlayAlpha / 255.0f * 255);
+                        view.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
+                        Log.d(TAG, "页面加载完成，网页背景透明未启用，WebView 背景透明度=" + alpha);
+                    } else {
+                        view.setBackgroundColor(Color.TRANSPARENT);
+                        Log.d(TAG, "页面加载完成，WebView 背景设为透明（不透明样式）");
+                    }
+                }
+                
                 // 页面加载完成后更新返回按钮状态
                 updateBackButtonState(backButtonRef);
             }
