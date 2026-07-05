@@ -669,6 +669,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     // 1. 根据"网页背景透明"设置决定是否注入透明背景 CSS
                     if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
                         injectTransparentBackground(view);
+                    }else{
+                        removeTransparentBackground(view);
                     }
                     // 2. 再注入自定义 CSS
                     if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
@@ -743,6 +745,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
             // 如果是亚克力/液态玻璃模式且开启了网页背景透明，立即注入透明背景 CSS
             if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
                 injectTransparentBackground(sPersistentWebView);
+            }else{
+                removeTransparentBackground(sPersistentWebView);
             }
             // 注入自定义 CSS
             if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
@@ -1898,6 +1902,21 @@ public class OverlayWindowActivity extends AppCompatActivity {
         webView.evaluateJavascript(js, null);
         Log.d(TAG, "Injected input focus script");
     }
+
+    private void removeTransparentBackground(WebView webView){
+        String js = "(function(){" +
+                "var s=document.getElementById('transparent-bg-style');" +
+                "if(s){s.parentNode.removeChild(s);}" +
+                "})()";
+
+        try {
+            // 同步执行，确保 CSS 立即生效
+            webView.evaluateJavascript(js, null);
+            Log.d(TAG, isDarkMode() ? "Dark mode CSS filter injected" : "Dark mode CSS filter removed");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to " + (isDarkMode() ? "inject" : "remove") + " dark mode CSS filter", e);
+        }
+    }
     
     /**
      * 注入透明背景 CSS（仅用于亚克力/液态玻璃模式）
@@ -1916,15 +1935,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 "  background: transparent !important;" +
                 "}";
         
-        // 如果有自定义 CSS，追加到后面
-        if (!TextUtils.isEmpty(customCss)) {
-            css += "\n/* 自定义 CSS */\n" + customCss;
-        }
+//        // 如果有自定义 CSS，追加到后面
+//        if (!TextUtils.isEmpty(customCss)) {
+//            css += "\n/* 自定义 CSS */\n" + customCss;
+//        }
         
         String js = "(function(){" +
                 // 注入 CSS
-                "var style = document.createElement('style');" +
-                "style.id = 'transparent-bg-style';" +
+                "var style=document.getElementById('transparent-bg-style');" +
+                "if(!style){style = document.createElement('style');style.id = 'transparent-bg-style';}" +
                 "style.textContent = '" + css.replace("'", "\\'") + "';" +
                 "if (document.head) {" +
                 "  document.head.appendChild(style);" +
@@ -1988,20 +2007,28 @@ public class OverlayWindowActivity extends AppCompatActivity {
      * 注入自定义 CSS（无论是否透明模式都注入）
      */
     private void injectCustomCss(WebView webView) {
-        if (TextUtils.isEmpty(customCss)) return;
+        String js;
+        if (TextUtils.isEmpty(customCss)) {
+            js = "(function(){" +
+                    "var s=document.getElementById('custom-css-style');" +
+                    "if(s){s.parentNode.removeChild(s);}" +
+                    "})()";
+        }else{
+            js = "(function(){" +
+                    "var style=document.getElementById('custom-css-style');" +
+                    "if(!style){var style = document.createElement('style');style.id = 'custom-css-style';}" +
+                    "style.textContent = '" + customCss.replace("'", "\\'") + "';" +
+                    "if (document.head) {" +
+                    "  document.head.appendChild(style);" +
+                    "} else {" +
+                    "  document.documentElement.appendChild(style);" +
+                    "}" +
+                    "console.log('Custom CSS injected');" +
+                    "return 'Custom CSS injection complete';" +
+                    "})()";
+        }
         
-        String js = "(function(){" +
-                "var style = document.createElement('style');" +
-                "style.id = 'custom-css-style';" +
-                "style.textContent = '" + customCss.replace("'", "\\'") + "';" +
-                "if (document.head) {" +
-                "  document.head.appendChild(style);" +
-                "} else {" +
-                "  document.documentElement.appendChild(style);" +
-                "}" +
-                "console.log('Custom CSS injected');" +
-                "return 'Custom CSS injection complete';" +
-                "})()";
+
         
         webView.evaluateJavascript(js, new android.webkit.ValueCallback<String>() {
             @Override
