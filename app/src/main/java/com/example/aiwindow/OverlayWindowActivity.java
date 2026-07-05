@@ -655,12 +655,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 @Override
                 public void onPageStarted(WebView view, String url, Bitmap favicon) {
                     super.onPageStarted(view, url, favicon);
-                    // 根据深色模式设置背景色（防止闪白）
-                    if (isDarkMode()) {
-                        view.setBackgroundColor(Color.parseColor("#111111"));
-                    } else {
-                        view.setBackgroundColor(Color.WHITE);
-                    }
                 }
 
                 @Override
@@ -686,24 +680,22 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     injectInputFocusScript(view);
                     
                     // 等待 CSS 生效后设置 WebView 背景
-                    view.postDelayed(() -> {
-                        // 如果开启了"网页背景透明"，WebView 保持透明
-                        // 否则根据 aiOverlayAlpha 决定透明度
-                        if (webpageBgTransparent) {
-                            view.setBackgroundColor(Color.TRANSPARENT);
-                            Log.d(TAG, "页面加载完成，网页背景透明已启用，WebView 背景设为透明");
+                    // 如果开启了"网页背景透明"，WebView 保持透明
+                    // 否则根据 aiOverlayAlpha 决定透明度
+                    if (webpageBgTransparent) {
+                        view.setBackgroundColor(Color.TRANSPARENT);
+                        Log.d(TAG, "页面加载完成，网页背景透明已启用，WebView 背景设为透明");
+                    } else {
+                        // 未开启网页背景透明，WebView 背景跟随 aiOverlayAlpha
+                        if (aiStyle != 0 && aiOverlayAlpha < 255) {
+                            int alpha = (int)(aiOverlayAlpha / 255.0f * 255);
+                            view.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
+                            Log.d(TAG, "页面加载完成，网页背景透明未启用，WebView 背景透明度=" + alpha);
                         } else {
-                            // 未开启网页背景透明，WebView 背景跟随 aiOverlayAlpha
-                            if (aiStyle != 0 && aiOverlayAlpha < 255) {
-                                int alpha = (int)(aiOverlayAlpha / 255.0f * 255);
-                                view.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
-                                Log.d(TAG, "页面加载完成，网页背景透明未启用，WebView 背景透明度=" + alpha);
-                            } else {
-                                view.setBackgroundColor(Color.TRANSPARENT);
-                                Log.d(TAG, "页面加载完成，WebView 背景设为透明（不透明样式）");
-                            }
+                            view.setBackgroundColor(Color.TRANSPARENT);
+                            Log.d(TAG, "页面加载完成，WebView 背景设为透明（不透明样式）");
                         }
-                    }, 50);
+                    }
                 }
 
                 @Override
@@ -1157,6 +1149,18 @@ public class OverlayWindowActivity extends AppCompatActivity {
             refreshBtn.setOnClickListener(v -> {
                 if (webView != null) {
                     webView.reload();
+                    // 如果是亚克力/液态玻璃模式且开启了网页背景透明，立即注入透明背景 CSS
+                    if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
+                        injectTransparentBackground(webView);
+                    }else{
+                        removeTransparentBackground(webView);
+                    }
+                    // 注入自定义 CSS
+                    if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
+                        injectCustomCss(webView);
+                    }
+//                     最后注入深色模式 CSS（确保不被覆盖）
+                    injectDarkModeCSS(webView);
                 }
             });
             container.addView(refreshBtn);
