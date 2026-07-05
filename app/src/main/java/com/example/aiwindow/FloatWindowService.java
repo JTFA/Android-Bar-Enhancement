@@ -1770,10 +1770,8 @@ public class FloatWindowService extends Service {
                                         cc.post(() -> {
                                             try {
                                                 // 计算 contentContainer 在屏幕上的绝对坐标
-                                                int[] location = new int[2];
-                                                cc.getLocationOnScreen(location);
-                                                int blurX = location[0];
-                                                int blurY = location[1];
+                                                int blurX = cc.getLeft();
+                                                int blurY = cc.getTop() - getNavigationBarHeight()/2;
                                                 int blurWidth = cc.getWidth();
                                                 int blurHeight = cc.getHeight();
                                                 
@@ -4025,10 +4023,9 @@ public class FloatWindowService extends Service {
                                     cc.post(() -> {
                                         try {
                                             // 计算 contentContainer 在屏幕上的绝对坐标
-                                            int[] location = new int[2];
-                                            cc.getLocationOnScreen(location);
-                                            int blurX = location[0];
-                                            int blurY = location[1];
+
+                                            int blurX = cc.getLeft();
+                                            int blurY = cc.getTop() - getNavigationBarHeight()/2;
                                             int blurWidth = cc.getWidth();
                                             int blurHeight = cc.getHeight();
                                             
