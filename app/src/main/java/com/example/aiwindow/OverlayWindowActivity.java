@@ -1,5 +1,8 @@
 package com.example.aiwindow;
 
+import static android.webkit.WebSettings.FORCE_DARK_OFF;
+import static android.webkit.WebSettings.FORCE_DARK_ON;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.annotation.SuppressLint;
@@ -624,14 +627,18 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 settings.setAllowUniversalAccessFromFileURLs(true);
             }
 
-            // 深色模式
+//            // 深色模式
+//            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+//                if (isDarkMode()) {
+//                    settings.setForceDark(FORCE_DARK_ON);
+//                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+//                        settings.setAlgorithmicDarkeningAllowed(true);
+//                    }
+//                }
+//            }
+            // 深色模式完全由 CSS filter 处理，禁用 Android 内置暗化
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                if (isDarkMode()) {
-                    settings.setForceDark(WebSettings.FORCE_DARK_ON);
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        settings.setAlgorithmicDarkeningAllowed(true);
-                    }
-                }
+                settings.setForceDark(FORCE_DARK_OFF);
             }
 
             // WebChromeClient（权限 + 文件选择）
@@ -655,22 +662,24 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 @Override
                 public void onPageStarted(WebView view, String url, Bitmap favicon) {
                     super.onPageStarted(view, url, favicon);
+//                    view.getSettings().setForceDark(isDarkMode() ? FORCE_DARK_ON : FORCE_DARK_OFF);
+
                 }
 
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     super.onPageFinished(view, url);
                     updateBackButtonState();
-                    
                     // 页面加载完成后按顺序注入所有 CSS（确保 DOM 已准备好）
-                    // 3. 最后注入深色模式 CSS（文字反色，图片不反色）- 必须最后注入确保不被覆盖
-                    injectDarkModeCSS(view);
+
                     // 1. 根据"网页背景透明"设置决定是否注入透明背景 CSS
                     if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
                         injectTransparentBackground(view);
                     }else{
                         removeTransparentBackground(view);
                     }
+                    // 3. 最后注入深色模式 CSS（文字反色，图片不反色）- 必须最后注入确保不被覆盖
+                    injectDarkModeCSS(view);
                     // 2. 再注入自定义 CSS
                     if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
                         injectCustomCss(view);
@@ -735,8 +744,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             Log.d(TAG, "复用已有 WebView，当前 URL: " + sPersistentWebView.getUrl());
             // 从父容器中移除（如果还在其他容器中）
             android.view.ViewParent parent = sPersistentWebView.getParent();
-            // 最后注入深色模式 CSS（确保不被覆盖）
-            injectDarkModeCSS(sPersistentWebView);
+
 
             if (parent instanceof ViewGroup) {
                 ((ViewGroup) parent).removeView(sPersistentWebView);
@@ -747,13 +755,68 @@ public class OverlayWindowActivity extends AppCompatActivity {
             }else{
                 removeTransparentBackground(sPersistentWebView);
             }
+            // 最后注入深色模式 CSS（确保不被覆盖）
+            injectDarkModeCSS(sPersistentWebView);
             // 注入自定义 CSS
             if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
                 injectCustomCss(sPersistentWebView);
             }
 
+            // —— 新增：重新设置 WebViewClient，确保回调使用当前 Activity 实例 ——
+            sPersistentWebView.setWebViewClient(new WebViewClient() {
+                @Override
+                public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                    super.onPageStarted(view, url, favicon);
+                }
+
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    super.onPageFinished(view, url);
+                    updateBackButtonState();
+                    // 页面加载完成后按顺序注入所有 CSS（确保 DOM 已准备好）
+
+                    // 1. 根据"网页背景透明"设置决定是否注入透明背景 CSS
+                    if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
+                        injectTransparentBackground(view);
+                    }else{
+                        removeTransparentBackground(view);
+                    }
+                    // 3. 最后注入深色模式 CSS（文字反色，图片不反色）- 必须最后注入确保不被覆盖
+                    injectDarkModeCSS(view);
+                    // 2. 再注入自定义 CSS
+                    if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
+                        injectCustomCss(view);
+                    }
+
+                    // 注入 JavaScript 检测输入框聚焦
+                    injectInputFocusScript(view);
+
+                    // 等待 CSS 生效后设置 WebView 背景
+                    if (webpageBgTransparent) {
+                        view.setBackgroundColor(Color.TRANSPARENT);
+                        Log.d(TAG, "页面加载完成，网页背景透明已启用，WebView 背景设为透明");
+                    } else {
+                        if (aiStyle != 0 && aiOverlayAlpha < 255) {
+                            int alpha = (int)(aiOverlayAlpha / 255.0f * 255);
+                            view.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
+                            Log.d(TAG, "页面加载完成，网页背景透明未启用，WebView 背景透明度=" + alpha);
+                        } else {
+                            view.setBackgroundColor(Color.TRANSPARENT);
+                            Log.d(TAG, "页面加载完成，WebView 背景设为透明（不透明样式）");
+                        }
+                    }
+                }
+
+                @Override
+                public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+                    super.doUpdateVisitedHistory(view, url, isReload);
+                    updateBackButtonState();
+                }
+            });
+
         }
-        
+
+
         webView = sPersistentWebView;
 
         // 设置圆角裁剪（连续曲率 Path）
@@ -1152,21 +1215,22 @@ public class OverlayWindowActivity extends AppCompatActivity {
             refreshBtn.setOnClickListener(v -> {
                 if (webView != null) {
                     webView.reload();
-//                     最后注入深色模式 CSS（确保不被覆盖）
 
-                    injectDarkModeCSS(webView);
 
-                    // 如果是亚克力/液态玻璃模式且开启了网页背景透明，立即注入透明背景 CSS
-                    if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
-                        injectTransparentBackground(webView);
-                    }else{
-                        removeTransparentBackground(webView);
-                    }
+//
+//                    // 如果是亚克力/液态玻璃模式且开启了网页背景透明，立即注入透明背景 CSS
+//                    if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
+//                        injectTransparentBackground(webView);
+//                    }else{
+//                        removeTransparentBackground(webView);
+//                    }
+                    //                     最后注入深色模式 CSS（确保不被覆盖）
+//                    injectDarkModeCSS(webView);
                     // 注入自定义 CSS
-                    if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
-                        injectCustomCss(webView);
-                    }
-
+//                    if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
+//                        injectCustomCss(webView);
+//                    }
+//                    webView.invalidate();
 
                 }
             });
@@ -1943,10 +2007,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 "  background-color: transparent !important;" +
                 "  background-image: none !important;" +
                 "  background: none !important;" +
-                "}" +
-                "/* 第二步：恢复 html/body 基本样式 */" +
-                "html, body {" +
-                "  background: transparent !important;" +
                 "}";
 
         
@@ -1982,20 +2042,24 @@ public class OverlayWindowActivity extends AppCompatActivity {
      * 与硬编码颜色不同，它保留页面原有设计关系，图片双重反转保持正常显示。
      */
     private void injectDarkModeCSS(WebView view) {
+        Log.d(TAG, "injectDarkModeCSS: isDarkMode=" + isDarkMode() + " webpageBgTransparent=" + webpageBgTransparent);
+
         String js;
         if (isDarkMode()) {
-            // 使用多行 CSS，清晰且易于调试
-            String css = "" +
-                    "html {" +
-                    "  -webkit-filter: invert(85%) hue-rotate(180deg);" +
-                    "  filter: invert(85%) hue-rotate(180deg);" +
-                    "  background-color: #111 !important;" +
-                    "}" +
-                    "img, video, canvas, svg, [style*=\"background-image\"] {" +
-                    "  -webkit-filter: invert(85%) hue-rotate(180deg);" +
-                    "  filter: invert(85%) hue-rotate(180deg);" +
-                    "}" +
-                    ":root { color-scheme: dark !important; }";
+            String css;
+            if (webpageBgTransparent) {
+                // 透明模式：只应用滤镜，不改变背景色（保持透明）
+                css = "" +
+                        "html { -webkit-filter: invert(85%) hue-rotate(180deg); filter: invert(85%) hue-rotate(180deg); }" +
+                        "img, video, canvas, svg, [style*=\"background-image\"] { -webkit-filter: invert(85%) hue-rotate(180deg); filter: invert(85%) hue-rotate(180deg); }" +
+                        ":root { color-scheme: dark !important; }";
+            } else {
+                // 不透明模式：设置深色背景，同时应用滤镜
+                css = "" +
+                        "html { background-color: #111 !important; -webkit-filter: invert(85%) hue-rotate(180deg); filter: invert(85%) hue-rotate(180deg); }" +
+                        "img, video, canvas, svg, [style*=\"background-image\"] { -webkit-filter: invert(85%) hue-rotate(180deg); filter: invert(85%) hue-rotate(180deg); }" +
+                        ":root { color-scheme: dark !important; }";
+            }
             js = "(function() {" +
                     "  var s = document.getElementById('__dark_mode_filter');" +
                     "  if (!s) { s = document.createElement('style'); s.id = '__dark_mode_filter'; }" +
