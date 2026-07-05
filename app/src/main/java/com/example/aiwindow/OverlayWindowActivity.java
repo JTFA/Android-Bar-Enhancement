@@ -663,6 +663,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     updateBackButtonState();
                     
                     // 页面加载完成后按顺序注入所有 CSS（确保 DOM 已准备好）
+                    // 3. 最后注入深色模式 CSS（文字反色，图片不反色）- 必须最后注入确保不被覆盖
+                    injectDarkModeCSS(view);
                     // 1. 根据"网页背景透明"设置决定是否注入透明背景 CSS
                     if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
                         injectTransparentBackground(view);
@@ -673,8 +675,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
                         injectCustomCss(view);
                     }
-                    // 3. 最后注入深色模式 CSS（文字反色，图片不反色）- 必须最后注入确保不被覆盖
-                    injectDarkModeCSS(view);
+
                     
                     // 注入 JavaScript 检测输入框聚焦
                     injectInputFocusScript(view);
@@ -734,6 +735,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             Log.d(TAG, "复用已有 WebView，当前 URL: " + sPersistentWebView.getUrl());
             // 从父容器中移除（如果还在其他容器中）
             android.view.ViewParent parent = sPersistentWebView.getParent();
+            // 最后注入深色模式 CSS（确保不被覆盖）
+            injectDarkModeCSS(sPersistentWebView);
+
             if (parent instanceof ViewGroup) {
                 ((ViewGroup) parent).removeView(sPersistentWebView);
             }
@@ -747,8 +751,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
                 injectCustomCss(sPersistentWebView);
             }
-            // 最后注入深色模式 CSS（确保不被覆盖）
-            injectDarkModeCSS(sPersistentWebView);
+
         }
         
         webView = sPersistentWebView;
@@ -1149,6 +1152,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
             refreshBtn.setOnClickListener(v -> {
                 if (webView != null) {
                     webView.reload();
+//                     最后注入深色模式 CSS（确保不被覆盖）
+
+                    injectDarkModeCSS(webView);
+
                     // 如果是亚克力/液态玻璃模式且开启了网页背景透明，立即注入透明背景 CSS
                     if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
                         injectTransparentBackground(webView);
@@ -1159,8 +1166,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
                         injectCustomCss(webView);
                     }
-//                     最后注入深色模式 CSS（确保不被覆盖）
-                    injectDarkModeCSS(webView);
+
+
                 }
             });
             container.addView(refreshBtn);
@@ -1977,17 +1984,23 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private void injectDarkModeCSS(WebView view) {
         String js;
         if (isDarkMode()) {
-            // 注入 CSS filter 实现深色模式（同时设置背景色防止闪白）
-            js = "(function(){" +
-                    "var s=document.getElementById('__dark_mode_filter');" +
-                    "if(!s){" +
-                    "s=document.createElement('style');" +
-                    "s.id='__dark_mode_filter';" +
-                    "s.textContent='html{-webkit-filter:invert(0.85)hue-rotate(180deg);filter:invert(0.85)hue-rotate(180deg);background-color:#111!important}' +" +
-                    "'img,video,canvas,svg,[style*=\"background-image\"]{-webkit-filter:invert(0.85)hue-rotate(180deg);filter:invert(0.85)hue-rotate(180deg)}' +" +
-                    "':root{color-scheme:dark!important}';" +
-                    "var h=document.head;if(h){h.appendChild(s);}else{document.documentElement.appendChild(s);}" +
+            // 使用多行 CSS，清晰且易于调试
+            String css = "" +
+                    "html {" +
+                    "  -webkit-filter: invert(85%) hue-rotate(180deg);" +
+                    "  filter: invert(85%) hue-rotate(180deg);" +
+                    "  background-color: #111 !important;" +
                     "}" +
+                    "img, video, canvas, svg, [style*=\"background-image\"] {" +
+                    "  -webkit-filter: invert(85%) hue-rotate(180deg);" +
+                    "  filter: invert(85%) hue-rotate(180deg);" +
+                    "}" +
+                    ":root { color-scheme: dark !important; }";
+            js = "(function() {" +
+                    "  var s = document.getElementById('__dark_mode_filter');" +
+                    "  if (!s) { s = document.createElement('style'); s.id = '__dark_mode_filter'; }" +
+                    "  s.textContent = '" + css.replace("'", "\\'") + "';" +
+                    "  var h = document.head; if (h) { h.appendChild(s); } else { document.documentElement.appendChild(s); }" +
                     "})()";
         } else {
             // 浅色模式：移除之前注入的深色 filter
