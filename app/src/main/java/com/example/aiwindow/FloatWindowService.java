@@ -251,6 +251,8 @@ public class FloatWindowService extends Service {
     private int aiOverlayAlpha = 204; // 0-255 (背景透明度)
 
     private boolean useExpandDirectly = false;
+    private boolean webpageBgTransparent = false;
+    private String customCss = "";
 
     // IME 处理中标志（类级别），可在 cleanupProxyIme 中重置，防止死锁
     private volatile boolean isImeProcessing = false;
@@ -351,8 +353,8 @@ public class FloatWindowService extends Service {
                     "if(!s){" +
                     "s=document.createElement('style');" +
                     "s.id='__dark_mode_filter';" +
-                    "s.textContent='html{-webkit-filter:invert(0.85)hue-rotate(180deg);filter:invert(0.85)hue-rotate(180deg);background-color:#111!important}'+" +
-                    "'img,video,canvas,svg,[style*=\"background-image\"]{-webkit-filter:invert(0.85)hue-rotate(180deg);filter:invert(0.85)hue-rotate(180deg)}'+" +
+                    "s.textContent='html{-webkit-filter:invert(0.85)hue-rotate(180deg);filter:invert(0.85)hue-rotate(180deg);background-color:#111!important}'" +
+                    "'img,video,canvas,svg,[style*=\"background-image\"]{-webkit-filter:invert(0.85)hue-rotate(180deg);filter:invert(0.85)hue-rotate(180deg)}'" +
                     "':root{color-scheme:dark!important}';" +
                     "var h=document.head;if(h){h.appendChild(s);}else{document.documentElement.appendChild(s);}" +
                     "}" +
@@ -364,12 +366,119 @@ public class FloatWindowService extends Service {
                     "if(s){s.parentNode.removeChild(s);}" +
                     "})()";
         }
-
+    
         try {
             view.evaluateJavascript(js, null);
             Log.d(TAG, isDarkMode() ? "Dark mode CSS filter injected" : "Dark mode CSS filter removed");
         } catch (Exception e) {
             Log.e(TAG, "Failed to " + (isDarkMode() ? "inject" : "remove") + " dark mode CSS filter", e);
+        }
+    }
+        
+    /**
+     * 应用网页设置：网页背景透明、自定义 CSS
+     * 在 AI 窗口展开后调用，确保 WebView 已创建并加载了 URL
+     */
+    private void applyWebpageSettings() {
+        if (aiWebView == null) return;
+            
+        // 1. 根据“网页背景透明”设置决定是否注入透明背景 CSS
+        if (webpageBgTransparent && aiStyle != 0) {
+            injectTransparentBackground(aiWebView);
+        } else {
+            removeTransparentBackground(aiWebView);
+        }
+            
+        // 2. 注入深色模式 CSS
+        injectDarkModeCSS(aiWebView);
+            
+        // 3. 注入自定义 CSS
+        if (!TextUtils.isEmpty(customCss)) {
+            injectCustomCss(aiWebView);
+        }
+            
+        // 4. 根据设置调整 WebView 背景透明度
+        if (webpageBgTransparent) {
+            aiWebView.setBackgroundColor(Color.TRANSPARENT);
+            Log.d(TAG, "网页背景透明已启用，WebView 背景设为透明");
+        } else if (aiStyle != 0 && aiOverlayAlpha < 255) {
+            int alpha = (int)(aiOverlayAlpha / 255.0f * 255);
+            aiWebView.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
+            Log.d(TAG, "网页背景透明未启用，WebView 背景透明度=" + alpha);
+        } else {
+            aiWebView.setBackgroundColor(Color.TRANSPARENT);
+            Log.d(TAG, "WebView 背景设为透明（不透明样式）");
+        }
+            
+        Log.d(TAG, "网页设置已应用: webpageBgTransparent=" + webpageBgTransparent 
+                + ", customCss length=" + (customCss != null ? customCss.length() : 0)
+                + ", aiStyle=" + aiStyle + ", aiOverlayAlpha=" + aiOverlayAlpha);
+    }
+        
+    /**
+     * 注入透明背景 CSS，使网页背景透明
+     */
+    private void injectTransparentBackground(WebView view) {
+        String js = "(function(){" +
+                "var s=document.getElementById('__transparent_bg');" +
+                "if(!s){" +
+                "s=document.createElement('style');" +
+                "s.id='__transparent_bg';" +
+                "s.textContent='html,body{background:transparent!important;background-color:transparent!important}';" +
+                "var h=document.head;if(h){h.appendChild(s);}else{document.documentElement.appendChild(s);}" +
+                "}" +
+                "})()";
+            
+        try {
+            view.evaluateJavascript(js, null);
+            view.setBackgroundColor(Color.TRANSPARENT);
+            Log.d(TAG, "透明背景 CSS 已注入");
+        } catch (Exception e) {
+            Log.e(TAG, "注入透明背景 CSS 失败", e);
+        }
+    }
+        
+    /**
+     * 移除透明背景 CSS
+     */
+    private void removeTransparentBackground(WebView view) {
+        String js = "(function(){" +
+                "var s=document.getElementById('__transparent_bg');" +
+                "if(s){s.parentNode.removeChild(s);}" +
+                "})()";
+            
+        try {
+            view.evaluateJavascript(js, null);
+            Log.d(TAG, "透明背景 CSS 已移除");
+        } catch (Exception e) {
+            Log.e(TAG, "移除透明背景 CSS 失败", e);
+        }
+    }
+        
+    /**
+     * 注入自定义 CSS
+     */
+    private void injectCustomCss(WebView view) {
+        if (TextUtils.isEmpty(customCss)) return;
+            
+        // 转义特殊字符，确保 JavaScript 字符串安全
+        String escapedCss = customCss.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "");
+            
+        String js = "(function(){" +
+                "var s=document.getElementById('__custom_css');" +
+                "if(!s){" +
+                "s=document.createElement('style');" +
+                "s.id='__custom_css';" +
+                "s.textContent='" + escapedCss + "';" +
+                "var h=document.head;if(h){h.appendChild(s);}else{document.documentElement.appendChild(s);}" +
+                "}" +
+                "})()";
+            
+        try {
+            view.evaluateJavascript(js, null);
+            Log.d(TAG, "自定义 CSS 已注入，长度: " + customCss.length());
+        } catch (Exception e) {
+            Log.e(TAG, "注入自定义 CSS 失败", e);
         }
     }
 
@@ -400,10 +509,11 @@ public class FloatWindowService extends Service {
 
             // 注册广播接收器，用于接收 Activity 发送的恢复提示条通知
             IntentFilter filter = new IntentFilter("com.example.aiwindow.RESTORE_BAR");
+            // Android 13+ (API 33) 必须指定 RECEIVER_EXPORTED 或 RECEIVER_NOT_EXPORTED
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 registerReceiver(restoreBarReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
             } else {
-                registerReceiver(restoreBarReceiver, filter);
+                registerReceiver(restoreBarReceiver, filter, 0); // 使用 0 作为默认标志
             }
 
         } catch (Exception e) {
@@ -1607,10 +1717,19 @@ public class FloatWindowService extends Service {
                             baseBottomMargin = contentLp.bottomMargin;
 
                             isAiWindowExpanded = true;
+                            
+                            // ===== 新增：启动下层模糊窗口（如果样式为亚克力或液态玻璃）=====
+                            if (aiStyle != 0) {
+                                startBlurWindow(aiWindowWidth, aiWindowHeight, windowPositionX, windowPositionY, cornerRadius, aiBlurRadius);
+                            }
+                            
                             startWindowHostActivity();
                             isKeyboardVisible = false;
                             if (aiWebView != null) {
                                 aiWebView.setAlpha(0f);
+                                
+                                // ===== 新增：应用网页背景透明和自定义 CSS =====
+                                applyWebpageSettings();
                             }
 
                             // ===== View.post()：等待 contentContainer 布局完全完成后设置属性并启动动画 =====
@@ -3817,6 +3936,13 @@ public class FloatWindowService extends Service {
 //                        contentContainer.invalidateOutline();
 
                         isShortcutWindowExpanded = true;
+
+                        // ===== 新增：启动下层模糊窗口（如果样式为亚克力或液态玻璃）=====
+                        if (shortcutStyle != 0) {
+                            int sTargetWidth = dpToPx(shortcutWindowWidth);
+                            int sTargetHeight = dpToPx(shortcutWindowHeight);
+                            startBlurWindow(sTargetWidth, sTargetHeight, 0, shortcutWindowPositionY, shortcutCornerRadius, shortcutBlurRadius);
+                        }
 
                         // 提前启动代理 Activity，展开过程中即可响应返回手势
                         startWindowHostActivity();
@@ -6411,6 +6537,9 @@ public class FloatWindowService extends Service {
             aiOverlayAlpha = prefs.getInt("ai_overlay_alpha", 204);
 
             useExpandDirectly = prefs.getBoolean("use_expand_directly", false);
+            // 加载网页背景透明和自定义 CSS（用于 AI 窗口）
+            webpageBgTransparent = prefs.getBoolean("webpage_bg_transparent", false);
+            customCss = prefs.getString("custom_css", "");
 
             Log.d(TAG, "设置已加载 - 提示条: 宽=" + currentWidth + ", 高=" + currentHeight +
                     ", 圆角=" + currentCornerRadius + ", 透明度=" + currentAlpha +
