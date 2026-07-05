@@ -106,14 +106,14 @@
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:excludeFromRecents="true"
             android:exported="false"
-            android:taskAffinity="" />
+            android:taskAffinity="com.example.aiwindow.floating" />
 
         <activity
             android:name=".OverlayWindowActivity"
             android:theme="@style/Theme.TransparentNoAnimation"
             android:excludeFromRecents="true"
             android:exported="false"
-            android:taskAffinity=""
+            android:taskAffinity="com.example.aiwindow.floating"
             android:launchMode="singleTask"
             android:configChanges="orientation|keyboardHidden|screenSize" />
 
