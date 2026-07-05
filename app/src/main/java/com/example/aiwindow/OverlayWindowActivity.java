@@ -635,24 +635,39 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 @Override
                 public void onPageStarted(WebView view, String url, Bitmap favicon) {
                     super.onPageStarted(view, url, favicon);
+                    // 根据深色模式设置背景色（防止闪白）
+                    if (isDarkMode()) {
+                        view.setBackgroundColor(Color.parseColor("#111111"));
+                    } else {
+                        view.setBackgroundColor(Color.WHITE);
+                    }
                 }
 
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     super.onPageFinished(view, url);
                     updateBackButtonState();
-                    // 注入 JavaScript 检测输入框聚焦
-                    injectInputFocusScript(view);
-                    // 如果是亚克力/液态玻璃模式，注入透明背景 CSS（让网页背景透明，但元素不透明）
+                    
+                    // 页面加载完成后按顺序注入所有 CSS（确保 DOM 已准备好）
+                    // 1. 先注入透明背景 CSS（让网页背景透明）
                     if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
                         injectTransparentBackground(view);
                     }
-                    // 注入深色模式 CSS（文字反色，图片不反色）
-                    injectDarkModeCSS(view);
-                    // 始终注入自定义 CSS（无论是否透明模式）
+                    // 2. 再注入自定义 CSS
                     if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
                         injectCustomCss(view);
                     }
+                    // 3. 最后注入深色模式 CSS（文字反色，图片不反色）- 必须最后注入确保不被覆盖
+                    injectDarkModeCSS(view);
+                    
+                    // 注入 JavaScript 检测输入框聚焦
+                    injectInputFocusScript(view);
+                    
+                    // 等待 CSS 生效后设置 WebView 背景为透明
+                    view.postDelayed(() -> {
+                        view.setBackgroundColor(Color.TRANSPARENT);
+                        Log.d(TAG, "页面加载完成，CSS 已生效，WebView 背景已设为透明");
+                    }, 50);
                 }
 
                 @Override
@@ -676,7 +691,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 }, "AndroidBridge");
             }
 
-            // WebView 背景透明
+            // WebView 保持透明背景
             sPersistentWebView.setBackgroundColor(Color.TRANSPARENT);
             sPersistentWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
             
@@ -698,12 +713,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
             if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
                 injectTransparentBackground(sPersistentWebView);
             }
-            // 注入深色模式 CSS
-            injectDarkModeCSS(sPersistentWebView);
-            // 始终注入自定义 CSS（无论是否透明模式）
+            // 注入自定义 CSS
             if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
                 injectCustomCss(sPersistentWebView);
             }
+            // 最后注入深色模式 CSS（确保不被覆盖）
+            injectDarkModeCSS(sPersistentWebView);
         }
         
         webView = sPersistentWebView;
@@ -734,7 +749,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             Log.d(TAG, "启用亚克力/液态玻璃模式，背景透明度由 aiOverlayAlpha 控制，网页背景将通过CSS透明化");
         }
         
-        // WebView 始终设置为完全透明背景
+        // WebView 始终保持透明背景
         webView.setBackgroundColor(Color.TRANSPARENT);
         
         // 设置下载监听器
@@ -1089,7 +1104,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             lp.setMargins(dpToPx(10), dpToPx(10), rightMargin, dpToPx(10));
             refreshBtn.setLayoutParams(lp);
             refreshBtn.setOnClickListener(v -> {
-                if (webView != null) webView.reload();
+                if (webView != null) {
+                    webView.reload();
+                }
             });
             container.addView(refreshBtn);
             rightMargin += buttonSize + gap;
@@ -1869,6 +1886,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
             @Override
             public void onReceiveValue(String value) {
                 Log.d(TAG, "Transparent background injection result: " + value);
+                // 注意：不在这里设置透明背景，让页面保持深色/浅色背景直到加载完成
+                // WebView 背景会在 onPageFinished 后由其他逻辑处理
             }
         });
         Log.d(TAG, "Injected transparent background CSS with wildcard selector");
@@ -1882,14 +1901,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private void injectDarkModeCSS(WebView view) {
         String js;
         if (isDarkMode()) {
-            // 注入 CSS filter 实现深色模式
+            // 注入 CSS filter 实现深色模式（同时设置背景色防止闪白）
             js = "(function(){" +
                     "var s=document.getElementById('__dark_mode_filter');" +
                     "if(!s){" +
                     "s=document.createElement('style');" +
                     "s.id='__dark_mode_filter';" +
-                    "s.textContent='html{-webkit-filter:invert(0.85)hue-rotate(180deg);filter:invert(0.85)hue-rotate(180deg);background-color:#111!important}'+" +
-                    "'img,video,canvas,svg,[style*=\"background-image\"]{-webkit-filter:invert(0.85)hue-rotate(180deg);filter:invert(0.85)hue-rotate(180deg)}'+" +
+                    "s.textContent='html{-webkit-filter:invert(0.85)hue-rotate(180deg);filter:invert(0.85)hue-rotate(180deg);background-color:#111!important}' +" +
+                    "'img,video,canvas,svg,[style*=\"background-image\"]{-webkit-filter:invert(0.85)hue-rotate(180deg);filter:invert(0.85)hue-rotate(180deg)}' +" +
                     "':root{color-scheme:dark!important}';" +
                     "var h=document.head;if(h){h.appendChild(s);}else{document.documentElement.appendChild(s);}" +
                     "}" +
@@ -1901,8 +1920,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     "if(s){s.parentNode.removeChild(s);}" +
                     "})()";
         }
-
+    
         try {
+            // 同步执行，确保 CSS 立即生效
             view.evaluateJavascript(js, null);
             Log.d(TAG, isDarkMode() ? "Dark mode CSS filter injected" : "Dark mode CSS filter removed");
         } catch (Exception e) {
@@ -1978,8 +1998,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         (android.app.DownloadManager) getSystemService(DOWNLOAD_SERVICE);
                     downloadManager.enqueue(request);
                     
-                    Toast.makeText(OverlayWindowActivity.this, 
-                        "开始下载: " + fileName, Toast.LENGTH_SHORT).show();
+//                    Toast.makeText(OverlayWindowActivity.this,
+//                        "开始下载: " + fileName, Toast.LENGTH_SHORT).show();
                     Log.d(TAG, "Download started: " + fileName);
                 } catch (Exception e) {
                     Log.e(TAG, "Download failed", e);
@@ -2009,7 +2029,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 "})()";
         
         webView.evaluateJavascript(js, null);
-        Toast.makeText(this, "正在处理 Blob 下载...", Toast.LENGTH_SHORT).show();
+//        Toast.makeText(this, "正在处理 Blob 下载...", Toast.LENGTH_SHORT).show();
     }
     
     /**
