@@ -306,10 +306,18 @@ public class FloatWindowService extends Service {
      * 获取窗口背景色（跟随系统深色模式）
      */
     private int getWindowBgColor() {
-        if (isDarkMode()) {
-            return Color.parseColor("#2B2B2B"); // Material Design 深色表面色
+        // AI 窗口：根据样式决定背景透明度
+        if (aiStyle == 0) {
+            // 不透明样式：白色背景完全不透明
+            return isDarkMode() ? Color.parseColor("#2B2B2B") : Color.WHITE;
         } else {
-            return Color.WHITE;
+            // 亚克力/液态玻璃：使用叠加色透明度（背景透明度）
+            int alpha = Math.min(255, Math.max(0, aiOverlayAlpha));
+            int baseColor = isDarkMode() ? 0xFF2B2B2B : 0xFFFFFFFF;
+            int r = (baseColor >> 16) & 0xFF;
+            int g = (baseColor >> 8) & 0xFF;
+            int b = baseColor & 0xFF;
+            return Color.argb(alpha, r, g, b);
         }
     }
 

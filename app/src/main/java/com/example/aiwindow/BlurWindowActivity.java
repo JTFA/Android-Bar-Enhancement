@@ -167,20 +167,37 @@ public class BlurWindowActivity extends Activity {
             }
         };
         
-        // 统一注册所有广播接收器
-        IntentFilter filter = new IntentFilter();
-        filter.addAction("UPDATE_BLUR_WINDOW_SIZE");
-        filter.addAction("BLUR_WINDOW_FADE_OUT");
-        filter.addAction("BLUR_WINDOW_TRANSLATE");
-        filter.addAction("BLUR_WINDOW_FADE_IN");
-        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(sizeUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            registerReceiver(sizeUpdateReceiver, new IntentFilter("UPDATE_BLUR_WINDOW_SIZE"), Context.RECEIVER_NOT_EXPORTED);
         } else {
-            registerReceiver(sizeUpdateReceiver, filter);
+            registerReceiver(sizeUpdateReceiver, new IntentFilter("UPDATE_BLUR_WINDOW_SIZE"));
         }
         
-        Log.d(TAG, "已注册模糊窗口广播接收器（4个动作）");
+        // 额外注册 BLUR_WINDOW_FADE_OUT 广播
+        IntentFilter fadeOutFilter = new IntentFilter("BLUR_WINDOW_FADE_OUT");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(sizeUpdateReceiver, fadeOutFilter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(sizeUpdateReceiver, fadeOutFilter);
+        }
+        
+        // 额外注册 BLUR_WINDOW_TRANSLATE 广播
+        IntentFilter translateFilter = new IntentFilter("BLUR_WINDOW_TRANSLATE");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(sizeUpdateReceiver, translateFilter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(sizeUpdateReceiver, translateFilter);
+        }
+        
+        // 额外注册 BLUR_WINDOW_FADE_IN 广播
+        IntentFilter fadeInFilter = new IntentFilter("BLUR_WINDOW_FADE_IN");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(sizeUpdateReceiver, fadeInFilter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(sizeUpdateReceiver, fadeInFilter);
+        }
+        
+        Log.d(TAG, "已注册模糊窗口大小更新、渐变消失、平移和渐变显示广播接收器");
 
         // 窗口级背景模糊（API 31+）：模糊窗口背后那小块桌面内容
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -259,9 +276,7 @@ public class BlurWindowActivity extends Activity {
      * 渐变消失动画
      */
     private void fadeOutAndFinish() {
-        Log.d(TAG, "fadeoutAndFinish: 开始执行，root=" + (root != null ? "存在" : "null")
-                + ", isFinishing=" + isFinishing()
-                + ", isDestroyed=" + isDestroyed());
+        Log.d(TAG, "fadeoutAndFinish: 开始执行，root=" + (root != null ? "存在" : "null"));
         
         if (root == null) {
             Log.w(TAG, "fadeoutAndFinish: root 为 null，直接 finish");
@@ -293,14 +308,9 @@ public class BlurWindowActivity extends Activity {
                 if (progress < 1.0f) {
                     handler.postDelayed(this, 16); // ~60fps
                 } else {
-                    Log.d(TAG, "fadeoutAndFinish: 动画完成，准备 finish, finalAlpha=" + wmParams.alpha);
-                    if (!isFinishing()) {
-                        finish();
-                        overridePendingTransition(0, 0);
-                        Log.d(TAG, "fadeoutAndFinish: finish() 已调用");
-                    } else {
-                        Log.w(TAG, "fadeoutAndFinish: Activity 已经在 finishing 状态");
-                    }
+                    Log.d(TAG, "fadeoutAndFinish: 动画完成，准备 finish");
+                    finish();
+                    overridePendingTransition(0, 0);
                 }
             }
         });
