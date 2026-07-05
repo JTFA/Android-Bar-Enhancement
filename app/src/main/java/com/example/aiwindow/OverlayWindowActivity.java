@@ -1157,18 +1157,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
             refreshBtn.setOnClickListener(v -> {
                 if (webView != null) {
                     webView.reload();
-                    // 如果是亚克力/液态玻璃模式且开启了网页背景透明，立即注入透明背景 CSS
-                    if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
-                        injectTransparentBackground(webView);
-                    }else{
-                        removeTransparentBackground(webView);
-                    }
-                    // 注入自定义 CSS
-                    if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
-                        injectCustomCss(webView);
-                    }
-                    // 最后注入深色模式 CSS（确保不被覆盖）
-                    injectDarkModeCSS(webView);
                 }
             });
             container.addView(refreshBtn);
