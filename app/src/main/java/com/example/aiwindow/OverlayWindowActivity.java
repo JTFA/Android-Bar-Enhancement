@@ -136,6 +136,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // AI 窗口模糊效果
     private int aiStyle, aiBlurRadius, aiOverlayAlpha;
     private String customCss; // 自定义 CSS
+    private boolean webpageBgTransparent = false; // 网页背景透明
     
     // 背景遮罩设置
     private int overlayAlpha = 50; // 遮罩透明度 (0-100)
@@ -398,6 +399,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             
             // 加载自定义 CSS
             loadCustomCss();
+            
+            // 加载网页背景透明设置
+            loadWebpageBgTransparentSetting();
         } else {
             shortcutIconSize = intent.getIntExtra(EXTRA_SHORTCUT_ICON_SIZE, 100);
             shortcutStyle = intent.getIntExtra(EXTRA_SHORTCUT_STYLE, 0);
@@ -435,6 +439,19 @@ public class OverlayWindowActivity extends AppCompatActivity {
             }
         } catch (Exception e) {
             Log.e(TAG, "加载自定义 CSS 失败", e);
+        }
+    }
+    
+    /**
+     * 从 SharedPreferences 加载网页背景透明设置
+     */
+    private void loadWebpageBgTransparentSetting() {
+        try {
+            SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
+            webpageBgTransparent = prefs.getBoolean("webpage_bg_transparent", false);
+            Log.d(TAG, "已加载网页背景透明设置: " + webpageBgTransparent);
+        } catch (Exception e) {
+            Log.e(TAG, "加载网页背景透明设置失败", e);
         }
     }
     
@@ -649,8 +666,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     updateBackButtonState();
                     
                     // 页面加载完成后按顺序注入所有 CSS（确保 DOM 已准备好）
-                    // 1. 先注入透明背景 CSS（让网页背景透明）
-                    if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
+                    // 1. 根据"网页背景透明"设置决定是否注入透明背景 CSS
+                    if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
                         injectTransparentBackground(view);
                     }
                     // 2. 再注入自定义 CSS
@@ -663,10 +680,24 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     // 注入 JavaScript 检测输入框聚焦
                     injectInputFocusScript(view);
                     
-                    // 等待 CSS 生效后设置 WebView 背景为透明
+                    // 等待 CSS 生效后设置 WebView 背景
                     view.postDelayed(() -> {
-                        view.setBackgroundColor(Color.TRANSPARENT);
-                        Log.d(TAG, "页面加载完成，CSS 已生效，WebView 背景已设为透明");
+                        // 如果开启了"网页背景透明"，WebView 保持透明
+                        // 否则根据 aiOverlayAlpha 决定透明度
+                        if (webpageBgTransparent) {
+                            view.setBackgroundColor(Color.TRANSPARENT);
+                            Log.d(TAG, "页面加载完成，网页背景透明已启用，WebView 背景设为透明");
+                        } else {
+                            // 未开启网页背景透明，WebView 背景跟随 aiOverlayAlpha
+                            if (aiStyle != 0 && aiOverlayAlpha < 255) {
+                                int alpha = (int)(aiOverlayAlpha / 255.0f * 255);
+                                view.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
+                                Log.d(TAG, "页面加载完成，网页背景透明未启用，WebView 背景透明度=" + alpha);
+                            } else {
+                                view.setBackgroundColor(Color.TRANSPARENT);
+                                Log.d(TAG, "页面加载完成，WebView 背景设为透明（不透明样式）");
+                            }
+                        }
                     }, 50);
                 }
 
@@ -709,8 +740,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
             if (parent instanceof ViewGroup) {
                 ((ViewGroup) parent).removeView(sPersistentWebView);
             }
-            // 如果是亚克力/液态玻璃模式，立即注入透明背景 CSS（不需要等 onPageFinished）
-            if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
+            // 如果是亚克力/液态玻璃模式且开启了网页背景透明，立即注入透明背景 CSS
+            if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
                 injectTransparentBackground(sPersistentWebView);
             }
             // 注入自定义 CSS
@@ -742,15 +773,28 @@ public class OverlayWindowActivity extends AppCompatActivity {
             });
         }
         
-        // AI 窗口：应用网页透明度设置（仅当样式非不透明时）
-        // aiOverlayAlpha 控制 contentContainer 背景透明度，而 injectTransparentBackground 让网页背景透明
-        // 这样设置项只影响窗口背景，不影响网页内容（文字、图片等保持100%不透明）
+        // AI 窗口：应用网页透明度设置
+        // 当开启"网页背景透明"时，aiOverlayAlpha 仅控制 contentContainer 背景透明度
+        // 当关闭"网页背景透明"时，aiOverlayAlpha 同时控制 contentContainer 和 WebView 透明度
         if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
-            Log.d(TAG, "启用亚克力/液态玻璃模式，背景透明度由 aiOverlayAlpha 控制，网页背景将通过CSS透明化");
+            if (webpageBgTransparent) {
+                Log.d(TAG, "启用亚克力/液态玻璃模式 + 网页背景透明，aiOverlayAlpha 仅控制窗口背景透明度");
+            } else {
+                Log.d(TAG, "启用亚克力/液态玻璃模式，aiOverlayAlpha 同时控制窗口背景和 WebView 透明度");
+            }
         }
         
-        // WebView 始终保持透明背景
-        webView.setBackgroundColor(Color.TRANSPARENT);
+        // WebView 背景透明度处理
+        // 如果开启了"网页背景透明"，WebView 始终保持透明（网页背景通过CSS透明化）
+        // 否则 WebView 透明度跟随 aiOverlayAlpha
+        if (webpageBgTransparent) {
+            webView.setBackgroundColor(Color.TRANSPARENT);
+        } else if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
+            int alpha = (int)(aiOverlayAlpha / 255.0f * 255);
+            webView.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
+        } else {
+            webView.setBackgroundColor(Color.TRANSPARENT);
+        }
         
         // 设置下载监听器
         setupDownloadListener();
@@ -1251,10 +1295,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         webView.setAlpha(0f);
                     } else {
                         float alphaProgress = (progress - 0.5f) * 2f;
-                        // AI 窗口：最终透明度为 aiOverlayAlpha 设置的值（仅当样式非不透明时）
+                        // AI 窗口：最终透明度根据"网页背景透明"设置决定
                         float targetAlpha = 1.0f;
                         if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
-                            targetAlpha = aiOverlayAlpha / 255.0f;
+                            // 如果开启了"网页背景透明"，WebView 始终保持100%不透明（网页内容通过CSS透明化）
+                            // 否则 WebView 透明度跟随 aiOverlayAlpha
+                            if (!webpageBgTransparent) {
+                                targetAlpha = aiOverlayAlpha / 255.0f;
+                            }
                         }
                         webView.setAlpha(targetAlpha * easeOutCubic(alphaProgress));
                     }
@@ -1283,9 +1331,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         blurBackgroundView.setTranslationY(0f);
                     }
                     if (webView != null) {
-                        // AI 窗口：应用网页透明度设置（仅当样式非不透明时）
+                        // AI 窗口：应用网页透明度设置
+                        // 如果开启了"网页背景透明"，WebView 保持100%不透明
+                        // 否则 WebView 透明度跟随 aiOverlayAlpha
                         if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
-                            webView.setAlpha(aiOverlayAlpha / 255.0f);
+                            if (!webpageBgTransparent) {
+                                webView.setAlpha(aiOverlayAlpha / 255.0f);
+                            } else {
+                                webView.setAlpha(1.0f);
+                            }
                         } else {
                             webView.setAlpha(1f);
                         }

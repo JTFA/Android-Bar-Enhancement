@@ -1102,6 +1102,17 @@
             android:progress="25"
             android:layout_marginBottom="16dp" />
 
+        <!-- 网页背景透明 -->
+        <Switch
+            android:id="@+id/switch_webpage_bg_transparent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="网页背景透明（仅对WebView生效）"
+            android:textSize="14sp"
+            android:padding="12dp"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone" />
+
         <!-- 网页透明度 -->
         <TextView
             android:id="@+id/text_ai_overlay_alpha"

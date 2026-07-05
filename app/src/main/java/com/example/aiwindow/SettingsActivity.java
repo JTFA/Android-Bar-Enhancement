@@ -132,6 +132,7 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_AI_BLUR_RADIUS = "ai_blur_radius";
     private static final String KEY_AI_OVERLAY_ALPHA = "ai_overlay_alpha";
     private static final String KEY_CUSTOM_CSS = "custom_css"; // 自定义 CSS
+    private static final String KEY_WEBPAGE_BG_TRANSPARENT = "webpage_bg_transparent"; // 网页背景透明
     
     // AI URL 输入框
     private EditText editAiUrl;
@@ -236,6 +237,7 @@ public class SettingsActivity extends AppCompatActivity {
     private SeekBar seekAiBlurRadius, seekAiOverlayAlpha;
     private TextView textAiBlurRadius, textAiOverlayAlpha;
     private EditText editCustomCss; // 自定义 CSS
+    private Switch switchWebpageBgTransparent; // 网页背景透明
     
     // 保存按钮
     private Button btnSave;
@@ -399,6 +401,7 @@ public class SettingsActivity extends AppCompatActivity {
         textAiBlurRadius = findViewById(R.id.text_ai_blur_radius);
         textAiOverlayAlpha = findViewById(R.id.text_ai_overlay_alpha);
         editCustomCss = findViewById(R.id.edit_custom_css);
+        switchWebpageBgTransparent = findViewById(R.id.switch_webpage_bg_transparent);
         
         // 保存按钮
         btnSave = findViewById(R.id.btn_save_apply);
@@ -662,6 +665,10 @@ public class SettingsActivity extends AppCompatActivity {
         // 加载自定义 CSS
         String customCss = preferences.getString(KEY_CUSTOM_CSS, "");
         editCustomCss.setText(customCss);
+        
+        // 加载网页背景透明设置
+        boolean webpageBgTransparent = preferences.getBoolean(KEY_WEBPAGE_BG_TRANSPARENT, false);
+        switchWebpageBgTransparent.setChecked(webpageBgTransparent);
     }
     
     /**
@@ -824,6 +831,9 @@ public class SettingsActivity extends AppCompatActivity {
         // 保存自定义 CSS
         String customCss = editCustomCss.getText().toString().trim();
         editor.putString(KEY_CUSTOM_CSS, customCss);
+        
+        // 保存网页背景透明设置
+        editor.putBoolean(KEY_WEBPAGE_BG_TRANSPARENT, switchWebpageBgTransparent.isChecked());
         
         // 提交保存
         editor.apply();
@@ -1485,6 +1495,12 @@ public class SettingsActivity extends AppCompatActivity {
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
+        
+        // 网页背景透明开关监听器
+        switchWebpageBgTransparent.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            // 实时保存设置
+            preferences.edit().putBoolean(KEY_WEBPAGE_BG_TRANSPARENT, isChecked).apply();
+        });
     }
 
     private void updateShortcutStyleVisibility(int style) {
@@ -1501,6 +1517,9 @@ public class SettingsActivity extends AppCompatActivity {
         seekAiBlurRadius.setVisibility(show ? View.VISIBLE : View.GONE);
         textAiOverlayAlpha.setVisibility(show ? View.VISIBLE : View.GONE);
         seekAiOverlayAlpha.setVisibility(show ? View.VISIBLE : View.GONE);
+        // 网页背景透明开关仅在亚克力(1)或液态玻璃(2)样式时显示
+        boolean showWebpageBgTransparent = (style == 1 || style == 2);
+        switchWebpageBgTransparent.setVisibility(showWebpageBgTransparent ? View.VISIBLE : View.GONE);
     }
     
     /**
