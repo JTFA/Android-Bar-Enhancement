@@ -250,6 +250,8 @@ public class FloatWindowService extends Service {
     private int aiBlurRadius = 25; // dp
     private int aiOverlayAlpha = 204; // 0-255 (背景透明度)
 
+    private boolean useExpandDirectly = false;
+
     // IME 处理中标志（类级别），可在 cleanupProxyIme 中重置，防止死锁
     private volatile boolean isImeProcessing = false;
 
@@ -529,6 +531,11 @@ public class FloatWindowService extends Service {
                     overlayAnimDuration = overlayAnim;
                     Log.d(TAG, "遮罩渐变时长已更新: " + overlayAnimDuration + "ms");
                 }
+            }
+
+            if (intent.hasExtra("use_expand_directly")) {
+                useExpandDirectly = intent.getBooleanExtra("use_expand_directly", false);
+                Log.d(TAG, "useExpandDirectly 已更新: " + useExpandDirectly);
             }
 
             // 更新遮罩窗口外观（如果已创建）
@@ -1394,12 +1401,20 @@ public class FloatWindowService extends Service {
         } else if (ACTION_SHORTCUT.equals(action)) {
             Log.d(TAG, gesture + " 行为：打开快捷方式窗口（Activity模式）");
             if (!isShortcutWindowExpanded && !isAiWindowExpanded) {
-                launchShortcutWindow();
+                if (useExpandDirectly) {
+                    expandToShortcutWindow();
+                } else {
+                    launchShortcutWindow();
+                }
             }
         } else if (ACTION_AI.equals(action)) {
             Log.d(TAG, gesture + " 行为：打开AI窗口（Activity模式）");
             if (!isShortcutWindowExpanded && !isAiWindowExpanded) {
-                launchAiWindow();
+                if (useExpandDirectly) {
+                    expandToAiWindow();
+                } else {
+                    launchAiWindow();
+                }
             }
         }
     }
@@ -6394,6 +6409,8 @@ public class FloatWindowService extends Service {
             aiStyle = prefs.getInt("ai_style", 0);
             aiBlurRadius = prefs.getInt("ai_blur_radius", 25);
             aiOverlayAlpha = prefs.getInt("ai_overlay_alpha", 204);
+
+            useExpandDirectly = prefs.getBoolean("use_expand_directly", false);
 
             Log.d(TAG, "设置已加载 - 提示条: 宽=" + currentWidth + ", 高=" + currentHeight +
                     ", 圆角=" + currentCornerRadius + ", 透明度=" + currentAlpha +

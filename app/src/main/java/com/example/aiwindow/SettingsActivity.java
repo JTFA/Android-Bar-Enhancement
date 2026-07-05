@@ -164,6 +164,8 @@ public class SettingsActivity extends AppCompatActivity {
     private Switch switchShowBackButton; // 显示后退按钮开关
     private Switch switchCloseOnOutsideClick; // 点击窗口外关闭窗口开关
     private Switch switchBackPrioritizeWebview; // 侧边返回手势行为
+
+    private Switch switchUseExpandDirectly;
     
     // 提示条触发行为配置
     private LinearLayout layoutClickAction, layoutDoubleClickAction, layoutLongPressAction;
@@ -402,6 +404,7 @@ public class SettingsActivity extends AppCompatActivity {
         textAiOverlayAlpha = findViewById(R.id.text_ai_overlay_alpha);
         editCustomCss = findViewById(R.id.edit_custom_css);
         switchWebpageBgTransparent = findViewById(R.id.switch_webpage_bg_transparent);
+        switchUseExpandDirectly = findViewById(R.id.switch_use_expand_directly);
         
         // 保存按钮
         btnSave = findViewById(R.id.btn_save_apply);
@@ -669,6 +672,9 @@ public class SettingsActivity extends AppCompatActivity {
         // 加载网页背景透明设置
         boolean webpageBgTransparent = preferences.getBoolean(KEY_WEBPAGE_BG_TRANSPARENT, false);
         switchWebpageBgTransparent.setChecked(webpageBgTransparent);
+
+        boolean useExpand = preferences.getBoolean("use_expand_directly", false);
+        switchUseExpandDirectly.setChecked(useExpand);
     }
     
     /**
@@ -834,6 +840,8 @@ public class SettingsActivity extends AppCompatActivity {
         
         // 保存网页背景透明设置
         editor.putBoolean(KEY_WEBPAGE_BG_TRANSPARENT, switchWebpageBgTransparent.isChecked());
+
+        editor.putBoolean("use_expand_directly", switchUseExpandDirectly.isChecked());
         
         // 提交保存
         editor.apply();
@@ -908,6 +916,7 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("long_press_app_package", longPressAppPackage);
         sizeIntent.putExtra("long_press_app_name", longPressAppName);
         sizeIntent.putExtra("long_press_app_class", longPressAppClass);
+        sizeIntent.putExtra("use_expand_directly", switchUseExpandDirectly.isChecked());
         startService(sizeIntent);
         
         // 更新输入法避让设置
@@ -1606,6 +1615,7 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("long_press_app_package", longPressAppPackage);
         sizeIntent.putExtra("long_press_app_name", longPressAppName);
         sizeIntent.putExtra("long_press_app_class", longPressAppClass);
+        sizeIntent.putExtra("use_expand_directly", switchUseExpandDirectly.isChecked());
         startService(sizeIntent);
         
         // 更新输入法避让设置

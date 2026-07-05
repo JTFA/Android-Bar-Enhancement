@@ -1306,6 +1306,15 @@
             android:progress="200"
             android:layout_marginBottom="24dp" />
 
+        <Switch
+            android:id="@+id/switch_use_expand_directly"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="悬浮窗模式"
+            android:textSize="14sp"
+            android:padding="12dp"
+            android:layout_marginBottom="24dp" />
+
         <!-- 保存并应用按钮 -->
         <Button
             android:id="@+id/btn_save_apply"
