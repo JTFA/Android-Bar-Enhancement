@@ -1754,6 +1754,35 @@ public class FloatWindowService extends Service {
                                     cc.setTranslationX(initTranslationX);
                                     cc.setTranslationY(initTranslationY);
                                     cc.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                                    
+                                    // 【关键修复】AI窗口需要根据实际位置更新模糊窗口
+                                    // 等待布局完成后获取真实坐标并发送广播
+                                    if (aiStyle != 0) {
+                                        cc.post(() -> {
+                                            try {
+                                                // 计算 contentContainer 在屏幕上的绝对坐标
+                                                int[] location = new int[2];
+                                                cc.getLocationOnScreen(location);
+                                                int blurX = location[0];
+                                                int blurY = location[1];
+                                                int blurWidth = cc.getWidth();
+                                                int blurHeight = cc.getHeight();
+                                                
+                                                Intent updateIntent = new Intent("UPDATE_BLUR_WINDOW_SIZE");
+                                                updateIntent.setPackage(getPackageName());
+                                                updateIntent.putExtra("blur_x", blurX);
+                                                updateIntent.putExtra("blur_y", blurY);
+                                                updateIntent.putExtra("blur_width", blurWidth);
+                                                updateIntent.putExtra("blur_height", blurHeight);
+                                                updateIntent.putExtra("blur_corner_radius", dpToPx(cornerRadius));
+                                                sendBroadcast(updateIntent);
+                                                Log.d(TAG, "已发送AI窗口模糊更新: x=" + blurX + " y=" + blurY
+                                                        + " w=" + blurWidth + " h=" + blurHeight + " 圆角=" + cornerRadius + "dp");
+                                            } catch (Exception e) {
+                                                Log.e(TAG, "发送模糊窗口更新失败", e);
+                                            }
+                                        });
+                                    }
 
                                     // 背景遮罩先渐入完成，再执行窗口展开动画
                                     if (overlayView != null) {
@@ -1838,7 +1867,8 @@ public class FloatWindowService extends Service {
             blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_CORNER_RADIUS, dpToPx((int) cornerRadiusDp));
             blurIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(blurIntent);
-            Log.d(TAG, "已启动模糊窗口: 位置(" + blurX + "," + blurY + ") 尺寸" + targetWidth + "x" + targetHeight + " 圆角" + dpToPx((int)cornerRadiusDp) + "px");
+            Log.d(TAG, "已启动模糊窗口: 位置(" + blurX + "," + blurY + ") 尺寸" + targetWidth + "x" + targetHeight 
+                    + " 圆角" + dpToPx((int)cornerRadiusDp) + "px 模糊半径=" + blurRadius);
         } catch (Exception e) {
             Log.e(TAG, "启动模糊窗口失败", e);
         }
@@ -3971,6 +4001,35 @@ public class FloatWindowService extends Service {
                                 cc.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
                                 updateShortcutWindowStyle();
+                                
+                                // 【关键修复】快捷窗口需要根据实际位置更新模糊窗口
+                                // 等待布局完成后获取真实坐标并发送广播
+                                if (shortcutStyle != 0) {
+                                    cc.post(() -> {
+                                        try {
+                                            // 计算 contentContainer 在屏幕上的绝对坐标
+                                            int[] location = new int[2];
+                                            cc.getLocationOnScreen(location);
+                                            int blurX = location[0];
+                                            int blurY = location[1];
+                                            int blurWidth = cc.getWidth();
+                                            int blurHeight = cc.getHeight();
+                                            
+                                            Intent updateIntent = new Intent("UPDATE_BLUR_WINDOW_SIZE");
+                                            updateIntent.setPackage(getPackageName());
+                                            updateIntent.putExtra("blur_x", blurX);
+                                            updateIntent.putExtra("blur_y", blurY);
+                                            updateIntent.putExtra("blur_width", blurWidth);
+                                            updateIntent.putExtra("blur_height", blurHeight);
+                                            updateIntent.putExtra("blur_corner_radius", dpToPx(shortcutCornerRadius));
+                                            sendBroadcast(updateIntent);
+                                            Log.d(TAG, "已发送快捷窗口模糊更新: x=" + blurX + " y=" + blurY
+                                                    + " w=" + blurWidth + " h=" + blurHeight + " 圆角=" + shortcutCornerRadius + "dp");
+                                        } catch (Exception e) {
+                                            Log.e(TAG, "发送模糊窗口更新失败", e);
+                                        }
+                                    });
+                                }
 
                                 // 背景遮罩先渐入完成，再执行窗口展开动画
                                 if (overlayView != null) {
@@ -4785,6 +4844,10 @@ public class FloatWindowService extends Service {
 
             // 关闭代理 Activity
             finishWindowHostActivity();
+            
+            // ===== 关键修复：关闭快捷窗口时同时关闭模糊层 =====
+            closeBlurWindow();
+            
             Log.d(TAG, "快捷方式窗口已收起");
         } catch (Exception e) {
             Log.e(TAG, "finishCollapseShortcutWindow 失败", e);
@@ -5059,6 +5122,10 @@ public class FloatWindowService extends Service {
 
             // Finish proxy Activity
             finishWindowHostActivity();
+            
+            // ===== 关键修复：关闭窗口时同时关闭模糊层 =====
+            closeBlurWindow();
+            
             Log.d(TAG, "Collapse to bottom bar complete");
         } catch (Exception e) {
             Log.e(TAG, "finishCollapse failed", e);
@@ -5152,6 +5219,22 @@ public class FloatWindowService extends Service {
             } catch (Exception e) {
                 Log.e(TAG, "Failed to finish WindowHostActivity", e);
             }
+        }
+    }
+    
+    /**
+     * 关闭模糊窗口 BlurWindowActivity
+     */
+    private void closeBlurWindow() {
+        try {
+            // 发送渐变消失广播，让 BlurWindowActivity 执行渐隐动画后自动关闭
+            Intent fadeOutIntent = new Intent("BLUR_WINDOW_FADE_OUT");
+            String packageName = getPackageName();
+            fadeOutIntent.setPackage(packageName);
+            sendBroadcast(fadeOutIntent);
+            Log.d(TAG, "已发送模糊窗口关闭广播: package=" + packageName);
+        } catch (Exception e) {
+            Log.e(TAG, "关闭模糊窗口失败", e);
         }
     }
 
