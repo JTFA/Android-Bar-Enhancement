@@ -92,7 +92,7 @@
             android:theme="@style/Theme.TransparentHost"
             android:exported="false"
             android:excludeFromRecents="true"
-            android:taskAffinity=""
+            android:taskAffinity="com.example.aiwindow.floating"
             android:launchMode="singleTask" />
 
         <!-- 快捷方式编辑页面 -->

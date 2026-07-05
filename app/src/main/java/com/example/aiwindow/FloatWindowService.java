@@ -284,6 +284,7 @@ public class FloatWindowService extends Service {
     private int overlayAnimDuration = 100; // 毫秒（背景遮罩透明度渐变动画时长）
     private static final long FRAME_INTERVAL = 8; // 120fps (1000/120 ≈ 8ms)
     private static final String TAG = "FloatWindowService";
+    private boolean blurWindowFadeInSent = false; // 标记是否已发送模糊窗口渐变显示广播
 
     // Android 官方贝塞尔曲线插值器（API 21+ 内置，零依赖）
     // Material Design FastOutSlowIn 标准缓动，先快后慢，末尾平滑自然
@@ -1851,6 +1852,7 @@ public class FloatWindowService extends Service {
             Log.d(TAG, "API < 31，跳过模糊窗口");
             return;
         }
+        blurWindowFadeInSent = false; // 重置渐变显示标志，准备新一次的动画
         try {
             DisplayMetrics dm = new DisplayMetrics();
             windowManager.getDefaultDisplay().getRealMetrics(dm);
@@ -3782,6 +3784,13 @@ public class FloatWindowService extends Service {
                         + " scale=" + curScaleX + "x" + curScaleY
                         + " trans=(" + curTranslationX + "," + curTranslationY + ")");
 
+                // 当动画进度达到 60% 时，通知模糊窗口开始渐变显示
+                if (progress >= 0.6f && !blurWindowFadeInSent) {
+                    blurWindowFadeInSent = true;
+                    sendBlurWindowFadeInBroadcast(progress);
+                    Log.d(TAG, "AI窗口展开动画进度达到60%，已发送模糊窗口渐变显示广播");
+                }
+
                 if (progress < 1.0f) {
                     Choreographer.getInstance().postFrameCallback(this);
                 } else {
@@ -4142,6 +4151,13 @@ public class FloatWindowService extends Service {
                 Log.d(TAG, "[SHORTCUT_EXPAND_TRACE] 第" + frameCount + "帧: tp=" + timeProgress + " p=" + progress + " ez=" + easedProgress
                         + " scale=" + curScaleX + "x" + curScaleY
                         + " trans=(" + curTranslationX + "," + curTranslationY + ")");
+
+                // 当动画进度达到 60% 时，通知模糊窗口开始渐变显示
+                if (progress >= 0.6f && !blurWindowFadeInSent) {
+                    blurWindowFadeInSent = true;
+                    sendBlurWindowFadeInBroadcast(progress);
+                    Log.d(TAG, "快捷窗口展开动画进度达到60%，已发送模糊窗口渐变显示广播");
+                }
 
                 if (progress < 1.0f) {
                     Choreographer.getInstance().postFrameCallback(this);
@@ -5227,6 +5243,22 @@ public class FloatWindowService extends Service {
             } catch (Exception e) {
                 Log.e(TAG, "Failed to finish WindowHostActivity", e);
             }
+        }
+    }
+    
+    /**
+     * 发送模糊窗口渐变显示广播
+     * @param progress 当前动画进度（0.0-1.0）
+     */
+    private void sendBlurWindowFadeInBroadcast(float progress) {
+        try {
+            Intent intent = new Intent("BLUR_WINDOW_FADE_IN");
+            intent.setPackage(getPackageName());
+            intent.putExtra("progress", progress);
+            sendBroadcast(intent);
+            Log.d(TAG, "已发送模糊窗口渐变显示广播，progress=" + progress);
+        } catch (Exception e) {
+            Log.e(TAG, "发送模糊窗口渐变显示广播失败", e);
         }
     }
     
