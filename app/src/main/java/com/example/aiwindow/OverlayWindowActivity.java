@@ -1299,7 +1299,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private void performExpandAnimation() {
         // 计算初始变换
         initScaleX = (float) startWidth / targetWidth;
-        initScaleY = (float) startHeight / targetHeight;
+//        initScaleY = (float) startHeight / targetHeight;
+        initScaleY = 0.01f;
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) contentContainer.getLayoutParams();
         initTranslationX = startX - 2 * lp.leftMargin;
         initTranslationY = startY - 2 * lp.topMargin - getNavigationBarHeight()/2;

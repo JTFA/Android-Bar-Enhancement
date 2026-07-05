@@ -824,7 +824,7 @@
             android:id="@+id/seek_ai_blur_radius"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="100"
+            android:max="300"
             android:progress="25"
             android:layout_marginBottom="16dp" />
 
@@ -833,7 +833,7 @@
             android:id="@+id/switch_webpage_bg_transparent"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="网页背景透明（仅对WebView生效）"
+            android:text="网页背景透明（不保证效果完美，可尝试通过自定义css实现）"
             android:textSize="14sp"
             android:padding="12dp"
             android:layout_marginBottom="8dp"
@@ -1123,7 +1123,7 @@
             android:id="@+id/seek_shortcut_blur_radius"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="100"
+            android:max="300"
             android:progress="20"
             android:layout_marginBottom="16dp"
             android:visibility="gone" />
