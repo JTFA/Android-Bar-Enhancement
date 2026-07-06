@@ -1675,6 +1675,10 @@ public class FloatWindowService extends Service {
             return;
         }
 
+        if (overlayView == null) {
+            createOverlayWindow();
+        }
+
         // Save start position for animation
         final int startWidth = barLayoutParams.width;
         final int startHeight = barLayoutParams.height;
@@ -1789,11 +1793,11 @@ public class FloatWindowService extends Service {
                             isAiWindowExpanded = true;
                             
                             // ===== 新增：启动下层模糊窗口（如果样式为亚克力或液态玻璃）=====
-                            if (aiStyle != 0) {
-                                startBlurWindow(aiWindowWidth, aiWindowHeight, windowPositionX, windowPositionY, cornerRadius, aiBlurRadius);
-                            }
+//                            if (aiStyle != 0) {
+//                                startBlurWindow(aiWindowWidth, aiWindowHeight, windowPositionX, windowPositionY, cornerRadius, aiBlurRadius);
+//                            }
                             
-                            startWindowHostActivity();
+//                            startWindowHostActivity();
                             isKeyboardVisible = false;
                             if (aiWebView != null) {
                                 aiWebView.setAlpha(0f);
@@ -1801,6 +1805,8 @@ public class FloatWindowService extends Service {
                                 // ===== 新增：应用网页背景透明和自定义 CSS =====
                                 applyWebpageSettings();
                             }
+
+
 
                             // ===== View.post()：等待 contentContainer 布局完全完成后设置属性并启动动画 =====
                             // 使用 View.post() 而非 OnGlobalLayoutListener，兼容性更强，避免不同 Android 版本布局回调时序差异
@@ -1827,34 +1833,32 @@ public class FloatWindowService extends Service {
                                     
                                     // 【关键修复】AI窗口需要根据实际位置更新模糊窗口
                                     // 等待布局完成后获取真实坐标并发送广播
-                                    if (aiStyle != 0) {
-                                        cc.post(() -> {
-                                            try {
-                                                // 计算 contentContainer 在屏幕上的绝对坐标
-                                                int blurX = cc.getLeft();
-                                                int blurY = cc.getTop() - getNavigationBarHeight()/2;
-                                                int blurWidth = cc.getWidth();
-                                                int blurHeight = cc.getHeight();
-                                                
-                                                Intent updateIntent = new Intent("UPDATE_BLUR_WINDOW_SIZE");
-                                                updateIntent.setPackage(getPackageName());
-                                                updateIntent.putExtra("blur_x", blurX);
-                                                updateIntent.putExtra("blur_y", blurY);
-                                                updateIntent.putExtra("blur_width", blurWidth);
-                                                updateIntent.putExtra("blur_height", blurHeight);
-                                                updateIntent.putExtra("blur_corner_radius", dpToPx(cornerRadius));
-                                                sendBroadcast(updateIntent);
-                                                Log.d(TAG, "已发送AI窗口模糊更新: x=" + blurX + " y=" + blurY
-                                                        + " w=" + blurWidth + " h=" + blurHeight + " 圆角=" + cornerRadius + "dp");
-                                            } catch (Exception e) {
-                                                Log.e(TAG, "发送模糊窗口更新失败", e);
-                                            }
-                                        });
-                                    }
+//                                    if (aiStyle != 0) {
+//                                        cc.post(() -> {
+//                                            try {
+//                                                // 计算 contentContainer 在屏幕上的绝对坐标
+//                                                int blurX = cc.getLeft();
+//                                                int blurY = cc.getTop() - getNavigationBarHeight()/2;
+//                                                int blurWidth = cc.getWidth();
+//                                                int blurHeight = cc.getHeight();
+//
+//                                                Intent updateIntent = new Intent("UPDATE_BLUR_WINDOW_SIZE");
+//                                                updateIntent.setPackage(getPackageName());
+//                                                updateIntent.putExtra("blur_x", blurX);
+//                                                updateIntent.putExtra("blur_y", blurY);
+//                                                updateIntent.putExtra("blur_width", blurWidth);
+//                                                updateIntent.putExtra("blur_height", blurHeight);
+//                                                updateIntent.putExtra("blur_corner_radius", dpToPx(cornerRadius));
+//                                                sendBroadcast(updateIntent);
+//                                                Log.d(TAG, "已发送AI窗口模糊更新: x=" + blurX + " y=" + blurY
+//                                                        + " w=" + blurWidth + " h=" + blurHeight + " 圆角=" + cornerRadius + "dp");
+//                                            } catch (Exception e) {
+//                                                Log.e(TAG, "发送模糊窗口更新失败", e);
+//                                            }
+//                                        });
+//                                    }
 
-                                    if (overlayView == null) {
-                                        createOverlayWindow();
-                                    }
+
 
                                     // 背景遮罩先渐入完成，再执行窗口展开动画
                                     if (overlayView != null) {
@@ -3884,11 +3888,11 @@ public class FloatWindowService extends Service {
                         + " trans=(" + curTranslationX + "," + curTranslationY + ")");
 
                 // 当动画进度达到 60% 时，通知模糊窗口开始渐变显示
-                if (progress >= 0.4f && !blurWindowFadeInSent) {
-                    blurWindowFadeInSent = true;
-                    sendBlurWindowFadeInBroadcast(progress);
-                    Log.d(TAG, "AI窗口展开动画进度达到60%，已发送模糊窗口渐变显示广播");
-                }
+//                if (progress >= 0.4f && !blurWindowFadeInSent) {
+//                    blurWindowFadeInSent = true;
+//                    sendBlurWindowFadeInBroadcast(progress);
+//                    Log.d(TAG, "AI窗口展开动画进度达到60%，已发送模糊窗口渐变显示广播");
+//                }
 
                 if (progress < 1.0f) {
                     Choreographer.getInstance().postFrameCallback(this);
@@ -3996,6 +4000,10 @@ public class FloatWindowService extends Service {
             return;
         }
 
+        if (overlayView == null) {
+            createOverlayWindow();
+        }
+
         Log.d(TAG, "展开快捷方式窗口: isAiExpanded=" + isAiWindowExpanded
                 + " isShortcutExpanded=" + isShortcutWindowExpanded);
 
@@ -4084,14 +4092,14 @@ public class FloatWindowService extends Service {
                         isShortcutWindowExpanded = true;
 
                         // ===== 新增：启动下层模糊窗口（如果样式为亚克力或液态玻璃）=====
-                        if (shortcutStyle != 0) {
-                            int sTargetWidth = dpToPx(shortcutWindowWidth);
-                            int sTargetHeight = dpToPx(shortcutWindowHeight);
-                            startBlurWindow(sTargetWidth, sTargetHeight, 0, shortcutWindowPositionY, shortcutCornerRadius, shortcutBlurRadius);
-                        }
+//                        if (shortcutStyle != 0) {
+//                            int sTargetWidth = dpToPx(shortcutWindowWidth);
+//                            int sTargetHeight = dpToPx(shortcutWindowHeight);
+//                            startBlurWindow(sTargetWidth, sTargetHeight, 0, shortcutWindowPositionY, shortcutCornerRadius, shortcutBlurRadius);
+//                        }
 
                         // 提前启动代理 Activity，展开过程中即可响应返回手势
-                        startWindowHostActivity();
+//                        startWindowHostActivity();
 
                         // ===== View.post()：等待 contentContainer 布局完全完成后设置属性并启动动画 =====
                         // 使用 View.post() 而非 OnGlobalLayoutListener，兼容性更强
@@ -4120,34 +4128,32 @@ public class FloatWindowService extends Service {
                                 
                                 // 【关键修复】快捷窗口需要根据实际位置更新模糊窗口
                                 // 等待布局完成后获取真实坐标并发送广播
-                                if (shortcutStyle != 0) {
-                                    cc.post(() -> {
-                                        try {
-                                            // 计算 contentContainer 在屏幕上的绝对坐标
+//                                if (shortcutStyle != 0) {
+//                                    cc.post(() -> {
+//                                        try {
+//                                            // 计算 contentContainer 在屏幕上的绝对坐标
+//
+//                                            int blurX = cc.getLeft();
+//                                            int blurY = cc.getTop() - getNavigationBarHeight()/2;
+//                                            int blurWidth = cc.getWidth();
+//                                            int blurHeight = cc.getHeight();
+//
+//                                            Intent updateIntent = new Intent("UPDATE_BLUR_WINDOW_SIZE");
+//                                            updateIntent.setPackage(getPackageName());
+//                                            updateIntent.putExtra("blur_x", blurX);
+//                                            updateIntent.putExtra("blur_y", blurY);
+//                                            updateIntent.putExtra("blur_width", blurWidth);
+//                                            updateIntent.putExtra("blur_height", blurHeight);
+//                                            updateIntent.putExtra("blur_corner_radius", dpToPx(shortcutCornerRadius));
+//                                            sendBroadcast(updateIntent);
+//                                            Log.d(TAG, "已发送快捷窗口模糊更新: x=" + blurX + " y=" + blurY
+//                                                    + " w=" + blurWidth + " h=" + blurHeight + " 圆角=" + shortcutCornerRadius + "dp");
+//                                        } catch (Exception e) {
+//                                            Log.e(TAG, "发送模糊窗口更新失败", e);
+//                                        }
+//                                    });
+//                                }
 
-                                            int blurX = cc.getLeft();
-                                            int blurY = cc.getTop() - getNavigationBarHeight()/2;
-                                            int blurWidth = cc.getWidth();
-                                            int blurHeight = cc.getHeight();
-                                            
-                                            Intent updateIntent = new Intent("UPDATE_BLUR_WINDOW_SIZE");
-                                            updateIntent.setPackage(getPackageName());
-                                            updateIntent.putExtra("blur_x", blurX);
-                                            updateIntent.putExtra("blur_y", blurY);
-                                            updateIntent.putExtra("blur_width", blurWidth);
-                                            updateIntent.putExtra("blur_height", blurHeight);
-                                            updateIntent.putExtra("blur_corner_radius", dpToPx(shortcutCornerRadius));
-                                            sendBroadcast(updateIntent);
-                                            Log.d(TAG, "已发送快捷窗口模糊更新: x=" + blurX + " y=" + blurY
-                                                    + " w=" + blurWidth + " h=" + blurHeight + " 圆角=" + shortcutCornerRadius + "dp");
-                                        } catch (Exception e) {
-                                            Log.e(TAG, "发送模糊窗口更新失败", e);
-                                        }
-                                    });
-                                }
-                                if (overlayView == null) {
-                                    createOverlayWindow();
-                                }
 
                                 // 背景遮罩先渐入完成，再执行窗口展开动画
                                 if (overlayView != null) {
@@ -4254,11 +4260,11 @@ public class FloatWindowService extends Service {
                         + " trans=(" + curTranslationX + "," + curTranslationY + ")");
 
                 // 当动画进度达到 60% 时，通知模糊窗口开始渐变显示
-                if (progress >= 0.6f && !blurWindowFadeInSent) {
-                    blurWindowFadeInSent = true;
-                    sendBlurWindowFadeInBroadcast(progress);
-                    Log.d(TAG, "快捷窗口展开动画进度达到60%，已发送模糊窗口渐变显示广播");
-                }
+//                if (progress >= 0.6f && !blurWindowFadeInSent) {
+//                    blurWindowFadeInSent = true;
+//                    sendBlurWindowFadeInBroadcast(progress);
+//                    Log.d(TAG, "快捷窗口展开动画进度达到60%，已发送模糊窗口渐变显示广播");
+//                }
 
                 if (progress < 1.0f) {
                     Choreographer.getInstance().postFrameCallback(this);
@@ -4843,7 +4849,7 @@ public class FloatWindowService extends Service {
         Log.d(TAG, "收起快捷方式窗口: " + android.util.Log.getStackTraceString(new Throwable()));
 
         // ===== 关键修复：收起动画开始时立即通知模糊窗口执行渐隐动画 =====
-        sendBlurWindowFadeOutBroadcast();
+//        sendBlurWindowFadeOutBroadcast();
         Log.d(TAG, "已发送快捷窗口模糊渐隐广播");
 
         // 动画期间在视图层拦截所有触摸
@@ -5078,8 +5084,8 @@ public class FloatWindowService extends Service {
         Log.d(TAG, "[COLLAPSE_DEBUG] 收起动画开始，视图层拦截触摸");
         
         // ===== 关键修复：收起动画开始时立即通知模糊窗口执行渐隐动画 =====
-        sendBlurWindowFadeOutBroadcast();
-        Log.d(TAG, "[COLLAPSE_DEBUG] 已发送模糊窗口渐隐广播");
+//        sendBlurWindowFadeOutBroadcast();
+//        Log.d(TAG, "[COLLAPSE_DEBUG] 已发送模糊窗口渐隐广播");
 
         // 直接计算 CENTER 重力下的目标位置，避免从动画结束值反算（需在 try 外声明，catch 中也用到）
         final int targetBtmX = barPositionX;
