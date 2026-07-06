@@ -66,12 +66,11 @@ public class BlurWindowActivity extends Activity {
         originalBlurRadius = getIntent().getIntExtra(EXTRA_BLUR_RADIUS, 50);
         int cornerRadius = getIntent().getIntExtra(EXTRA_BLUR_CORNER_RADIUS, 0);
 
-        // 配置窗口：全透明、不聚焦、不触摸（让上层 OverlayWindowActivity 接收触摸）
+        // 配置窗口:全透明、不聚焦、不触摸(让上层 OverlayWindowActivity 接收触摸)
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
         
         // 关键：设置窗口背景为圆角矩形（半透明或完全透明）
         // 这样模糊效果会透过这个圆角背景显示出来

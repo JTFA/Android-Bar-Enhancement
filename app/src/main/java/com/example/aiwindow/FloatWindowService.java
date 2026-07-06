@@ -872,52 +872,52 @@ public class FloatWindowService extends Service {
         barContainer.addView(pressedOverlay);
 
         // 创建背景遮罩窗口（全屏覆盖状态栏和导航栏，不触摸、不聚焦，在提示条下方）
-        try {
-            overlayView = new View(this);
-
-            // 使用 GradientDrawable 作为背景（用于颜色和初始状态）
-            GradientDrawable overlayBg = new GradientDrawable();
-            overlayBg.setShape(GradientDrawable.RECTANGLE);
-            int overlayColorInt = Color.parseColor(overlayColor);
-            overlayBg.setColor(overlayColorInt);
-            overlayBg.setAlpha(255); // drawable 始终不透明，由 View.setAlpha/animate 控制透明度
-            overlayView.setBackground(overlayBg);
-            overlayBackground = overlayBg;
-            overlayView.setAlpha(0f); // View 初始完全透明
-
-            // 获取包含系统装饰区的实际屏幕尺寸，使遮罩覆盖到状态栏和导航栏下方
-            DisplayMetrics realMetrics = new DisplayMetrics();
-            windowManager.getDefaultDisplay().getRealMetrics(realMetrics);
-
-            overlayLayoutParams = new WindowManager.LayoutParams();
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                overlayLayoutParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-            } else {
-                overlayLayoutParams.type = WindowManager.LayoutParams.TYPE_PHONE;
-            }
-            overlayLayoutParams.format = PixelFormat.RGBA_8888;
-            overlayLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                    | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                    | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-                    | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-            overlayLayoutParams.gravity = Gravity.TOP | Gravity.START;
-            // 使用实际屏幕尺寸（包括状态栏和导航栏区域）
-            overlayLayoutParams.width = realMetrics.widthPixels;
-            overlayLayoutParams.height = realMetrics.heightPixels;
-            overlayLayoutParams.x = 0;
-            overlayLayoutParams.y = 0;
-
-            windowManager.addView(overlayView, overlayLayoutParams);
-
-            Log.d(TAG, "背景遮罩窗口已创建 - 尺寸: " + realMetrics.widthPixels + "x" + realMetrics.heightPixels
-                    + ", 颜色: " + overlayColor + ", 透明度: " + overlayAlpha + "%");
-        } catch (Exception e) {
-            Log.e(TAG, "创建背景遮罩窗口失败", e);
-            overlayView = null;
-            overlayLayoutParams = null;
-            overlayBackground = null;
-        }
+//        try {
+//            overlayView = new View(this);
+//
+//            // 使用 GradientDrawable 作为背景（用于颜色和初始状态）
+//            GradientDrawable overlayBg = new GradientDrawable();
+//            overlayBg.setShape(GradientDrawable.RECTANGLE);
+//            int overlayColorInt = Color.parseColor(overlayColor);
+//            overlayBg.setColor(overlayColorInt);
+//            overlayBg.setAlpha(255); // drawable 始终不透明，由 View.setAlpha/animate 控制透明度
+//            overlayView.setBackground(overlayBg);
+//            overlayBackground = overlayBg;
+//            overlayView.setAlpha(0f); // View 初始完全透明
+//
+//            // 获取包含系统装饰区的实际屏幕尺寸，使遮罩覆盖到状态栏和导航栏下方
+//            DisplayMetrics realMetrics = new DisplayMetrics();
+//            windowManager.getDefaultDisplay().getRealMetrics(realMetrics);
+//
+//            overlayLayoutParams = new WindowManager.LayoutParams();
+//            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+//                overlayLayoutParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+//            } else {
+//                overlayLayoutParams.type = WindowManager.LayoutParams.TYPE_PHONE;
+//            }
+//            overlayLayoutParams.format = PixelFormat.RGBA_8888;
+//            overlayLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+//                    | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+//                    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+//                    | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+//                    | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+//            overlayLayoutParams.gravity = Gravity.TOP | Gravity.START;
+//            // 使用实际屏幕尺寸（包括状态栏和导航栏区域）
+//            overlayLayoutParams.width = realMetrics.widthPixels;
+//            overlayLayoutParams.height = realMetrics.heightPixels;
+//            overlayLayoutParams.x = 0;
+//            overlayLayoutParams.y = 0;
+//
+//            windowManager.addView(overlayView, overlayLayoutParams);
+//
+//            Log.d(TAG, "背景遮罩窗口已创建 - 尺寸: " + realMetrics.widthPixels + "x" + realMetrics.heightPixels
+//                    + ", 颜色: " + overlayColor + ", 透明度: " + overlayAlpha + "%");
+//        } catch (Exception e) {
+//            Log.e(TAG, "创建背景遮罩窗口失败", e);
+//            overlayView = null;
+//            overlayLayoutParams = null;
+//            overlayBackground = null;
+//        }
 
         // 添加到底部窗口（在遮罩之上）
         try {
@@ -1607,6 +1607,67 @@ public class FloatWindowService extends Service {
     }
 
     /**
+     * 创建背景遮罩窗口（仅在窗口展开时使用）
+     */
+    private void createOverlayWindow() {
+        if (overlayView != null) return;
+        try {
+            overlayView = new View(this);
+            GradientDrawable overlayBg = new GradientDrawable();
+            overlayBg.setShape(GradientDrawable.RECTANGLE);
+            int overlayColorInt = Color.parseColor(overlayColor);
+            overlayBg.setColor(overlayColorInt);
+            overlayBg.setAlpha(255);
+            overlayView.setBackground(overlayBg);
+            overlayView.setAlpha(0f);
+
+            DisplayMetrics realMetrics = new DisplayMetrics();
+            windowManager.getDefaultDisplay().getRealMetrics(realMetrics);
+
+            overlayLayoutParams = new WindowManager.LayoutParams();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                overlayLayoutParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+            } else {
+                overlayLayoutParams.type = WindowManager.LayoutParams.TYPE_PHONE;
+            }
+            overlayLayoutParams.format = PixelFormat.RGBA_8888;
+            overlayLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                    | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                    | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+            overlayLayoutParams.gravity = Gravity.TOP | Gravity.START;
+            overlayLayoutParams.width = realMetrics.widthPixels;
+            overlayLayoutParams.height = realMetrics.heightPixels;
+            overlayLayoutParams.x = 0;
+            overlayLayoutParams.y = 0;
+
+            windowManager.addView(overlayView, overlayLayoutParams);
+            Log.d(TAG, "背景遮罩窗口已按需创建");
+        } catch (Exception e) {
+            Log.e(TAG, "创建背景遮罩窗口失败", e);
+            overlayView = null;
+        }
+    }
+
+    /**
+     * 移除背景遮罩窗口
+     */
+    private void removeOverlayWindow() {
+        if (overlayView != null && windowManager != null) {
+            try {
+                windowManager.removeView(overlayView);
+                Log.d(TAG, "背景遮罩窗口已移除");
+            } catch (Exception e) {
+                Log.e(TAG, "移除背景遮罩窗口失败", e);
+            }
+            overlayView = null;
+            overlayLayoutParams = null;
+            overlayBackground = null;
+        }
+    }
+
+    /**
      * 展开为 AI 对话窗口
      */
     private void expandToAiWindow() {
@@ -1789,6 +1850,10 @@ public class FloatWindowService extends Service {
                                                 Log.e(TAG, "发送模糊窗口更新失败", e);
                                             }
                                         });
+                                    }
+
+                                    if (overlayView == null) {
+                                        createOverlayWindow();
                                     }
 
                                     // 背景遮罩先渐入完成，再执行窗口展开动画
@@ -4080,6 +4145,9 @@ public class FloatWindowService extends Service {
                                         }
                                     });
                                 }
+                                if (overlayView == null) {
+                                    createOverlayWindow();
+                                }
 
                                 // 背景遮罩先渐入完成，再执行窗口展开动画
                                 if (overlayView != null) {
@@ -4903,6 +4971,9 @@ public class FloatWindowService extends Service {
 
             barContainer.setOnTouchListener(null);
 
+            // 移除背景遮罩（释放窗口资源，避免干扰其他应用弹窗）
+            removeOverlayWindow();
+
             // 关闭代理 Activity
             finishWindowHostActivity();
             
@@ -5184,6 +5255,9 @@ public class FloatWindowService extends Service {
 
             // 恢复正常触摸处理（收起动画开始时在 barContainer 设置了拦截触摸的 OnTouchListener）
             barContainer.setOnTouchListener(null);
+
+            // 移除背景遮罩（释放窗口资源，避免干扰其他应用弹窗）
+            removeOverlayWindow();
 
             // Finish proxy Activity
             finishWindowHostActivity();
