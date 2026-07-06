@@ -871,53 +871,6 @@ public class FloatWindowService extends Service {
         pressedOverlay = createPressedOverlay();
         barContainer.addView(pressedOverlay);
 
-        // 创建背景遮罩窗口（全屏覆盖状态栏和导航栏，不触摸、不聚焦，在提示条下方）
-//        try {
-//            overlayView = new View(this);
-//
-//            // 使用 GradientDrawable 作为背景（用于颜色和初始状态）
-//            GradientDrawable overlayBg = new GradientDrawable();
-//            overlayBg.setShape(GradientDrawable.RECTANGLE);
-//            int overlayColorInt = Color.parseColor(overlayColor);
-//            overlayBg.setColor(overlayColorInt);
-//            overlayBg.setAlpha(255); // drawable 始终不透明，由 View.setAlpha/animate 控制透明度
-//            overlayView.setBackground(overlayBg);
-//            overlayBackground = overlayBg;
-//            overlayView.setAlpha(0f); // View 初始完全透明
-//
-//            // 获取包含系统装饰区的实际屏幕尺寸，使遮罩覆盖到状态栏和导航栏下方
-//            DisplayMetrics realMetrics = new DisplayMetrics();
-//            windowManager.getDefaultDisplay().getRealMetrics(realMetrics);
-//
-//            overlayLayoutParams = new WindowManager.LayoutParams();
-//            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-//                overlayLayoutParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-//            } else {
-//                overlayLayoutParams.type = WindowManager.LayoutParams.TYPE_PHONE;
-//            }
-//            overlayLayoutParams.format = PixelFormat.RGBA_8888;
-//            overlayLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-//                    | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-//                    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-//                    | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-//                    | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-//            overlayLayoutParams.gravity = Gravity.TOP | Gravity.START;
-//            // 使用实际屏幕尺寸（包括状态栏和导航栏区域）
-//            overlayLayoutParams.width = realMetrics.widthPixels;
-//            overlayLayoutParams.height = realMetrics.heightPixels;
-//            overlayLayoutParams.x = 0;
-//            overlayLayoutParams.y = 0;
-//
-//            windowManager.addView(overlayView, overlayLayoutParams);
-//
-//            Log.d(TAG, "背景遮罩窗口已创建 - 尺寸: " + realMetrics.widthPixels + "x" + realMetrics.heightPixels
-//                    + ", 颜色: " + overlayColor + ", 透明度: " + overlayAlpha + "%");
-//        } catch (Exception e) {
-//            Log.e(TAG, "创建背景遮罩窗口失败", e);
-//            overlayView = null;
-//            overlayLayoutParams = null;
-//            overlayBackground = null;
-//        }
 
         // 添加到底部窗口（在遮罩之上）
         try {
@@ -1642,8 +1595,7 @@ public class FloatWindowService extends Service {
             overlayLayoutParams.x = 0;
             overlayLayoutParams.y = 0;
 
-            windowManager.addView(overlayView, overlayLayoutParams);
-            Log.d(TAG, "背景遮罩窗口已按需创建");
+            Log.d(TAG, "背景遮罩窗口已创建（等待添加到窗口管理器）");
         } catch (Exception e) {
             Log.e(TAG, "创建背景遮罩窗口失败", e);
             overlayView = null;
@@ -1677,6 +1629,25 @@ public class FloatWindowService extends Service {
 
         if (overlayView == null) {
             createOverlayWindow();
+        }
+
+        // 确保 overlayView 在 barContainer 下方
+        if (overlayView != null && barContainer != null) {
+            try {
+                // 如果 barContainer 当前在窗口中，先移除
+                if (barContainer.getWindowToken() != null) {
+                    windowManager.removeView(barContainer);
+                }
+                // 如果 overlayView 尚未添加，则添加
+                if (overlayView.getWindowToken() == null) {
+                    windowManager.addView(overlayView, overlayLayoutParams);
+                }
+                // 重新添加 barContainer（使用当前的 barLayoutParams）
+                windowManager.addView(barContainer, barLayoutParams);
+                Log.d(TAG, "窗口层级已调整：barContainer 置于 overlayView 之上");
+            } catch (Exception e) {
+                Log.e(TAG, "调整窗口层级失败", e);
+            }
         }
 
         // Save start position for animation
@@ -4002,6 +3973,25 @@ public class FloatWindowService extends Service {
 
         if (overlayView == null) {
             createOverlayWindow();
+        }
+
+        // 确保 overlayView 在 barContainer 下方
+        if (overlayView != null && barContainer != null) {
+            try {
+                // 如果 barContainer 当前在窗口中，先移除
+                if (barContainer.getWindowToken() != null) {
+                    windowManager.removeView(barContainer);
+                }
+                // 如果 overlayView 尚未添加，则添加
+                if (overlayView.getWindowToken() == null) {
+                    windowManager.addView(overlayView, overlayLayoutParams);
+                }
+                // 重新添加 barContainer（使用当前的 barLayoutParams）
+                windowManager.addView(barContainer, barLayoutParams);
+                Log.d(TAG, "窗口层级已调整：barContainer 置于 overlayView 之上");
+            } catch (Exception e) {
+                Log.e(TAG, "调整窗口层级失败", e);
+            }
         }
 
         Log.d(TAG, "展开快捷方式窗口: isAiExpanded=" + isAiWindowExpanded
