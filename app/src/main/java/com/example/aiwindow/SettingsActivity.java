@@ -12,9 +12,11 @@ import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.Spinner;
@@ -1708,6 +1710,11 @@ public class SettingsActivity extends AppCompatActivity {
                 .show();
     }
     
+    // 应用选择器相关成员变量
+    private AlertDialog currentAppPickerDialog = null;
+    private android.widget.ListView currentAppPickerListView = null;
+    private AppPickerAdapter currentAppPickerAdapter = null;
+    
     /**
      * 显示已安装应用列表供用户选择
      * 根据 appPickerTarget 确定设置哪个手势的应用
@@ -1719,32 +1726,207 @@ public class SettingsActivity extends AppCompatActivity {
         }
         isAppPickerSelecting = true;
         
-        // 查询所有可启动的应用
-        PackageManager pm = getPackageManager();
-        Intent mainIntent = new Intent(Intent.ACTION_MAIN);
-        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-        List<ResolveInfo> apps = pm.queryIntentActivities(mainIntent, 0);
+        // 创建加载对话框
+        final AlertDialog loadingDialog = new AlertDialog.Builder(this)
+                .setTitle(R.string.select_app)
+                .setMessage("正在加载应用列表...")
+                .setCancelable(false)
+                .create();
+        loadingDialog.show();
         
-        // 按应用名排序（使用中文排序器，中文按拼音首字母排列）
-        final Collator collator = Collator.getInstance(java.util.Locale.CHINESE);
-        Collections.sort(apps, new Comparator<ResolveInfo>() {
+        // 在后台线程中查询应用列表
+        new Thread(new Runnable() {
             @Override
-            public int compare(ResolveInfo a, ResolveInfo b) {
-                String labelA = a.loadLabel(pm).toString();
-                String labelB = b.loadLabel(pm).toString();
-                return collator.compare(labelA, labelB);
+            public void run() {
+                try {
+                    // 查询所有可启动的应用
+                    PackageManager pm = getPackageManager();
+                    Intent mainIntent = new Intent(Intent.ACTION_MAIN);
+                    mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+                    List<ResolveInfo> apps = pm.queryIntentActivities(mainIntent, 0);
+                    
+                    // 过滤系统应用（默认不读取）
+                    boolean includeSystemApps = preferences.getBoolean("include_system_apps", false);
+                    List<ResolveInfo> filteredApps = new ArrayList<>();
+                    for (ResolveInfo app : apps) {
+                        if (includeSystemApps || !isSystemApp(pm, app)) {
+                            filteredApps.add(app);
+                        }
+                    }
+                    
+                    // 按应用名排序（使用中文排序器，中文按拼音首字母排列）
+                    final Collator collator = Collator.getInstance(java.util.Locale.CHINESE);
+                    Collections.sort(filteredApps, new Comparator<ResolveInfo>() {
+                        @Override
+                        public int compare(ResolveInfo a, ResolveInfo b) {
+                            String labelA = a.loadLabel(pm).toString();
+                            String labelB = b.loadLabel(pm).toString();
+                            return collator.compare(labelA, labelB);
+                        }
+                    });
+                    
+                    // 准备列表数据
+                    final String[] appNames = new String[filteredApps.size()];
+                    final String[] appPackages = new String[filteredApps.size()];
+                    final String[] appClasses = new String[filteredApps.size()];
+                    final android.graphics.drawable.Drawable[] appIcons = new android.graphics.drawable.Drawable[filteredApps.size()];
+                    for (int i = 0; i < filteredApps.size(); i++) {
+                        appNames[i] = filteredApps.get(i).loadLabel(pm).toString();
+                        appPackages[i] = filteredApps.get(i).activityInfo.packageName;
+                        appClasses[i] = filteredApps.get(i).activityInfo.name;
+                        appIcons[i] = filteredApps.get(i).loadIcon(pm);
+                    }
+                    
+                    // 在主线程中显示对话框
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            loadingDialog.dismiss();
+                            showAppPickerDialog(appNames, appPackages, appClasses, appIcons);
+                        }
+                    });
+                } catch (Exception e) {
+                    android.util.Log.e("SettingsActivity", "加载应用列表失败", e);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            loadingDialog.dismiss();
+                            Toast.makeText(SettingsActivity.this, "加载应用列表失败", Toast.LENGTH_SHORT).show();
+                            isAppPickerSelecting = false;
+                        }
+                    });
+                }
             }
-        });
-        
-        // 准备列表数据
-        final String[] appNames = new String[apps.size()];
-        final String[] appPackages = new String[apps.size()];
-        final String[] appClasses = new String[apps.size()];
-        for (int i = 0; i < apps.size(); i++) {
-            appNames[i] = apps.get(i).loadLabel(pm).toString();
-            appPackages[i] = apps.get(i).activityInfo.packageName;
-            appClasses[i] = apps.get(i).activityInfo.name;
+        }).start();
+    }
+    
+    /**
+     * 判断是否为系统应用
+     */
+    private boolean isSystemApp(PackageManager pm, ResolveInfo resolveInfo) {
+        try {
+            android.content.pm.ApplicationInfo appInfo = pm.getApplicationInfo(resolveInfo.activityInfo.packageName, 0);
+            return (appInfo.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0;
+        } catch (Exception e) {
+            return false;
         }
+    }
+    
+    /**
+     * 自定义适配器类
+     */
+    private class AppPickerAdapter extends android.widget.BaseAdapter {
+        private String[] appNames;
+        private String[] appPackages;
+        private String[] appClasses;
+        private android.graphics.drawable.Drawable[] appIcons;
+        
+        public AppPickerAdapter(String[] names, String[] packages, String[] classes, android.graphics.drawable.Drawable[] icons) {
+            this.appNames = names;
+            this.appPackages = packages;
+            this.appClasses = classes;
+            this.appIcons = icons;
+        }
+        
+        @Override
+        public int getCount() {
+            return appNames.length;
+        }
+        
+        @Override
+        public Object getItem(int position) {
+            return null;
+        }
+        
+        @Override
+        public long getItemId(int position) {
+            return position;
+        }
+        
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            if (convertView == null) {
+                LinearLayout itemLayout = new LinearLayout(SettingsActivity.this);
+                itemLayout.setOrientation(LinearLayout.HORIZONTAL);
+                itemLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
+                itemLayout.setPadding(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8));
+                
+                // 图标
+                ImageView iconView = new ImageView(SettingsActivity.this);
+                iconView.setId(View.generateViewId());
+                iconView.setLayoutParams(new LinearLayout.LayoutParams(dpToPx(40), dpToPx(40)));
+                iconView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                itemLayout.addView(iconView);
+                
+                // 名称
+                TextView nameView = new TextView(SettingsActivity.this);
+                nameView.setId(View.generateViewId());
+                nameView.setTextSize(14);
+                nameView.setTextColor(0xFF333333);
+                nameView.setPadding(dpToPx(12), 0, 0, 0);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+                nameView.setLayoutParams(lp);
+                itemLayout.addView(nameView);
+                
+                convertView = itemLayout;
+            }
+            
+            LinearLayout itemLayout = (LinearLayout) convertView;
+            ImageView iconView = (ImageView) itemLayout.getChildAt(0);
+            TextView nameView = (TextView) itemLayout.getChildAt(1);
+            
+            iconView.setImageDrawable(appIcons[position]);
+            nameView.setText(appNames[position]);
+            
+            return convertView;
+        }
+        
+        /**
+         * 更新数据
+         */
+        public void updateData(String[] names, String[] packages, String[] classes, android.graphics.drawable.Drawable[] icons) {
+            this.appNames = names;
+            this.appPackages = packages;
+            this.appClasses = classes;
+            this.appIcons = icons;
+            notifyDataSetChanged();
+        }
+    }
+    
+    /**
+     * 显示应用选择对话框（带图标和系统应用开关）
+     */
+    private void showAppPickerDialog(final String[] appNames, final String[] appPackages, 
+                                     final String[] appClasses, final android.graphics.drawable.Drawable[] appIcons) {
+        // 创建自定义视图
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(dpToPx(16), dpToPx(8), dpToPx(16), dpToPx(8));
+        
+        // 系统应用开关
+        Switch switchSystemApps = new Switch(this);
+        switchSystemApps.setText("显示系统应用");
+        switchSystemApps.setChecked(preferences.getBoolean("include_system_apps", false));
+        switchSystemApps.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            preferences.edit().putBoolean("include_system_apps", isChecked).apply();
+            // 在同一个对话框中重新加载列表
+            reloadAppListInDialog();
+        });
+        layout.addView(switchSystemApps);
+        
+        // 创建 ListView
+        android.widget.ListView listView = new android.widget.ListView(this);
+        listView.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        
+        // 保存引用以便后续更新
+        currentAppPickerListView = listView;
+        currentAppPickerAdapter = new AppPickerAdapter(appNames, appPackages, appClasses, appIcons);
+        listView.setAdapter(currentAppPickerAdapter);
+        
+        layout.addView(listView);
         
         // 根据 appPickerTarget 找到当前选中的应用
         final String currentPkg = getGestureAppPackage(appPickerTarget);
@@ -1758,39 +1940,120 @@ public class SettingsActivity extends AppCompatActivity {
             }
         }
         
-        // 先创建对话框（不 show），注册好所有回调再显示
+        // 创建对话框
         AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle(R.string.select_app)
-                .setSingleChoiceItems(appNames, checkedItem, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        // 防止重复触发（某些 Android 版本在 dismiss 时可能重入）
-                        if (!isAppPickerSelecting) {
-                            return;
-                        }
-                        
-                        String pkg = appPackages[which];
-                        String name = appNames[which];
-                        String cls = appClasses[which];
-                        setGestureApp(appPickerTarget, pkg, name, cls);
-                        // 保存并通知服务
-                        saveGestureAppSetting(appPickerTarget);
-                        dialog.dismiss();
-                    }
-                })
+                .setView(layout)
                 .setNegativeButton(R.string.cancel, null);
         
         AlertDialog dialog = builder.create();
+        currentAppPickerDialog = dialog;
         
-        // 弹窗关闭时重置标记（在 show 之前注册，确保不会被遗漏）
+        // 设置列表项点击事件
+        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                if (!isAppPickerSelecting) {
+                    return;
+                }
+                
+                String pkg = currentAppPickerAdapter.appPackages[position];
+                String name = currentAppPickerAdapter.appNames[position];
+                String cls = currentAppPickerAdapter.appClasses[position];
+                setGestureApp(appPickerTarget, pkg, name, cls);
+                // 保存并通知服务
+                saveGestureAppSetting(appPickerTarget);
+                dialog.dismiss();
+            }
+        });
+        
+        // 弹窗关闭时重置标记
         dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
             @Override
             public void onDismiss(DialogInterface d) {
                 isAppPickerSelecting = false;
+                currentAppPickerDialog = null;
+                currentAppPickerListView = null;
+                currentAppPickerAdapter = null;
             }
         });
         
         dialog.show();
+    }
+    
+    /**
+     * 在对话框中重新加载应用列表（不关闭对话框）
+     */
+    private void reloadAppListInDialog() {
+        if (currentAppPickerDialog == null || currentAppPickerAdapter == null) {
+            return;
+        }
+        
+        // 显示加载状态（可选）
+        currentAppPickerDialog.setTitle("正在刷新...");
+        
+        // 在后台线程中重新查询
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    PackageManager pm = getPackageManager();
+                    Intent mainIntent = new Intent(Intent.ACTION_MAIN);
+                    mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+                    List<ResolveInfo> apps = pm.queryIntentActivities(mainIntent, 0);
+                    
+                    // 过滤系统应用
+                    boolean includeSystemApps = preferences.getBoolean("include_system_apps", false);
+                    List<ResolveInfo> filteredApps = new ArrayList<>();
+                    for (ResolveInfo app : apps) {
+                        if (includeSystemApps || !isSystemApp(pm, app)) {
+                            filteredApps.add(app);
+                        }
+                    }
+                    
+                    // 排序
+                    final Collator collator = Collator.getInstance(java.util.Locale.CHINESE);
+                    Collections.sort(filteredApps, new Comparator<ResolveInfo>() {
+                        @Override
+                        public int compare(ResolveInfo a, ResolveInfo b) {
+                            String labelA = a.loadLabel(pm).toString();
+                            String labelB = b.loadLabel(pm).toString();
+                            return collator.compare(labelA, labelB);
+                        }
+                    });
+                    
+                    // 准备数据
+                    final String[] appNames = new String[filteredApps.size()];
+                    final String[] appPackages = new String[filteredApps.size()];
+                    final String[] appClasses = new String[filteredApps.size()];
+                    final android.graphics.drawable.Drawable[] appIcons = new android.graphics.drawable.Drawable[filteredApps.size()];
+                    for (int i = 0; i < filteredApps.size(); i++) {
+                        appNames[i] = filteredApps.get(i).loadLabel(pm).toString();
+                        appPackages[i] = filteredApps.get(i).activityInfo.packageName;
+                        appClasses[i] = filteredApps.get(i).activityInfo.name;
+                        appIcons[i] = filteredApps.get(i).loadIcon(pm);
+                    }
+                    
+                    // 更新UI
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            currentAppPickerAdapter.updateData(appNames, appPackages, appClasses, appIcons);
+                            currentAppPickerDialog.setTitle(R.string.select_app);
+                        }
+                    });
+                } catch (Exception e) {
+                    android.util.Log.e("SettingsActivity", "刷新应用列表失败", e);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            currentAppPickerDialog.setTitle(R.string.select_app);
+                            Toast.makeText(SettingsActivity.this, "刷新失败", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                }
+            }
+        }).start();
     }
     
     /**
