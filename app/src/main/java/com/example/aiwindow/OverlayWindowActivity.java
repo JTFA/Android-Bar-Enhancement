@@ -496,6 +496,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         final float density = getResources().getDisplayMetrics().density;
         AcrylicRoundRectDrawable bg = new AcrylicRoundRectDrawable(
                 getAcrylicBgColor(), dpToPx(cornerRadius), density);
+        bg.setBrightnessFactor(0.9f);
         if (borderWidth > 0) {
             int borderColorWithAlpha = parseColorWithAlpha(borderColor, borderAlpha);
             bg.setStroke(dpToPx(borderWidth), borderColorWithAlpha);
@@ -560,36 +561,40 @@ public class OverlayWindowActivity extends AppCompatActivity {
         createBackgroundOverlay();
     }
 
+//    private int getAcrylicBgColor() {
+//        if (windowType == WINDOW_TYPE_SHORTCUT) {
+//            // 快捷窗口：根据样式决定背景透明度
+//            if (shortcutStyle == 0) {
+//                // 不透明样式：白色背景完全不透明
+//                return isDarkMode() ? Color.parseColor("#2B2B2B") : Color.WHITE;
+//            } else {
+//                // 亚克力/液态玻璃：使用叠加色透明度
+//                int alpha = Math.min(255, Math.max(0, shortcutOverlayAlpha));
+//                int baseColor = isDarkMode() ? 0xFF2B2B2B : 0xFFFFFFFF;
+//                int r = (baseColor >> 16) & 0xFF;
+//                int g = (baseColor >> 8) & 0xFF;
+//                int b = baseColor & 0xFF;
+//                return Color.argb(alpha, r, g, b);
+//            }
+//        } else {
+//            // AI 窗口：根据样式决定背景透明度
+//            if (aiStyle == 0) {
+//                // 不透明样式：白色背景完全不透明
+//                return isDarkMode() ? Color.parseColor("#2B2B2B") : Color.WHITE;
+//            } else {
+//                // 亚克力/液态玻璃：使用叠加色透明度（背景透明度）
+//                int alpha = Math.min(255, Math.max(0, aiOverlayAlpha));
+//                int baseColor = isDarkMode() ? 0xFF2B2B2B : 0xFFFFFFFF;
+//                int r = (baseColor >> 16) & 0xFF;
+//                int g = (baseColor >> 8) & 0xFF;
+//                int b = baseColor & 0xFF;
+//                return Color.argb(alpha, r, g, b);
+//            }
+//        }
+//    }
     private int getAcrylicBgColor() {
-        if (windowType == WINDOW_TYPE_SHORTCUT) {
-            // 快捷窗口：根据样式决定背景透明度
-            if (shortcutStyle == 0) {
-                // 不透明样式：白色背景完全不透明
-                return isDarkMode() ? Color.parseColor("#2B2B2B") : Color.WHITE;
-            } else {
-                // 亚克力/液态玻璃：使用叠加色透明度
-                int alpha = Math.min(255, Math.max(0, shortcutOverlayAlpha));
-                int baseColor = isDarkMode() ? 0xFF2B2B2B : 0xFFFFFFFF;
-                int r = (baseColor >> 16) & 0xFF;
-                int g = (baseColor >> 8) & 0xFF;
-                int b = baseColor & 0xFF;
-                return Color.argb(alpha, r, g, b);
-            }
-        } else {
-            // AI 窗口：根据样式决定背景透明度
-            if (aiStyle == 0) {
-                // 不透明样式：白色背景完全不透明
-                return isDarkMode() ? Color.parseColor("#2B2B2B") : Color.WHITE;
-            } else {
-                // 亚克力/液态玻璃：使用叠加色透明度（背景透明度）
-                int alpha = Math.min(255, Math.max(0, aiOverlayAlpha));
-                int baseColor = isDarkMode() ? 0xFF2B2B2B : 0xFFFFFFFF;
-                int r = (baseColor >> 16) & 0xFF;
-                int g = (baseColor >> 8) & 0xFF;
-                int b = baseColor & 0xFF;
-                return Color.argb(alpha, r, g, b);
-            }
-        }
+        // 背景本身完全不透明，透明度由 Drawable.setAlpha 控制
+        return isDarkMode() ? 0xFF2B2B2B : 0xFFFFFFFF;
     }
 
     private boolean isDarkMode() {
@@ -1372,6 +1377,22 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     blurBackgroundView.setTranslationY(curTransY);
                 }
 
+                // 计算当前背景透明度
+                Drawable bg = contentContainer.getBackground();
+                if (bg instanceof AcrylicRoundRectDrawable) {
+                    AcrylicRoundRectDrawable acrylicBg = (AcrylicRoundRectDrawable) bg;
+                    int targetAlpha = (windowType == WINDOW_TYPE_AI) ? aiOverlayAlpha : shortcutOverlayAlpha;
+                    int currentAlpha;
+                    if (progress <= 0.6f) {
+                        currentAlpha = 255; // 前60%完全不透明
+                    } else {
+                        float t = (progress - 0.6f) / 0.4f;
+                        currentAlpha = (int)(255 + (targetAlpha - 255) * t);
+                    }
+                    acrylicBg.updateFillColorAndAlpha(currentAlpha, targetAlpha); // 替换原 bg.setAlpha
+                    contentContainer.invalidate(); // 强制重绘
+                }
+
                 // WebView 后 50% 渐入
                 if (webView != null) {
                     if (progress < 0.5f) {
@@ -1391,11 +1412,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     }
                 }
                 
-                // 当动画进度达到70%时，通知模糊窗口开始渐变显示
+                // 当动画进度达到60%时，通知模糊窗口开始渐变显示
                 if (progress >= 0.6f && !blurWindowFadeInSent) {
                     blurWindowFadeInSent = true;
                     sendBlurWindowFadeInBroadcast(progress);
-                    Log.d(TAG, "展开动画进度达到70%，已发送模糊窗口渐变显示广播");
+                    Log.d(TAG, "展开动画进度达到60%，已发送模糊窗口渐变显示广播");
                 }
 
                 if (progress < 1.0f) {
@@ -1427,6 +1448,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
                             webView.setAlpha(1f);
                         }
                         webView.invalidate();
+                    }
+                    if (bg instanceof AcrylicRoundRectDrawable) {
+                        int targetAlpha = (windowType == WINDOW_TYPE_AI) ? aiOverlayAlpha : shortcutOverlayAlpha;
+                        AcrylicRoundRectDrawable acrylicBg = (AcrylicRoundRectDrawable) bg;
+                        acrylicBg.updateFillColorAndAlpha(targetAlpha, targetAlpha);
                     }
                 }
             }
@@ -1492,6 +1518,21 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     blurBackgroundView.setScaleY(curScaleY);
                     blurBackgroundView.setTranslationX(curTransX);
                     blurBackgroundView.setTranslationY(curTransY);
+                }
+
+                Drawable bg = contentContainer.getBackground();
+                if (bg instanceof AcrylicRoundRectDrawable) {
+                    AcrylicRoundRectDrawable acrylicBg = (AcrylicRoundRectDrawable) bg;
+                    int targetAlpha = (windowType == WINDOW_TYPE_AI) ? aiOverlayAlpha : shortcutOverlayAlpha;
+                    int currentAlpha;
+                    if (progress <= 0.3f) {
+                        float t = progress / 0.3f;
+                        currentAlpha = (int)(targetAlpha + (255 - targetAlpha) * t);
+                    } else {
+                        currentAlpha = 255; // 后70%保持完全不透明
+                    }
+                    acrylicBg.updateFillColorAndAlpha(currentAlpha, targetAlpha);
+                    contentContainer.invalidate(); // 强制重绘
                 }
 
                 // WebView 前 50% 渐出
@@ -1674,9 +1715,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
         private int width, height;
         private final float density;
 
+        // ---- 动画过程亮度控制 ----
+        private int mBaseColor;               // 完全不透明时的颜色
+        private float mBrightnessFactor = 0.7f; // 完全透明时的亮度因子
+
         AcrylicRoundRectDrawable(int fillColor, float cornerRadiusPx, float density) {
             this.density = density;
             fillPaint.setColor(fillColor);
+            mBaseColor =  fillColor;        // 43
             fillPaint.setStyle(Paint.Style.FILL);
             strokePaint.setStyle(Paint.Style.STROKE);
             strokePaint.setColor(Color.TRANSPARENT);
@@ -1745,10 +1791,47 @@ public class OverlayWindowActivity extends AppCompatActivity {
             }
         }
 
+        // ---- 新增：设置亮度因子 ----
+        void setBrightnessFactor(float factor) {
+            mBrightnessFactor = Math.max(0.1f, Math.min(1.0f, factor));
+        }
+
+        // ---- 新增：根据透明度更新填充颜色和透明度 ----
+        void updateFillColorAndAlpha(int alpha, int targetAlpha) {
+            // 计算亮度因子：alpha=255 时最低，alpha=targetAlpha 时最高(1.0)
+            float factor;
+            if (targetAlpha >= 255) {
+                factor = 1.0f; // 不可能发生，但以防万一
+            } else {
+                // 线性插值：alpha 从 255 到 targetAlpha，factor 从 mBrightnessFactor 到 1.0
+                float range = 255 - targetAlpha;
+                float progress = (255 - alpha) / range; // 0~1
+                factor = mBrightnessFactor + (1.0f - mBrightnessFactor) * progress;
+            }
+
+            int r = (mBaseColor >> 16) & 0xFF;
+            int g = (mBaseColor >> 8) & 0xFF;
+            int b = (mBaseColor) & 0xFF;
+            int newR = Math.round(r * factor);
+            int newG = Math.round(g * factor);
+            int newB = Math.round(b * factor);
+            int newColor = Color.argb(alpha, newR, newG, newB);
+            fillPaint.setColor(newColor);
+            invalidateSelf();
+        }
+
+//        @Override
+//        public void setAlpha(int alpha) {
+//            // 只修改边框和玻璃高光的透明度，填充色由 updateFillColorAndAlpha 单独控制
+//            strokePaint.setAlpha(alpha);
+//            glassPaint.setAlpha(alpha);
+//            // 不修改 fillPaint
+//        }
+
         @Override
         public void setAlpha(int alpha) {
             fillPaint.setAlpha(alpha);
-            strokePaint.setAlpha(alpha);
+            strokePaint.setAlpha(alpha);    // strokePaint 的透明度保持 setStroke 时设置的值，不在此修改
             glassPaint.setAlpha(alpha);
         }
 
