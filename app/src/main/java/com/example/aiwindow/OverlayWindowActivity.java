@@ -1348,7 +1348,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 if (isCollapsing || isFinishing()) return;
 
                 float progress = (float) (frameTimeNanos - startNanos) / 1_000_000f / animDuration;
-                progress = Math.min(progress, 1.0f);
+                progress = Math.max(0f, Math.min(progress, 1.0f));
                 float eased = expandInterpolator.getInterpolation(progress);
 
                 float curScaleX = initScaleX + (1f - initScaleX) * eased;
@@ -1468,9 +1468,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
         isCollapsing = true;
         isExpanded = false;
         
-        // 【将 FADE_OUT 广播移到 doFrame 第一帧中发送，与动画同步触发】
-        // 避免在 Choreographer 回调前下层模糊窗口就隐藏，导致半透明区域底色突变
-
         final float endScaleX = initScaleX;
         final float endScaleY = initScaleY;
         final float endTransX = initTranslationX;
@@ -1486,7 +1483,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 BlurWindowActivity.fadeOutIfAlive();
                 
                 float progress = (float) (frameTimeNanos - startNanos) / 1_000_000f / animDuration;
-                progress = Math.min(progress, 1.0f);
+                progress = Math.max(0f, Math.min(progress, 1.0f));
                 float eased = animInterpolator.getInterpolation(progress);
 
                 float curScaleX = 1f + (endScaleX - 1f) * eased;
