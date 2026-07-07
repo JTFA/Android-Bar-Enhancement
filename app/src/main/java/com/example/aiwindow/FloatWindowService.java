@@ -4776,9 +4776,8 @@ public class FloatWindowService extends Service {
      * 对于非导出的内部 Activity（如支付宝/微信的扫一扫、付款码），使用 URL Scheme 启动
      */
     private void launchShortcutApp(ShortcutItem item) {
-        if (item == null || android.text.TextUtils.isEmpty(item.getPackageName())
-                || android.text.TextUtils.isEmpty(item.getClassName())) {
-            Log.d(TAG, "快捷方式包名或类名为空");
+        if (item == null || android.text.TextUtils.isEmpty(item.getPackageName())) {
+            Log.d(TAG, "快捷方式包名为空");
             return;
         }
 
@@ -4823,7 +4822,22 @@ public class FloatWindowService extends Service {
             return configIntent;
         }
 
-        // 对于导出的普通 Activity，使用显式组件名启动
+        // 如果类名为空，使用包名启动（类似单击提示条的方式）
+        if (android.text.TextUtils.isEmpty(item.getClassName())) {
+            Intent intent = getPackageManager().getLaunchIntentForPackage(item.getPackageName());
+            if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                return intent;
+            }
+            // 降级方案：使用 CATEGORY_LAUNCHER
+            Intent fallbackIntent = new Intent(Intent.ACTION_MAIN);
+            fallbackIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+            fallbackIntent.setPackage(item.getPackageName());
+            fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            return fallbackIntent;
+        }
+
+        // 有类名时使用显式组件启动
         Intent intent = new Intent();
         intent.setClassName(item.getPackageName(), item.getClassName());
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);

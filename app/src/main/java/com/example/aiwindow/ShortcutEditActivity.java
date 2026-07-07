@@ -800,8 +800,8 @@ public class ShortcutEditActivity extends AppCompatActivity {
                         Toast.makeText(this, "请输入名称", Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    if (TextUtils.isEmpty(pkg) || TextUtils.isEmpty(cls)) {
-                        Toast.makeText(this, "请输入包名和类名", Toast.LENGTH_SHORT).show();
+                    if (TextUtils.isEmpty(pkg)) {
+                        Toast.makeText(this, "请输入包名", Toast.LENGTH_SHORT).show();
                         return;
                     }
 
