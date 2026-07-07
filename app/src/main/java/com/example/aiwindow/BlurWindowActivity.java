@@ -51,6 +51,17 @@ public class BlurWindowActivity extends Activity {
             act.finish();
         }
     }
+    
+    /**
+     * 淡出并关闭当前存活的 BlurWindowActivity（由 OverlayWindowActivity 在动画开始时调用）
+     * 直接通过静态方法调用，不经过广播，轻量且同步
+     */
+    public static void fadeOutIfAlive() {
+        BlurWindowActivity act = sInstance != null ? sInstance.get() : null;
+        if (act != null && !act.isFinishing()) {
+            act.fadeOutAndFinish();
+        }
+    }
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {

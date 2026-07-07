@@ -1482,9 +1482,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             @Override
             public void doFrame(long frameTimeNanos) {
-                // 【关键修复】在动画第一帧中发送 FADE_OUT 广播
-                // 与 collapse 动画同步，避免广播在前、动画在后造成的底层底色突变
-                sendBlurWindowFadeOutBroadcast();
+                // 直接调用静态方法触发 BlurWindowActivity 淡出，不经过广播分发，不掉帧
+                BlurWindowActivity.fadeOutIfAlive();
                 
                 float progress = (float) (frameTimeNanos - startNanos) / 1_000_000f / animDuration;
                 progress = Math.min(progress, 1.0f);
