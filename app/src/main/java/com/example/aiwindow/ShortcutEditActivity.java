@@ -1,6 +1,8 @@
 package com.example.aiwindow;
 
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.GradientDrawable;
@@ -28,6 +30,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.ClipData;
+import android.content.Intent;
 import android.view.DragEvent;
 
 import org.json.JSONArray;
@@ -36,7 +39,11 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.text.Collator;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * 快捷方式编辑 Activity
@@ -537,12 +544,54 @@ public class ShortcutEditActivity extends AppCompatActivity {
         pkgLabel.setPadding(0, 0, 0, dpToPx(4));
         formLayout.addView(pkgLabel);
 
+        // 类名（提前声明，以便在包名选择按钮中使用）
+        TextView clsLabel = new TextView(this);
+        clsLabel.setText("Activity 类名");
+        clsLabel.setTextSize(13);
+        clsLabel.setTextColor(0xFF666666);
+        clsLabel.setPadding(0, 0, 0, dpToPx(4));
+
+        EditText clsInput = new EditText(this);
+        clsInput.setHint("输入 Activity 完整类名");
+        clsInput.setText(existing != null ? existing.getClassName() : "");
+        clsInput.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+        clsInput.setBackgroundResource(android.R.drawable.edit_text);
+
+        // 包名输入行（包含输入框和选择按钮）
+        LinearLayout pkgRow = new LinearLayout(this);
+        pkgRow.setOrientation(LinearLayout.HORIZONTAL);
+        pkgRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+
         EditText pkgInput = new EditText(this);
+        pkgInput.setId(View.generateViewId());
         pkgInput.setHint("输入应用包名");
         pkgInput.setText(existing != null ? existing.getPackageName() : "");
         pkgInput.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
         pkgInput.setBackgroundResource(android.R.drawable.edit_text);
-        formLayout.addView(pkgInput);
+        pkgInput.setTextSize(14);
+        LinearLayout.LayoutParams pkgLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        pkgInput.setLayoutParams(pkgLp);
+        pkgRow.addView(pkgInput);
+
+        Button selectAppBtn = new Button(this);
+        selectAppBtn.setText("选择应用");
+        selectAppBtn.setTextSize(12);
+        selectAppBtn.setTextColor(0xFFFFFFFF);
+        selectAppBtn.setBackgroundColor(0xFF2196F3);
+        selectAppBtn.setPadding(dpToPx(12), dpToPx(6), dpToPx(12), dpToPx(6));
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        btnLp.setMargins(dpToPx(8), 0, 0, 0);
+        selectAppBtn.setLayoutParams(btnLp);
+        
+        // 点击选择应用按钮
+        selectAppBtn.setOnClickListener(v -> {
+            showAppPickerForShortcut(pkgInput, nameInput, dialogIconPathInput, dialogImagePreview, clsInput);
+        });
+        
+        pkgRow.addView(selectAppBtn);
+        formLayout.addView(pkgRow);
 
         // 间距
         TextView spacer3 = new TextView(this);
@@ -550,19 +599,8 @@ public class ShortcutEditActivity extends AppCompatActivity {
         spacer3.setPadding(0, dpToPx(8), 0, 0);
         formLayout.addView(spacer3);
 
-        // 类名
-        TextView clsLabel = new TextView(this);
-        clsLabel.setText("Activity 类名");
-        clsLabel.setTextSize(13);
-        clsLabel.setTextColor(0xFF666666);
-        clsLabel.setPadding(0, 0, 0, dpToPx(4));
+        // 添加类名标签和输入框
         formLayout.addView(clsLabel);
-
-        EditText clsInput = new EditText(this);
-        clsInput.setHint("输入 Activity 完整类名");
-        clsInput.setText(existing != null ? existing.getClassName() : "");
-        clsInput.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
-        clsInput.setBackgroundResource(android.R.drawable.edit_text);
         formLayout.addView(clsInput);
 
         // ========== 分隔 + 启动方式配置 ==========
@@ -1014,6 +1052,289 @@ public class ShortcutEditActivity extends AppCompatActivity {
         saveShortcuts();
         refreshList();
         Toast.makeText(this, "已恢复默认", Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * 为快捷方式编辑显示应用选择器
+     */
+    private void showAppPickerForShortcut(final EditText pkgInput, final EditText nameInput,
+                                          final EditText iconPathInput, final ImageView imagePreview,
+                                          final EditText clsInput) {
+        // 创建加载对话框
+        final AlertDialog loadingDialog = new AlertDialog.Builder(this)
+                .setTitle("选择应用")
+                .setMessage("正在加载应用列表...")
+                .setCancelable(false)
+                .create();
+        loadingDialog.show();
+        
+        // 在后台线程中查询应用列表
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    PackageManager pm = getPackageManager();
+                    Intent mainIntent = new Intent(Intent.ACTION_MAIN);
+                    mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+                    List<ResolveInfo> apps = pm.queryIntentActivities(mainIntent, 0);
+                    
+                    // 过滤系统应用（默认不读取）
+                    boolean includeSystemApps = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                            .getBoolean("include_system_apps", false);
+                    List<ResolveInfo> filteredApps = new ArrayList<>();
+                    for (ResolveInfo app : apps) {
+                        if (includeSystemApps || !isSystemApp(pm, app)) {
+                            filteredApps.add(app);
+                        }
+                    }
+                    
+                    // 按应用名排序
+                    final Collator collator = Collator.getInstance(java.util.Locale.CHINESE);
+                    Collections.sort(filteredApps, new Comparator<ResolveInfo>() {
+                        @Override
+                        public int compare(ResolveInfo a, ResolveInfo b) {
+                            String labelA = a.loadLabel(pm).toString();
+                            String labelB = b.loadLabel(pm).toString();
+                            return collator.compare(labelA, labelB);
+                        }
+                    });
+                    
+                    // 准备列表数据
+                    final String[] appNames = new String[filteredApps.size()];
+                    final String[] appPackages = new String[filteredApps.size()];
+                    final String[] appClasses = new String[filteredApps.size()];
+                    final android.graphics.drawable.Drawable[] appIcons = new android.graphics.drawable.Drawable[filteredApps.size()];
+                    for (int i = 0; i < filteredApps.size(); i++) {
+                        appNames[i] = filteredApps.get(i).loadLabel(pm).toString();
+                        appPackages[i] = filteredApps.get(i).activityInfo.packageName;
+                        appClasses[i] = filteredApps.get(i).activityInfo.name;
+                        appIcons[i] = filteredApps.get(i).loadIcon(pm);
+                    }
+                    
+                    // 在主线程中显示对话框
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            loadingDialog.dismiss();
+                            showAppPickerDialogForShortcut(appNames, appPackages, appClasses, appIcons,
+                                    pkgInput, nameInput, iconPathInput, imagePreview, clsInput);
+                        }
+                    });
+                } catch (Exception e) {
+                    android.util.Log.e("ShortcutEdit", "加载应用列表失败", e);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            loadingDialog.dismiss();
+                            Toast.makeText(ShortcutEditActivity.this, "加载应用列表失败", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                }
+            }
+        }).start();
+    }
+    
+    /**
+     * 判断是否为系统应用
+     */
+    private boolean isSystemApp(PackageManager pm, ResolveInfo resolveInfo) {
+        try {
+            android.content.pm.ApplicationInfo appInfo = pm.getApplicationInfo(resolveInfo.activityInfo.packageName, 0);
+            return (appInfo.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    /**
+     * 显示应用选择对话框（用于快捷方式编辑）
+     */
+    private void showAppPickerDialogForShortcut(final String[] appNames, final String[] appPackages,
+                                                final String[] appClasses, final android.graphics.drawable.Drawable[] appIcons,
+                                                final EditText pkgInput, final EditText nameInput,
+                                                final EditText iconPathInput, final ImageView imagePreview,
+                                                final EditText clsInput) {
+        // 创建自定义视图
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(dpToPx(16), dpToPx(8), dpToPx(16), dpToPx(8));
+        
+        // 系统应用开关
+        Switch switchSystemApps = new Switch(this);
+        switchSystemApps.setText("显示系统应用");
+        switchSystemApps.setChecked(getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .getBoolean("include_system_apps", false));
+        switchSystemApps.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+                    .putBoolean("include_system_apps", isChecked).apply();
+            // 重新加载应用列表（关闭当前对话框并重新打开）
+            showAppPickerForShortcut(pkgInput, nameInput, iconPathInput, imagePreview, clsInput);
+        });
+        layout.addView(switchSystemApps);
+        
+        // 创建 ListView
+        android.widget.ListView listView = new android.widget.ListView(this);
+        listView.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        
+        // 自定义适配器（带图标）
+        android.widget.BaseAdapter adapter = new android.widget.BaseAdapter() {
+            @Override
+            public int getCount() {
+                return appNames.length;
+            }
+            
+            @Override
+            public Object getItem(int position) {
+                return null;
+            }
+            
+            @Override
+            public long getItemId(int position) {
+                return position;
+            }
+            
+            @Override
+            public View getView(int position, View convertView, ViewGroup parent) {
+                if (convertView == null) {
+                    LinearLayout itemLayout = new LinearLayout(ShortcutEditActivity.this);
+                    itemLayout.setOrientation(LinearLayout.HORIZONTAL);
+                    itemLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
+                    itemLayout.setPadding(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8));
+                    
+                    // 图标
+                    ImageView iconView = new ImageView(ShortcutEditActivity.this);
+                    iconView.setId(View.generateViewId());
+                    iconView.setLayoutParams(new LinearLayout.LayoutParams(dpToPx(40), dpToPx(40)));
+                    iconView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                    itemLayout.addView(iconView);
+                    
+                    // 名称
+                    TextView nameView = new TextView(ShortcutEditActivity.this);
+                    nameView.setId(View.generateViewId());
+                    nameView.setTextSize(14);
+                    nameView.setTextColor(0xFF333333);
+                    nameView.setPadding(dpToPx(12), 0, 0, 0);
+                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+                    nameView.setLayoutParams(lp);
+                    itemLayout.addView(nameView);
+                    
+                    convertView = itemLayout;
+                }
+                
+                LinearLayout itemLayout = (LinearLayout) convertView;
+                ImageView iconView = (ImageView) itemLayout.getChildAt(0);
+                TextView nameView = (TextView) itemLayout.getChildAt(1);
+                
+                iconView.setImageDrawable(appIcons[position]);
+                nameView.setText(appNames[position]);
+                
+                return convertView;
+            }
+        };
+        
+        listView.setAdapter(adapter);
+        layout.addView(listView);
+        
+        // 创建对话框
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                .setTitle("选择应用")
+                .setView(layout)
+                .setNegativeButton("取消", null);
+        
+        AlertDialog dialog = builder.create();
+        
+        // 设置列表项点击事件
+        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                String pkg = appPackages[position];
+                String name = appNames[position];
+                String cls = appClasses[position];
+                android.graphics.drawable.Drawable icon = appIcons[position];
+                
+                // 自动填充包名
+                pkgInput.setText(pkg);
+                
+                // 自动填充名称（如果用户没有修改过）
+                if (TextUtils.isEmpty(nameInput.getText().toString().trim())) {
+                    nameInput.setText(name);
+                }
+                
+                // 自动填充类名
+                clsInput.setText(cls);
+                
+                // 保存图标到内部存储
+                saveAppIconToStorage(pkg, icon);
+                
+                // 更新图标预览
+                String savedIconPath = getSavedIconPath(pkg);
+                if (!TextUtils.isEmpty(savedIconPath)) {
+                    iconPathInput.setText(savedIconPath);
+                    Bitmap bmp = loadIconBitmap(savedIconPath);
+                    if (bmp != null) {
+                        imagePreview.setImageBitmap(bmp);
+                        imagePreview.setVisibility(View.VISIBLE);
+                    }
+                }
+                
+                Toast.makeText(ShortcutEditActivity.this, "已选择: " + name, Toast.LENGTH_SHORT).show();
+                dialog.dismiss();
+            }
+        });
+        
+        dialog.show();
+    }
+    
+    /**
+     * 将应用图标保存到内部存储
+     */
+    private void saveAppIconToStorage(String packageName, android.graphics.drawable.Drawable drawable) {
+        try {
+            File iconsDir = new File(getFilesDir(), ICONS_DIR);
+            if (!iconsDir.exists()) {
+                iconsDir.mkdirs();
+            }
+            
+            File destFile = new File(iconsDir, packageName + ".png");
+            
+            // 将 Drawable 转换为 Bitmap
+            android.graphics.Bitmap bitmap;
+            if (drawable instanceof android.graphics.drawable.BitmapDrawable) {
+                bitmap = ((android.graphics.drawable.BitmapDrawable) drawable).getBitmap();
+            } else {
+                bitmap = android.graphics.Bitmap.createBitmap(
+                        drawable.getIntrinsicWidth(),
+                        drawable.getIntrinsicHeight(),
+                        android.graphics.Bitmap.Config.ARGB_8888);
+                android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
+                drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+                drawable.draw(canvas);
+            }
+            
+            // 保存为 PNG
+            FileOutputStream out = new FileOutputStream(destFile);
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out);
+            out.close();
+            
+            android.util.Log.d("ShortcutEdit", "图标已保存: " + destFile.getAbsolutePath());
+        } catch (Exception e) {
+            android.util.Log.e("ShortcutEdit", "保存图标失败", e);
+        }
+    }
+    
+    /**
+     * 获取已保存的图标路径
+     */
+    private String getSavedIconPath(String packageName) {
+        File iconsDir = new File(getFilesDir(), ICONS_DIR);
+        File iconFile = new File(iconsDir, packageName + ".png");
+        if (iconFile.exists()) {
+            return iconFile.getAbsolutePath();
+        }
+        return null;
     }
 
     private int dpToPx(int dp) {
