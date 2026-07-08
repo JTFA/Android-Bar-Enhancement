@@ -35,14 +35,24 @@
         android:layout_marginBottom="16dp"
         android:backgroundTint="#2196F3" />
 
-    <Button
-        android:id="@+id/btn_start_service"
+    <Switch
+        android:id="@+id/switch_service"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="启动悬浮窗服务"
         android:textSize="16sp"
         android:padding="16dp"
+        android:layout_marginBottom="16dp"
         android:backgroundTint="#4CAF50" />
+
+    <Switch
+        android:id="@+id/switch_boot_start"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="开机自启"
+        android:textSize="16sp"
+        android:padding="16dp"
+        android:backgroundTint="#2196F3" />
 
     <Button
         android:id="@+id/btn_open_settings"

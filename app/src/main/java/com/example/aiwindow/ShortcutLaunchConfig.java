@@ -20,9 +20,34 @@ public class ShortcutLaunchConfig {
     public String uri = "";
     public String targetPackage = "";
     public String targetClass = "";
+    
+    // 支持多个 Extra
+    public java.util.List<ExtraItem> extras = new java.util.ArrayList<>();
+    
+    // 兼容旧版本的单字段（已废弃）
+    @Deprecated
     public String extraKey = "";
+    @Deprecated
     public String extraValue = "";
+    @Deprecated
     public String extraType = "boolean"; // "boolean" or "string"
+    
+    /**
+     * Extra 项
+     */
+    public static class ExtraItem {
+        public String key;
+        public String value;
+        public String type; // "boolean", "string", "int", "long", "float"
+        
+        public ExtraItem() {}
+        
+        public ExtraItem(String key, String value, String type) {
+            this.key = key;
+            this.value = value;
+            this.type = type;
+        }
+    }
 
     public ShortcutLaunchConfig() {}
 
@@ -79,9 +104,37 @@ public class ShortcutLaunchConfig {
         c.uri = json.optString("uri", "");
         c.targetPackage = json.optString("targetPackage", "");
         c.targetClass = json.optString("targetClass", "");
-        c.extraKey = json.optString("extraKey", "");
-        c.extraValue = json.optString("extraValue", "");
-        c.extraType = json.optString("extraType", "boolean");
+        
+        // 尝试读取 extras 列表
+        if (json.has("extras")) {
+            try {
+                org.json.JSONArray extrasArray = json.getJSONArray("extras");
+                for (int i = 0; i < extrasArray.length(); i++) {
+                    JSONObject extraObj = extrasArray.getJSONObject(i);
+                    ExtraItem item = new ExtraItem(
+                        extraObj.optString("key", ""),
+                        extraObj.optString("value", ""),
+                        extraObj.optString("type", "string")
+                    );
+                    c.extras.add(item);
+                }
+            } catch (Exception e) {
+                // 解析失败，忽略
+            }
+        }
+        
+        // 兼容旧版本：如果没有 extras，从旧字段迁移
+        if (c.extras.isEmpty()) {
+            String oldKey = json.optString("extraKey", "");
+            if (!TextUtils.isEmpty(oldKey)) {
+                c.extras.add(new ExtraItem(
+                    oldKey,
+                    json.optString("extraValue", ""),
+                    json.optString("extraType", "boolean")
+                ));
+            }
+        }
+        
         return c;
     }
 
@@ -92,9 +145,18 @@ public class ShortcutLaunchConfig {
             json.put("uri", uri);
             json.put("targetPackage", targetPackage);
             json.put("targetClass", targetClass);
-            json.put("extraKey", extraKey);
-            json.put("extraValue", extraValue);
-            json.put("extraType", extraType);
+            
+            // 保存 extras 列表
+            org.json.JSONArray extrasArray = new org.json.JSONArray();
+            for (ExtraItem item : extras) {
+                JSONObject extraObj = new JSONObject();
+                extraObj.put("key", item.key);
+                extraObj.put("value", item.value);
+                extraObj.put("type", item.type);
+                extrasArray.put(extraObj);
+            }
+            json.put("extras", extrasArray);
+            
             return json;
         } catch (JSONException e) {
             return new JSONObject();
@@ -147,9 +209,15 @@ public class ShortcutLaunchConfig {
             case MODE_URL:
                 return "URL: " + uri;
             case MODE_INTENT:
-                String extraSummary = !TextUtils.isEmpty(extraKey)
-                        ? " Extra: " + extraKey + "=" + extraValue
-                        : " 无Extra";
+                String extraSummary;
+                if (extras.isEmpty()) {
+                    extraSummary = " 无Extra";
+                } else if (extras.size() == 1) {
+                    ExtraItem item = extras.get(0);
+                    extraSummary = " Extra: " + item.key + "=" + item.value;
+                } else {
+                    extraSummary = " Extras: " + extras.size() + "个";
+                }
                 return targetClass.substring(targetClass.lastIndexOf('.') + 1) + extraSummary;
             case MODE_EXPLICIT:
                 return targetClass.substring(targetClass.lastIndexOf('.') + 1);
@@ -175,13 +243,43 @@ public class ShortcutLaunchConfig {
                 if (!TextUtils.isEmpty(targetPackage) && !TextUtils.isEmpty(targetClass)) {
                     android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_VIEW);
                     intent.setClassName(targetPackage, targetClass);
-                    if (!TextUtils.isEmpty(extraKey)) {
-                        if ("boolean".equals(extraType)) {
-                            intent.putExtra(extraKey, Boolean.parseBoolean(extraValue));
-                        } else {
-                            intent.putExtra(extraKey, extraValue);
+                    
+                    // 添加所有 extras
+                    for (ExtraItem item : extras) {
+                        if (!TextUtils.isEmpty(item.key)) {
+                            switch (item.type) {
+                                case "boolean":
+                                    intent.putExtra(item.key, Boolean.parseBoolean(item.value));
+                                    break;
+                                case "int":
+                                    try {
+                                        intent.putExtra(item.key, Integer.parseInt(item.value));
+                                    } catch (NumberFormatException e) {
+                                        // 忽略无效值
+                                    }
+                                    break;
+                                case "long":
+                                    try {
+                                        intent.putExtra(item.key, Long.parseLong(item.value));
+                                    } catch (NumberFormatException e) {
+                                        // 忽略无效值
+                                    }
+                                    break;
+                                case "float":
+                                    try {
+                                        intent.putExtra(item.key, Float.parseFloat(item.value));
+                                    } catch (NumberFormatException e) {
+                                        // 忽略无效值
+                                    }
+                                    break;
+                                case "string":
+                                default:
+                                    intent.putExtra(item.key, item.value);
+                                    break;
+                            }
                         }
                     }
+                    
                     intent.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP | android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
                     return intent;
                 }

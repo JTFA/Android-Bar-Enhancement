@@ -663,48 +663,130 @@ public class ShortcutEditActivity extends AppCompatActivity {
         uriLp.setMargins(0, 0, 0, dpToPx(8));
         formLayout.addView(editUri, uriLp);
 
-        // Extra Key 输入框
-        final EditText editExtraKey = new EditText(this);
-        editExtraKey.setHint("Extra Key（如 LauncherUI.From.Scaner.Shortcut）");
-        editExtraKey.setText(launchConfig.extraKey);
-        editExtraKey.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
-        editExtraKey.setBackgroundResource(android.R.drawable.edit_text);
-        editExtraKey.setTextSize(14);
-        LinearLayout.LayoutParams ekLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-        ekLp.setMargins(0, 0, 0, dpToPx(4));
-        formLayout.addView(editExtraKey, ekLp);
-
-        // Extra Value + 类型
-        LinearLayout extraRow = new LinearLayout(this);
-        extraRow.setOrientation(LinearLayout.HORIZONTAL);
-        extraRow.setPadding(0, 0, 0, dpToPx(8));
-
-        final EditText editExtraValue = new EditText(this);
-        editExtraValue.setHint("Extra Value");
-        editExtraValue.setText(launchConfig.extraValue);
-        editExtraValue.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
-        editExtraValue.setBackgroundResource(android.R.drawable.edit_text);
-        editExtraValue.setTextSize(14);
-        LinearLayout.LayoutParams evLp = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1);
-        evLp.setMargins(0, 0, dpToPx(8), 0);
-        extraRow.addView(editExtraValue, evLp);
-
-        // 值类型：boolean / string
-        final Spinner spinnerType = new Spinner(this);
-        String[] typeLabels = {"boolean", "string"};
-        ArrayAdapter<String> typeAdapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item, typeLabels);
-        typeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinnerType.setAdapter(typeAdapter);
-        spinnerType.setSelection("boolean".equals(launchConfig.extraType) ? 0 : 1);
-        LinearLayout.LayoutParams typeLp = new LinearLayout.LayoutParams(
-                dpToPx(100), ViewGroup.LayoutParams.WRAP_CONTENT);
-        extraRow.addView(spinnerType, typeLp);
-
-        formLayout.addView(extraRow);
+        // Extras 容器
+        final LinearLayout extrasContainer = new LinearLayout(this);
+        extrasContainer.setOrientation(LinearLayout.VERTICAL);
+        formLayout.addView(extrasContainer);
+        
+        // 添加 Extra 按钮
+        Button addExtraBtn = new Button(this);
+        addExtraBtn.setText("+ 添加 Extra");
+        addExtraBtn.setTextSize(12);
+        addExtraBtn.setTextColor(0xFFFFFFFF);
+        addExtraBtn.setBackgroundColor(0xFF2196F3);
+        addExtraBtn.setPadding(dpToPx(12), dpToPx(6), dpToPx(12), dpToPx(6));
+        LinearLayout.LayoutParams addBtnLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        addBtnLp.setMargins(0, dpToPx(8), 0, dpToPx(8));
+        addExtraBtn.setLayoutParams(addBtnLp);
+        
+        // 用于存储所有 Extra 行的引用
+        final java.util.List<LinearLayout> extraRows = new java.util.ArrayList<>();
+        final java.util.List<EditText> extraKeyInputs = new java.util.ArrayList<>();
+        final java.util.List<EditText> extraValueInputs = new java.util.ArrayList<>();
+        final java.util.List<Spinner> extraTypeSpinners = new java.util.ArrayList<>();
+        
+        // 创建 Extra 行的方法
+        final Runnable[] createExtraRow = new Runnable[1];
+        createExtraRow[0] = new Runnable() {
+            @Override
+            public void run() {
+                LinearLayout row = new LinearLayout(ShortcutEditActivity.this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+                row.setPadding(0, 0, 0, dpToPx(4));
+                
+                // Key 输入框
+                EditText keyInput = new EditText(ShortcutEditActivity.this);
+                keyInput.setHint("Key");
+                keyInput.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+                keyInput.setBackgroundResource(android.R.drawable.edit_text);
+                keyInput.setTextSize(13);
+                LinearLayout.LayoutParams keyLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+                keyLp.setMargins(0, 0, dpToPx(4), 0);
+                keyInput.setLayoutParams(keyLp);
+                row.addView(keyInput);
+                
+                // Value 输入框
+                EditText valueInput = new EditText(ShortcutEditActivity.this);
+                valueInput.setHint("Value");
+                valueInput.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+                valueInput.setBackgroundResource(android.R.drawable.edit_text);
+                valueInput.setTextSize(13);
+                LinearLayout.LayoutParams valLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+                valLp.setMargins(0, 0, dpToPx(4), 0);
+                valueInput.setLayoutParams(valLp);
+                row.addView(valueInput);
+                
+                // 类型选择器
+                Spinner typeSpinner = new Spinner(ShortcutEditActivity.this);
+                String[] types = {"string", "boolean", "int", "long", "float"};
+                ArrayAdapter<String> typeAdapter = new ArrayAdapter<>(ShortcutEditActivity.this,
+                        android.R.layout.simple_spinner_item, types);
+                typeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                typeSpinner.setAdapter(typeAdapter);
+                LinearLayout.LayoutParams typeLp = new LinearLayout.LayoutParams(dpToPx(80), ViewGroup.LayoutParams.WRAP_CONTENT);
+                typeLp.setMargins(0, 0, dpToPx(4), 0);
+                typeSpinner.setLayoutParams(typeLp);
+                row.addView(typeSpinner);
+                
+                // 删除按钮
+                Button deleteBtn = new Button(ShortcutEditActivity.this);
+                deleteBtn.setText("×");
+                deleteBtn.setTextSize(16);
+                deleteBtn.setTextColor(0xFFFFFFFF);
+                deleteBtn.setBackgroundColor(0xFFF44336);
+                deleteBtn.setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4));
+                deleteBtn.setLayoutParams(new LinearLayout.LayoutParams(dpToPx(32), ViewGroup.LayoutParams.WRAP_CONTENT));
+                
+                final int index = extraRows.size();
+                deleteBtn.setOnClickListener(v -> {
+                    extrasContainer.removeView(row);
+                    extraRows.remove(row);
+                    extraKeyInputs.remove(keyInput);
+                    extraValueInputs.remove(valueInput);
+                    extraTypeSpinners.remove(typeSpinner);
+                });
+                
+                row.addView(deleteBtn);
+                
+                extrasContainer.addView(row);
+                extraRows.add(row);
+                extraKeyInputs.add(keyInput);
+                extraValueInputs.add(valueInput);
+                extraTypeSpinners.add(typeSpinner);
+            }
+        };
+        
+        addExtraBtn.setOnClickListener(v -> {
+            createExtraRow[0].run();
+        });
+        
+        formLayout.addView(addExtraBtn);
+        
+        // 加载已有的 extras
+        if (launchConfig.extras != null && !launchConfig.extras.isEmpty()) {
+            for (ShortcutLaunchConfig.ExtraItem item : launchConfig.extras) {
+                createExtraRow[0].run();
+                int lastIdx = extraKeyInputs.size() - 1;
+                extraKeyInputs.get(lastIdx).setText(item.key);
+                extraValueInputs.get(lastIdx).setText(item.value);
+                String[] types = {"string", "boolean", "int", "long", "float"};
+                for (int i = 0; i < types.length; i++) {
+                    if (types[i].equals(item.type)) {
+                        extraTypeSpinners.get(lastIdx).setSelection(i);
+                        break;
+                    }
+                }
+            }
+        } else if (!TextUtils.isEmpty(launchConfig.extraKey)) {
+            // 兼容旧版本
+            createExtraRow[0].run();
+            int lastIdx = extraKeyInputs.size() - 1;
+            extraKeyInputs.get(lastIdx).setText(launchConfig.extraKey);
+            extraValueInputs.get(lastIdx).setText(launchConfig.extraValue);
+            extraTypeSpinners.get(lastIdx).setSelection("boolean".equals(launchConfig.extraType) ? 1 : 0);
+        }
 
         // "恢复默认"按钮（仅4个默认快捷方式）
         if (existing != null) {
@@ -770,8 +852,8 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 boolean isUrl = ShortcutLaunchConfig.MODE_URL.equals(mode);
                 boolean isIntent = ShortcutLaunchConfig.MODE_INTENT.equals(mode);
                 editUri.setVisibility(isUrl ? View.VISIBLE : View.GONE);
-                editExtraKey.setVisibility(isIntent ? View.VISIBLE : View.GONE);
-                extraRow.setVisibility(isIntent ? View.VISIBLE : View.GONE);
+                extrasContainer.setVisibility(isIntent ? View.VISIBLE : View.GONE);
+                addExtraBtn.setVisibility(isIntent ? View.VISIBLE : View.GONE);
             }
             @Override
             public void onNothingSelected(AdapterView<?> parent) {}
@@ -852,9 +934,19 @@ public class ShortcutEditActivity extends AppCompatActivity {
                     launchConfig.uri = editUri.getText().toString().trim();
                     launchConfig.targetPackage = pkg;
                     launchConfig.targetClass = cls;
-                    launchConfig.extraKey = editExtraKey.getText().toString().trim();
-                    launchConfig.extraValue = editExtraValue.getText().toString().trim();
-                    launchConfig.extraType = spinnerType.getSelectedItemPosition() == 0 ? "boolean" : "string";
+                    
+                    // 收集所有 extras
+                    launchConfig.extras.clear();
+                    for (int i = 0; i < extraKeyInputs.size(); i++) {
+                        String key = extraKeyInputs.get(i).getText().toString().trim();
+                        String value = extraValueInputs.get(i).getText().toString().trim();
+                        if (!TextUtils.isEmpty(key)) {
+                            String[] types = {"string", "boolean", "int", "long", "float"};
+                            String type = types[extraTypeSpinners.get(i).getSelectedItemPosition()];
+                            launchConfig.extras.add(new ShortcutLaunchConfig.ExtraItem(key, value, type));
+                        }
+                    }
+                    
                     ShortcutLaunchConfig.save(getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit(), shortcutId, launchConfig).apply();
 
                     refreshList();
