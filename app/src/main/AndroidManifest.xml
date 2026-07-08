@@ -42,13 +42,22 @@
             android:name="android.webkit.WebView.EnableSafeBrowsing"
             android:value="false" />
 
+        <!-- 透明启动代理，永久隐藏于最近任务中 -->
         <activity
-            android:name=".MainActivity"
-            android:exported="true">
+            android:name=".SplashActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false">
         </activity>
 
         <!-- 设置页面（可选） -->

@@ -24,19 +24,22 @@ public class MainActivity extends AppCompatActivity {
     
     private Switch switchService;
     private Switch switchBootStart;
+    private Switch switchExcludeRecents;
     private SharedPreferences prefs;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-
+        
         // 初始化 SharedPreferences
         prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
+        
+        setContentView(R.layout.activity_main);
 
         Button btnCheckPermission = findViewById(R.id.btn_check_permission);
         switchService = findViewById(R.id.switch_service);
         switchBootStart = findViewById(R.id.switch_boot_start);
+        switchExcludeRecents = findViewById(R.id.switch_exclude_recents);
         Button btnOpenSettings = findViewById(R.id.btn_open_settings);
         Button btnTestSimple = findViewById(R.id.btn_test_simple);
 
@@ -67,6 +70,34 @@ public class MainActivity extends AppCompatActivity {
         switchBootStart.setOnCheckedChangeListener((buttonView, isChecked) -> {
             prefs.edit().putBoolean("boot_start_enabled", isChecked).apply();
             Toast.makeText(this, isChecked ? "已开启开机自启" : "已关闭开机自启", Toast.LENGTH_SHORT).show();
+        });
+        
+        // 在最近任务中隐藏开关
+        boolean excludeFromRecentsSetting = prefs.getBoolean("exclude_from_recents", false);
+        switchExcludeRecents.setChecked(excludeFromRecentsSetting);
+        switchExcludeRecents.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            prefs.edit().putBoolean("exclude_from_recents", isChecked).apply();
+            
+            if (isChecked) {
+                // 显示对话框，询问是否立即重启
+                new androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("启用隐藏功能")
+                    .setMessage("需要在最近任务中隐藏MainActivity。\n\n是否立即重启应用以应用此设置？")
+                    .setPositiveButton("立即重启", (dialog, which) -> {
+                        Intent intent = new Intent(this, SplashActivity.class);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                        startActivity(intent);
+                        finish();
+                    })
+                    .setNegativeButton("稍后重启", (dialog, which) -> {
+                        Toast.makeText(this, "已保存设置，下次启动应用时生效", Toast.LENGTH_SHORT).show();
+                    })
+                    .show();
+                Log.d("MainActivity", "已在最近任务中隐藏开关打开");
+            } else {
+                Toast.makeText(this, "已关闭：应用将在最近任务中显示", Toast.LENGTH_SHORT).show();
+                Log.d("MainActivity", "已在最近任务中隐藏开关关闭");
+            }
         });
         
         // 打开设置页面按钮点击事件
