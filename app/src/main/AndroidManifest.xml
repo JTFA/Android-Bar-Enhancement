@@ -124,8 +124,8 @@
             android:theme="@style/Theme.TransparentNoAnimation"
             android:excludeFromRecents="true"
             android:exported="false"
+            android:noHistory="true"
             android:taskAffinity="com.example.aiwindow.floating"
-            android:launchMode="singleTask"
             android:configChanges="orientation|keyboardHidden|screenSize" />
 
         <!-- 删除 WindowHostActivity 的声明 -->
