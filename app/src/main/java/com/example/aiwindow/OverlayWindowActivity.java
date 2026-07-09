@@ -1406,7 +1406,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         currentAlpha = (int)(255 + (targetAlpha - 255) * t);
                     }
                     acrylicBg.updateFillColorAndAlpha(currentAlpha, targetAlpha); // 替换原 bg.setAlpha
-                    contentContainer.invalidate(); // 强制重绘
+//                    contentContainer.invalidate(); // 强制重绘
                 }
 
                 // WebView 后 50% 渐入
@@ -1547,7 +1547,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         currentAlpha = 255; // 后70%保持完全不透明
                     }
                     acrylicBg.updateFillColorAndAlpha(currentAlpha, targetAlpha);
-                    contentContainer.invalidate(); // 强制重绘
+//                    contentContainer.invalidate(); // 强制重绘
                 }
 
                 // WebView 前 50% 渐出
@@ -1725,19 +1725,21 @@ public class OverlayWindowActivity extends AppCompatActivity {
         private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint glassPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint darkOverlayPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path path = new Path();
         private float cornerRadius;
         private int width, height;
         private final float density;
 
-        // ---- 动画过程亮度控制 ----
-        private int mBaseColor;               // 完全不透明时的颜色
-        private float mBrightnessFactor = 0.7f; // 完全透明时的亮度因子
+        // 黑色遮罩层的最大透明度（展开/收起动画中调节亮度用，替代修改颜色值方案）
+        private int mMaxOverlayAlpha = 26; // 默认对应亮度因子 0.9
 
         AcrylicRoundRectDrawable(int fillColor, float cornerRadiusPx, float density) {
             this.density = density;
             fillPaint.setColor(fillColor);
-            mBaseColor =  fillColor;        // 43
+            darkOverlayPaint.setColor(Color.BLACK);
+            darkOverlayPaint.setStyle(Paint.Style.FILL);
+            darkOverlayPaint.setAlpha(0);
             fillPaint.setStyle(Paint.Style.FILL);
             strokePaint.setStyle(Paint.Style.STROKE);
             strokePaint.setColor(Color.TRANSPARENT);
@@ -1794,44 +1796,42 @@ public class OverlayWindowActivity extends AppCompatActivity {
         public void draw(@NonNull Canvas canvas) {
             // 1. 填充半透明底色（透出模糊背景）
             canvas.drawPath(path, fillPaint);
-            // 2. 绘制玻璃反射高光
+            // 2. 黑色遮罩层（展开/收起动画中调节亮度用，仅修改 alpha 比修改颜色值性能更高）
+            if (darkOverlayPaint.getAlpha() > 0) {
+                canvas.drawPath(path, darkOverlayPaint);
+            }
+            // 3. 绘制玻璃反射高光
             canvas.save();
             canvas.clipPath(path);
             canvas.drawRect(0, 0, width, Math.min(height, Math.round(80 * density)), glassPaint);
             canvas.restore();
-            // 3. 绘制边框
+            // 4. 绘制边框
             if (strokePaint.getStrokeWidth() > 0
                     && strokePaint.getColor() != Color.TRANSPARENT) {
                 canvas.drawPath(path, strokePaint);
             }
         }
 
-        // ---- 新增：设置亮度因子 ----
+        // ---- 设置亮度因子（转换为黑色遮罩最大透明度） ----
         void setBrightnessFactor(float factor) {
-            mBrightnessFactor = Math.max(0.1f, Math.min(1.0f, factor));
+            float clamped = Math.max(0.1f, Math.min(1.0f, factor));
+            mMaxOverlayAlpha = Math.round((1.0f - clamped) * 255);
         }
 
-        // ---- 新增：根据透明度更新填充颜色和透明度 ----
+        // ---- 更新背景透明度和黑色遮罩透明度（替代原来修改颜色值方案，性能更高） ----
         void updateFillColorAndAlpha(int alpha, int targetAlpha) {
-            // 计算亮度因子：alpha=255 时最低，alpha=targetAlpha 时最高(1.0)
-            float factor;
-            if (targetAlpha >= 255) {
-                factor = 1.0f; // 不可能发生，但以防万一
+            // 设置填充底色透明度
+            fillPaint.setAlpha(alpha);
+            // 计算黑色遮罩透明度：alpha=255 时遮罩最浓，alpha=targetAlpha 时遮罩消失
+            int darkAlpha;
+            if (targetAlpha >= 255 || alpha <= targetAlpha) {
+                darkAlpha = 0;
+            } else if (alpha >= 255) {
+                darkAlpha = mMaxOverlayAlpha;
             } else {
-                // 线性插值：alpha 从 255 到 targetAlpha，factor 从 mBrightnessFactor 到 1.0
-                float range = 255 - targetAlpha;
-                float progress = (255 - alpha) / range; // 0~1
-                factor = mBrightnessFactor + (1.0f - mBrightnessFactor) * progress;
+                darkAlpha = mMaxOverlayAlpha * (alpha - targetAlpha) / (255 - targetAlpha);
             }
-
-            int r = (mBaseColor >> 16) & 0xFF;
-            int g = (mBaseColor >> 8) & 0xFF;
-            int b = (mBaseColor) & 0xFF;
-            int newR = Math.round(r * factor);
-            int newG = Math.round(g * factor);
-            int newB = Math.round(b * factor);
-            int newColor = Color.argb(alpha, newR, newG, newB);
-            fillPaint.setColor(newColor);
+            darkOverlayPaint.setAlpha(darkAlpha);
             invalidateSelf();
         }
 
