@@ -163,8 +163,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // ─── WebView 状态保持 ───
     private static WebView sPersistentWebView; // 静态 WebView，跨 Activity 生命周期保持
     
-    // ─── 模糊窗口渐变显示标志 ───
+    // ─── 模糊窗口渐变标志 ───
     private boolean blurWindowFadeInSent = false; // 标记是否已发送模糊窗口渐变显示广播
+    private boolean blurFadeOutStarted = false; // 标记收起动画中是否已触发模糊淡出
 
     // ─── 输入法避让相关 ───
     private ViewTreeObserver.OnGlobalLayoutListener keyboardLayoutListener;
@@ -1356,6 +1357,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         isExpanded = true;
 
+        // 缓存背景 Drawable 和目标透明度，避免每帧重复获取
+        final Drawable expandBg = contentContainer.getBackground();
+        final AcrylicRoundRectDrawable expandAcrylicBg = (expandBg instanceof AcrylicRoundRectDrawable) ? (AcrylicRoundRectDrawable) expandBg : null;
+        final int expandTargetAlpha = (windowType == WINDOW_TYPE_AI) ? aiOverlayAlpha : shortcutOverlayAlpha;
+
         final long startNanos = System.nanoTime();
 
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
@@ -1394,19 +1400,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 }
 
                 // 计算当前背景透明度
-                Drawable bg = contentContainer.getBackground();
-                if (bg instanceof AcrylicRoundRectDrawable) {
-                    AcrylicRoundRectDrawable acrylicBg = (AcrylicRoundRectDrawable) bg;
-                    int targetAlpha = (windowType == WINDOW_TYPE_AI) ? aiOverlayAlpha : shortcutOverlayAlpha;
+                if (expandAcrylicBg != null) {
                     int currentAlpha;
                     if (progress <= 0.6f) {
                         currentAlpha = 255; // 前60%完全不透明
                     } else {
                         float t = (progress - 0.6f) / 0.4f;
-                        currentAlpha = (int)(255 + (targetAlpha - 255) * t);
+                        currentAlpha = (int)(255 + (expandTargetAlpha - 255) * t);
                     }
-                    acrylicBg.updateFillColorAndAlpha(currentAlpha, targetAlpha); // 替换原 bg.setAlpha
-//                    contentContainer.invalidate(); // 强制重绘
+                    expandAcrylicBg.updateFillColorAndAlpha(currentAlpha, expandTargetAlpha);
                 }
 
                 // WebView 后 50% 渐入
@@ -1465,10 +1467,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         }
                         webView.invalidate();
                     }
-                    if (bg instanceof AcrylicRoundRectDrawable) {
-                        int targetAlpha = (windowType == WINDOW_TYPE_AI) ? aiOverlayAlpha : shortcutOverlayAlpha;
-                        AcrylicRoundRectDrawable acrylicBg = (AcrylicRoundRectDrawable) bg;
-                        acrylicBg.updateFillColorAndAlpha(targetAlpha, targetAlpha);
+                    if (expandAcrylicBg != null) {
+                        expandAcrylicBg.updateFillColorAndAlpha(expandTargetAlpha, expandTargetAlpha);
                     }
                 }
             }
@@ -1490,13 +1490,22 @@ public class OverlayWindowActivity extends AppCompatActivity {
         final float endTransY = initTranslationY;
         final long startNanos = System.nanoTime();
 
+        // 缓存背景 Drawable 和目标透明度，避免每帧重复获取
+        final Drawable bg = contentContainer.getBackground();
+        final AcrylicRoundRectDrawable acrylicBg = (bg instanceof AcrylicRoundRectDrawable) ? (AcrylicRoundRectDrawable) bg : null;
+        final int collapseTargetAlpha = (windowType == WINDOW_TYPE_AI) ? aiOverlayAlpha : shortcutOverlayAlpha;
+
         contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        blurFadeOutStarted = false;
 
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             @Override
             public void doFrame(long frameTimeNanos) {
-                // 直接调用静态方法触发 BlurWindowActivity 淡出，不经过广播分发，不掉帧
-                BlurWindowActivity.fadeOutIfAlive();
+                // 只触发一次模糊淡出，避免每帧重复创建 Handler 动画
+                if (!blurFadeOutStarted) {
+                    blurFadeOutStarted = true;
+                    BlurWindowActivity.fadeOutIfAlive();
+                }
                 
                 float progress = (float) (frameTimeNanos - startNanos) / 1_000_000f / animDuration;
                 progress = Math.max(0f, Math.min(progress, 1.0f));
@@ -1507,7 +1516,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 float curTransX = endTransX * eased;
                 float curTransY = endTransY * eased;
 
-                // 末尾淡出：最后 20% 进度渐隐
+                // 末尾淡出：最后 30% 进度渐隐
                 float containerAlpha = 1.0f;
                 if (progress > 0.7f) {
                     float fadeProgress = (progress - 0.7f) / 0.3f;
@@ -1517,8 +1526,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 
                 // 背景遮罩同步渐出（与窗口动画同时）
                 if (overlayView != null) {
-                    float targetAlpha = overlayAlpha / 100.0f;
-                    overlayView.setAlpha(targetAlpha * (1.0f - eased));
+                    float overlayTargetAlpha = overlayAlpha / 100.0f;
+                    overlayView.setAlpha(overlayTargetAlpha * (1.0f - eased));
                 }
 
                 contentContainer.setScaleX(curScaleX);
@@ -1535,19 +1544,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     blurBackgroundView.setTranslationY(curTransY);
                 }
 
-                Drawable bg = contentContainer.getBackground();
-                if (bg instanceof AcrylicRoundRectDrawable) {
-                    AcrylicRoundRectDrawable acrylicBg = (AcrylicRoundRectDrawable) bg;
-                    int targetAlpha = (windowType == WINDOW_TYPE_AI) ? aiOverlayAlpha : shortcutOverlayAlpha;
+                if (acrylicBg != null) {
                     int currentAlpha;
                     if (progress <= 0.3f) {
                         float t = progress / 0.3f;
-                        currentAlpha = (int)(targetAlpha + (255 - targetAlpha) * t);
+                        currentAlpha = (int)(collapseTargetAlpha + (255 - collapseTargetAlpha) * t);
                     } else {
                         currentAlpha = 255; // 后70%保持完全不透明
                     }
-                    acrylicBg.updateFillColorAndAlpha(currentAlpha, targetAlpha);
-//                    contentContainer.invalidate(); // 强制重绘
+                    acrylicBg.updateFillColorAndAlpha(currentAlpha, collapseTargetAlpha);
                 }
 
                 // WebView 前 50% 渐出
