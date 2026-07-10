@@ -357,14 +357,16 @@ public class FloatWindowService extends Service {
         String js;
         if (isDarkMode()) {
             // 注入 CSS filter 实现深色模式
+            String css = "html { -webkit-filter: invert(0.85) hue-rotate(180deg); filter: invert(0.85) hue-rotate(180deg); background-color: #111 !important; }" +
+                    "img, video, canvas, svg, [style*=\"background-image\"] { -webkit-filter: invert(0.85) hue-rotate(180deg); filter: invert(0.85) hue-rotate(180deg); }" +
+                    ":root { color-scheme: dark !important; }";
+            
             js = "(function(){" +
                     "var s=document.getElementById('__dark_mode_filter');" +
                     "if(!s){" +
                     "s=document.createElement('style');" +
                     "s.id='__dark_mode_filter';" +
-                    "s.textContent='html{-webkit-filter:invert(0.85)hue-rotate(180deg);filter:invert(0.85)hue-rotate(180deg);background-color:#111!important}'" +
-                    "'img,video,canvas,svg,[style*=\"background-image\"]{-webkit-filter:invert(0.85)hue-rotate(180deg);filter:invert(0.85)hue-rotate(180deg)}'" +
-                    "':root{color-scheme:dark!important}';" +
+                    "s.textContent='" + css.replace("'", "\\'") + "';" +
                     "var h=document.head;if(h){h.appendChild(s);}else{document.documentElement.appendChild(s);}" +
                     "}" +
                     "})()";
@@ -470,8 +472,12 @@ public class FloatWindowService extends Service {
     private void injectCustomCss(WebView view) {
         if (TextUtils.isEmpty(customCss)) return;
             
-        // 转义特殊字符，确保 JavaScript 字符串安全
-        String escapedCss = customCss.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "");
+        // 完整的 JavaScript 字符串转义
+        String escapedCss = customCss
+                .replace("\\", "\\\\")  // 先转义反斜杠
+                .replace("'", "\\'")     // 再转义单引号
+                .replace("\n", "\\n")    // 转义换行符
+                .replace("\r", "\\r");   // 转义回车符
             
         String js = "(function(){" +
                 "var s=document.getElementById('__custom_css');" +
@@ -481,6 +487,7 @@ public class FloatWindowService extends Service {
                 "s.textContent='" + escapedCss + "';" +
                 "var h=document.head;if(h){h.appendChild(s);}else{document.documentElement.appendChild(s);}" +
                 "}" +
+                "console.log('Custom CSS injected, length: " + customCss.length() + "');" +
                 "})()";
             
         try {
