@@ -188,6 +188,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        overridePendingTransition(0, 0);
         Log.d(TAG, "onCreate");
 
         // 1. 解析参数
@@ -211,6 +212,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
         rootLayout.setClipChildren(false);
         rootLayout.setClickable(true);
         setContentView(rootLayout);
+        // 初始隐藏根布局，避免系统默认的 Activity 转场淡入动画导致窗口透明度渐变
+        rootLayout.setVisibility(View.INVISIBLE);
 
         // 5. 创建内容视图
         createContent();
@@ -232,9 +235,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             }
         });
 
-        // 9. 布局完成后执行展开动画
-        contentContainer.post(this::performExpandAnimation);
-        
+        // 9. 布局完成后，延迟500ms执行展开动画（诊断用：判断透明度淡入是否来自系统过渡动画）
+        contentContainer.postDelayed(this::performExpandAnimation, 180);
+
         // 10. 设置输入法检测监听器
         setupKeyboardListener(rootLayout);
     }
@@ -248,7 +251,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         if (restoreBarReceiver != null) {
             try { unregisterReceiver(restoreBarReceiver); } catch (Exception ignored) {}
         }
-        
+
         // 关键修复：从父容器中移除 WebView，但不销毁它，以便下次打开时复用
         if (webView != null && sPersistentWebView == webView) {
             android.view.ViewParent parent = webView.getParent();
@@ -258,7 +261,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             }
         }
         // 不清空 webView 引用，sPersistentWebView 保持引用
-        
+
         super.onDestroy();
     }
 
@@ -295,7 +298,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 透出下层 BlurWindowActivity 的窗口级模糊效果
         Log.d(TAG, "模糊由下层 BlurWindowActivity 提供");
     }
-    
+
     /**
      * 创建背景遮罩视图
      * 在窗口外部设置半透明遮罩，避免窗口与外部元素混淆
@@ -303,7 +306,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private void createBackgroundOverlay() {
         try {
             overlayView = new View(this);
-            
+
             // 解析颜色
             int colorInt = Color.parseColor(overlayColor);
             int r = (colorInt >> 16) & 0xFF;
@@ -311,60 +314,60 @@ public class OverlayWindowActivity extends AppCompatActivity {
             int b = colorInt & 0xFF;
             // overlayAlpha 是 0-100，转换为 0-255
             int alpha = (int)(overlayAlpha * 255.0 / 100.0);
-            
+
             // 设置背景色
             overlayView.setBackgroundColor(Color.argb(alpha, r, g, b));
-            
+
             // 设置 LayoutParams 覆盖整个屏幕
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
             );
             overlayView.setLayoutParams(params);
-            
+
             // 初始状态为完全透明
             overlayView.setAlpha(0f);
-            
+
             // 插入到 rootLayout 最底层（contentContainer 之前）
             rootLayout.addView(overlayView, 0);
-            
+
             Log.d(TAG, "背景遮罩已创建 - 颜色: " + overlayColor + ", 透明度: " + overlayAlpha + "%");
         } catch (Exception e) {
             Log.e(TAG, "创建背景遮罩失败", e);
             overlayView = null;
         }
     }
-    
+
     /**
      * 显示背景遮罩（渐变动画）
      */
     private void showBackgroundOverlay() {
         if (overlayView == null) return;
-        
+
         // 计算目标透明度
         float targetAlpha = overlayAlpha / 100.0f;
-        
+
         // 执行渐变动画
         overlayView.animate()
                 .alpha(targetAlpha)
                 .setDuration(overlayAnimDuration)
                 .start();
-        
+
         Log.d(TAG, "背景遮罩开始显示 - 目标透明度: " + targetAlpha);
     }
-    
+
     /**
      * 隐藏背景遮罩（渐变动画）
      */
     private void hideBackgroundOverlay() {
         if (overlayView == null) return;
-        
+
         // 执行渐变动画到完全透明
         overlayView.animate()
                 .alpha(0f)
                 .setDuration(overlayAnimDuration)
                 .start();
-        
+
         Log.d(TAG, "背景遮罩开始隐藏");
     }
 
@@ -400,13 +403,13 @@ public class OverlayWindowActivity extends AppCompatActivity {
             aiStyle = intent.getIntExtra(EXTRA_AI_STYLE, 0);
             aiBlurRadius = intent.getIntExtra(EXTRA_AI_BLUR_RADIUS, 25);
             aiOverlayAlpha = intent.getIntExtra(EXTRA_AI_OVERLAY_ALPHA, 204);
-            
+
             // 加载输入法避让设置
             loadKeyboardSettings();
-            
+
             // 加载自定义 CSS
             loadCustomCss();
-            
+
             // 加载网页背景透明设置
             loadWebpageBgTransparentSetting();
         } else {
@@ -415,11 +418,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
             shortcutBlurRadius = intent.getIntExtra(EXTRA_SHORTCUT_BLUR_RADIUS, 20);
             shortcutOverlayAlpha = intent.getIntExtra(EXTRA_SHORTCUT_OVERLAY_ALPHA, 180);
         }
-        
+
         // 加载背景遮罩设置（所有窗口类型）
         loadOverlaySettings();
     }
-    
+
     /**
      * 从 SharedPreferences 加载输入法避让设置
      */
@@ -433,7 +436,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             Log.e(TAG, "加载输入法设置失败", e);
         }
     }
-    
+
     /**
      * 从 SharedPreferences 加载自定义 CSS
      */
@@ -448,7 +451,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             Log.e(TAG, "加载自定义 CSS 失败", e);
         }
     }
-    
+
     /**
      * 从 SharedPreferences 加载网页背景透明设置
      */
@@ -461,7 +464,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             Log.e(TAG, "加载网页背景透明设置失败", e);
         }
     }
-    
+
     /**
      * 从 SharedPreferences 加载背景遮罩设置
      */
@@ -557,7 +560,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         // 创建独立模糊背景层（插入到 contentContainer 下方）
         createBlurBackgroundLayer();
-        
+
         // 创建背景遮罩（插入到 rootLayout 最底层）
         createBackgroundOverlay();
     }
@@ -615,7 +618,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             sPersistentWebView.setLayoutParams(new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
-            
+
             // Activity 中的 WebView 可以正常接收输入法输入，无需 IME 代理
             WebSettings settings = sPersistentWebView.getSettings();
             settings.setJavaScriptEnabled(true);
@@ -653,7 +656,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 public void onPermissionRequest(PermissionRequest request) {
                     try { request.grant(request.getResources()); } catch (Exception ignored) {}
                 }
-                
+
                 // Android 5.0+ 文件选择
                 @Override
                 public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
@@ -691,10 +694,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         injectCustomCss(view);
                     }
 
-                    
+
                     // 注入 JavaScript 检测输入框聚焦
                     injectInputFocusScript(view);
-                    
+
                     // 等待 CSS 生效后设置 WebView 背景
                     // 如果开启了"网页背景透明"，WebView 保持透明
                     // 否则根据 aiOverlayAlpha 决定透明度
@@ -724,7 +727,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             // Activity 的 WebView 可以使用原生 ActionMode，无需 JS 选中
             sPersistentWebView.setFocusable(true);
             sPersistentWebView.setFocusableInTouchMode(true);
-            
+
             // 添加 JavaScript 桥接接口用于 blob 下载
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
                 sPersistentWebView.addJavascriptInterface(new Object() {
@@ -738,10 +741,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
             // WebView 保持透明背景
             sPersistentWebView.setBackgroundColor(Color.TRANSPARENT);
             sPersistentWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-            
+
             // 添加触摸监听器检测输入框聚焦
             setupWebViewInputDetection(sPersistentWebView);
-            
+
             // 首次加载 URL
             Log.d(TAG, "首次创建 WebView，加载 URL: " + aiUrl);
             sPersistentWebView.loadUrl(aiUrl);
@@ -843,7 +846,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 }
             });
         }
-        
+
 //        // AI 窗口：应用网页透明度设置
 //        // 当开启"网页背景透明"时，aiOverlayAlpha 仅控制 contentContainer 背景透明度
 //        // 当关闭"网页背景透明"时，aiOverlayAlpha 同时控制 contentContainer 和 WebView 透明度
@@ -854,7 +857,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
 //                Log.d(TAG, "启用亚克力/液态玻璃模式，aiOverlayAlpha 同时控制窗口背景和 WebView 透明度");
 //            }
 //        }
-        
+
         // WebView 背景透明度处理
         // 如果开启了"网页背景透明"，WebView 始终保持透明（网页背景通过CSS透明化）
         // 否则 WebView 透明度跟随 aiOverlayAlpha
@@ -866,7 +869,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         } else {
             webView.setBackgroundColor(Color.TRANSPARENT);
         }
-        
+
         // 设置下载监听器
         setupDownloadListener();
 
@@ -917,7 +920,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         containerLp.topMargin = adjustedTopMargin;
         containerLp.bottomMargin = -adjustedTopMargin;
         container.setLayoutParams(containerLp);
-        
+
         // 【关键修复】快捷窗口需要根据实际高度和位置更新模糊窗口
         // 等待布局完成后获取真实坐标
         container.post(() -> {
@@ -1162,7 +1165,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         if (configIntent != null) {
             return configIntent;
         }
-        
+
         // 如果类名为空，使用包名启动（类似单击提示条的方式）
         if (TextUtils.isEmpty(item.getClassName())) {
             Intent intent = getPackageManager().getLaunchIntentForPackage(item.getPackageName());
@@ -1177,7 +1180,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             return fallbackIntent;
         }
-        
+
         // 有类名时使用显式组件启动
         Intent intent = new Intent();
         intent.setClassName(item.getPackageName(), item.getClassName());
@@ -1327,6 +1330,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
         initTranslationX = startX - 2 * lp.leftMargin;
         initTranslationY = startY - 2 * lp.topMargin - getNavigationBarHeight()/2;
 
+        // 展开动画即将开始，恢复根布局可见性
+        // 之前隐藏是为了避免系统 Activity 转场淡入动画导致窗口透明度渐变
+        rootLayout.setVisibility(View.VISIBLE);
+
         // 限制最小比例，防止除零
         if (initScaleX <= 0) initScaleX = 0.01f;
         if (initScaleY <= 0) initScaleY = 0.01f;
@@ -1337,8 +1344,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
         contentContainer.setScaleY(initScaleY);
         contentContainer.setTranslationX(initTranslationX);
         contentContainer.setTranslationY(initTranslationY);
-        contentContainer.setAlpha(0f);
-        contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
         // blurBackgroundView 同步初始状态
         if (blurBackgroundView != null) {
@@ -1348,7 +1353,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
             blurBackgroundView.setScaleY(initScaleY);
             blurBackgroundView.setTranslationX(initTranslationX);
             blurBackgroundView.setTranslationY(initTranslationY);
-            blurBackgroundView.setAlpha(0f);
         }
 
         if (webView != null) {
@@ -1383,7 +1387,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 contentContainer.setScaleY(curScaleY);
                 contentContainer.setTranslationX(curTransX);
                 contentContainer.setTranslationY(curTransY);
-                
+
                 // 背景遮罩同步渐入（与窗口动画同时）
                 if (overlayView != null) {
                     float targetAlpha = overlayAlpha / 100.0f;
@@ -1429,7 +1433,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         webView.setAlpha(targetAlpha * easeOutCubic(alphaProgress));
                     }
                 }
-                
+
                 // 当动画进度达到60%时，通知模糊窗口开始渐变显示
                 if (progress >= 0.6f && !blurWindowFadeInSent) {
                     blurWindowFadeInSent = true;
@@ -1445,7 +1449,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     contentContainer.setScaleY(1f);
                     contentContainer.setTranslationX(0f);
                     contentContainer.setTranslationY(0f);
-                    contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
                     if (blurBackgroundView != null) {
                         blurBackgroundView.setScaleX(1f);
                         blurBackgroundView.setScaleY(1f);
