@@ -2198,16 +2198,26 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     "if(s){s.parentNode.removeChild(s);}" +
                     "})()";
         }else{
+            // 完整的 JavaScript 字符串转义
+            String escapedCss = customCss
+                    .replace("\\", "\\\\")  // 先转义反斜杠
+                    .replace("'", "\\'")     // 再转义单引号
+                    .replace("\n", "\\n")    // 转义换行符
+                    .replace("\r", "\\r");   // 转义回车符
+            
             js = "(function(){" +
                     "var style=document.getElementById('custom-css-style');" +
-                    "if(!style){var style = document.createElement('style');style.id = 'custom-css-style';}" +
-                    "style.textContent = '" + customCss.replace("'", "\\'") + "';" +
+                    "if(!style){style = document.createElement('style');style.id = 'custom-css-style';}" +
+                    "style.textContent = '" + escapedCss + "';" +
                     "if (document.head) {" +
                     "  document.head.appendChild(style);" +
                     "} else {" +
                     "  document.documentElement.appendChild(style);" +
                     "}" +
-                    "console.log('Custom CSS injected');" +
+                    // 调试：检查目标元素是否存在
+                    "var target = document.querySelector('.container-slHYQz');" +
+                    "console.log('Custom CSS injected, length: " + customCss.length() + ", element found: ' + (target !== null));" +
+                    "if(target) { console.log('Element display: ' + window.getComputedStyle(target).display); }" +
                     "return 'Custom CSS injection complete';" +
                     "})()";
         }
@@ -2220,7 +2230,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 Log.d(TAG, "Custom CSS injection result: " + value);
             }
         });
-        Log.d(TAG, "Injected custom CSS");
+        Log.d(TAG, "Injected custom CSS, content: " + customCss.substring(0, Math.min(customCss.length(), 100)));
     }
     
     /**
