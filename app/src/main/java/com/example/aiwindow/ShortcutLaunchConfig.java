@@ -82,17 +82,13 @@ public class ShortcutLaunchConfig {
                 c.launchMode = MODE_INTENT;
                 c.targetPackage = "com.tencent.mm";
                 c.targetClass = "com.tencent.mm.ui.LauncherUI";
-                c.extraKey = "LauncherUI.From.Scaner.Shortcut";
-                c.extraValue = "true";
-                c.extraType = "boolean";
+                c.extras.add(new ExtraItem("LauncherUI.From.Scaner.Shortcut", "true", "boolean"));
                 break;
             case "wechat_pay":
                 c.launchMode = MODE_INTENT;
                 c.targetPackage = "com.tencent.mm";
                 c.targetClass = "com.tencent.mm.ui.LauncherUI";
-                c.extraKey = "LauncherUI.Shortcut.LaunchType";
-                c.extraValue = "launch_type_offline_wallet";
-                c.extraType = "string";
+                c.extras.add(new ExtraItem("LauncherUI.Shortcut.LaunchType", "launch_type_offline_wallet", "string"));
                 break;
         }
         return c;
