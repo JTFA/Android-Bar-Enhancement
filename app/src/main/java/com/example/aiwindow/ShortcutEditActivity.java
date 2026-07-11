@@ -933,7 +933,11 @@ public class ShortcutEditActivity extends AppCompatActivity {
                     launchConfig.launchMode = modes[modePos];
                     launchConfig.uri = editUri.getText().toString().trim();
                     launchConfig.targetPackage = pkg;
-                    launchConfig.targetClass = cls;
+                    // MODE_INTENT 时 targetClass 由启动配置自行管理（如 LauncherUI + Extra），
+                    // 不应被 ShortcutItem 的 className（如 BaseScanUI）覆盖
+                    if (!ShortcutLaunchConfig.MODE_INTENT.equals(launchConfig.launchMode)) {
+                        launchConfig.targetClass = cls;
+                    }
                     
                     // 收集所有 extras
                     launchConfig.extras.clear();
