@@ -1060,6 +1060,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         // 点击事件（使用 ShortcutLaunchConfig 启动，与服务行为一致）
         cell.setOnClickListener(v -> {
+            if (windowType == WINDOW_TYPE_SHORTCUT) {
+                // 设置兜底标志位：即使进程冻结导致 fadeOutAndFinish 的 Handler 动画未执行，
+                // 进程恢复后 BlurWindowActivity.onResume 也会检测到此标志并自销毁
+                BlurWindowActivity.sShortcutLaunched = true;
+                BlurWindowActivity.fadeOutIfAlive();
+            }
             launchShortcutApp(item);
             collapseAndFinish();
         });

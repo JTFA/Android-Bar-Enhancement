@@ -29,6 +29,12 @@ public class BlurWindowActivity extends Activity {
     private static final String TAG = "BlurWindowActivity";
     private static WeakReference<BlurWindowActivity> sInstance;
     
+    /**
+     * 标志位：当通过快捷方式点击启动外部应用时设为 true。
+     * 用于进程冻结恢复后的兜底清理——onResume 中检测到此标志时自销毁模糊层。
+     */
+    static volatile boolean sShortcutLaunched = false;
+    
     private BroadcastReceiver sizeUpdateReceiver;
     private int originalBlurRadius = 25;
     private int originalY = 0; // 保存原始 Y 位置
@@ -66,6 +72,9 @@ public class BlurWindowActivity extends Activity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // 重置兜底标志位：新实例创建时清除上次生命周期遗留的残值
+        // 防止 onResume 误判导致新 BlurWindowActivity 被立即销毁
+        sShortcutLaunched = false;
         sInstance = new WeakReference<>(this);
         Log.d(TAG, "onCreate");
 
@@ -221,6 +230,21 @@ public class BlurWindowActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // 兜底清理：当快捷方式点击启动外部应用后进程被冻结
+        // 导致 fadeOutAndFinish 的 Handler 渐变动画未执行，
+        // 进程恢复后 BlurWindowActivity 回到前台时在此处检测并自清理。
+        if (sShortcutLaunched) {
+            sShortcutLaunched = false;
+            if (!isFinishing()) {
+                Log.d(TAG, "onResume: 检测到快捷方式已启动，清理模糊层");
+                finish();
+            }
+        }
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
         Log.d(TAG, "onDestroy");
@@ -298,9 +322,17 @@ public class BlurWindowActivity extends Activity {
         // 先隐藏 View，防止闪烁
         root.setVisibility(View.INVISIBLE);
         
-        // 只使用窗口 alpha 实现渐变（模糊效果由窗口级别控制）
+        // 窗口 alpha + 模糊半径同步渐变动画
+        // 模糊半径必须在此循环中**逐帧递减**，原因：
+        // intent_extra 使用 FLAG_ACTIVITY_CLEAR_TOP 导致任务切换极快，
+        // ColorOS 等 ROM 会立即冻结后台进程，Handler 动画可能在中途被冻结。
+        // 如果只靠动画结束时 finish() 移除窗口，冻结时 finish() 不执行，
+        // 窗口保留在 SurfaceFlinger，模糊持续可见。
+        // 逐帧递减模糊半径确保每一帧的改动都在 SurfaceFlinger 层生效，
+        // 即使进程冻结了，已减小的半径不反弹。
         final WindowManager.LayoutParams wmParams = (WindowManager.LayoutParams) getWindow().getAttributes();
         final float startWindowAlpha = wmParams.alpha;
+        final int startBlurRadius = originalBlurRadius;
         final long startTime = System.currentTimeMillis();
         final int duration = 100;
         
@@ -311,13 +343,24 @@ public class BlurWindowActivity extends Activity {
                 long elapsed = System.currentTimeMillis() - startTime;
                 float progress = Math.min((float) elapsed / duration, 1.0f);
                 
-                // 同步更新窗口 alpha
+                // alpha 渐隐
                 wmParams.alpha = startWindowAlpha * (1f - progress);
                 getWindow().setAttributes(wmParams);
+                
+                // 模糊半径同步递减：每一帧的改动都直接送达 SurfaceFlinger
+                // 进程冻结后已改动的半径不回弹，保证模糊至少被部分清除
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    int curRadius = Math.max(0, Math.round(startBlurRadius * (1f - progress)));
+                    getWindow().setBackgroundBlurRadius(curRadius);
+                }
                 
                 if (progress < 1.0f) {
                     handler.postDelayed(this, 16); // ~60fps
                 } else {
+                    // 确保最终半径归零
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        getWindow().setBackgroundBlurRadius(0);
+                    }
                     Log.d(TAG, "fadeoutAndFinish: 动画完成，准备 finish");
                     finish();
                     overridePendingTransition(0, 0);
@@ -325,6 +368,6 @@ public class BlurWindowActivity extends Activity {
             }
         });
         
-        Log.d(TAG, "fadeoutAndFinish: 窗口渐变动画已启动");
+        Log.d(TAG, "fadeoutAndFinish: 窗口渐变动画+模糊半径渐隐已启动");
     }
 }
