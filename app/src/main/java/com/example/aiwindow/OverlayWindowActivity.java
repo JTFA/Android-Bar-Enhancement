@@ -183,6 +183,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // ─── 动画初始值 ───
     private float initScaleX, initScaleY;
     private float initTranslationX, initTranslationY;
+    
+    // ─── 待启动快捷方式（收起动画完成后启动，避免 startActivity 立即触发 onUserLeaveHint 中断动画） ───
+    private ShortcutItem pendingShortcutItem = null;
 
     // ─── 屏幕尺寸（解析度无关像素，但 getRealMetrics 是 px） ───
     private int screenWidth, screenHeight;
@@ -1163,6 +1166,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         cell.addView(nameView);
 
         // 点击事件（使用 ShortcutLaunchConfig 启动，与服务行为一致）
+        // 注意：将应用启动延迟到收起动画完成后，避免 startActivity 立即触发 onUserLeaveHint 中断动画
         cell.setOnClickListener(v -> {
             if (windowType == WINDOW_TYPE_SHORTCUT) {
                 // 设置兜底标志位：即使进程冻结导致 fadeOutAndFinish 的 Handler 动画未执行，
@@ -1170,7 +1174,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 BlurWindowActivity.sShortcutLaunched = true;
                 BlurWindowActivity.fadeOutIfAlive();
             }
-            launchShortcutApp(item);
+            pendingShortcutItem = item;
             collapseAndFinish();
         });
 
@@ -1702,6 +1706,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     }
                     if (webView != null) {
                         webView.setAlpha(0f);
+                    }
+                    // 收起动画完成后，如果有待启动的快捷方式，在此启动
+                    // 延迟到动画完成之后再 startActivity，避免立即触发 onUserLeaveHint 中断动画
+                    if (pendingShortcutItem != null) {
+                        launchShortcutApp(pendingShortcutItem);
+                        pendingShortcutItem = null;
                     }
                     sendRestoreBarBroadcast();
                     finish();
