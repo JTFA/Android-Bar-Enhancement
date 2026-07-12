@@ -3731,6 +3731,31 @@ public class FloatWindowService extends Service {
         }
 
         container.addView(topBarView);
+
+        // ── 扩展小横条触控区域（收起时可视区域极小，难以点击） ──
+        // 添加透明覆盖层，触控区域向外扩展 dpToPx(8)；展开状态下不拦截事件，让触摸穿透到下方按钮
+        int extPx = dpToPx(8);
+        View barTouchExtender = new View(this);
+        FrameLayout.LayoutParams extLp = new FrameLayout.LayoutParams(
+                topBarCollapsedW + extPx * 2,
+                topBarCollapsedH + extPx * 2
+        );
+        extLp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        extLp.topMargin = dpToPx(8) - extPx;
+        barTouchExtender.setLayoutParams(extLp);
+        barTouchExtender.setClickable(false);
+        barTouchExtender.setOnTouchListener((v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                if (isTopBarExpanded) {
+                    return false; // 展开时不拦截，让事件穿透到下方按钮
+                } else {
+                    expandTopBar();
+                    return true;  // 收起时消费事件，触发展开
+                }
+            }
+            return isTopBarExpanded ? false : true;
+        });
+        container.addView(barTouchExtender);
     }
 
     private ImageView createTopBarButton(int iconRes) {
