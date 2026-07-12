@@ -57,20 +57,23 @@
 
         <activity
             android:name=".MainActivity"
-            android:exported="false">
+            android:exported="false"
+            android:theme="@style/Theme.ModernSettings">
         </activity>
 
         <!-- 权限管理页面 -->
         <activity
             android:name=".PermissionCheckActivity"
             android:exported="false"
-            android:label="权限管理" />
+            android:label="权限管理"
+            android:theme="@style/Theme.ModernSettings" />
 
         <!-- 设置页面（可选） -->
         <activity
             android:name=".SettingsActivity"
             android:exported="false"
-            android:label="提示条设置" />
+            android:label="提示条设置"
+            android:theme="@style/Theme.ModernSettings" />
 
         <!-- 悬浮窗前台服务 -->
         <service
@@ -116,7 +119,8 @@
         <activity
             android:name=".ShortcutEditActivity"
             android:exported="false"
-            android:label="编辑快捷方式" />
+            android:label="编辑快捷方式"
+            android:theme="@style/Theme.ModernSettings" />
 
         <activity
             android:name=".BlurWindowActivity"

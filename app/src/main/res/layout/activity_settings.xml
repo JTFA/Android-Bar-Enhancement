@@ -8,1362 +8,1552 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:padding="16dp">
 
+        <!-- 页面标题 -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="提示条设置"
-            android:textSize="24sp"
+            android:textSize="28sp"
             android:textStyle="bold"
-            android:textColor="#333333"
-            android:layout_marginBottom="32dp" />
+            android:textColor="#1A1A1A"
+            android:layout_marginBottom="24dp" />
 
-        <!-- ===== 提示条触发行为设置 ===== -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/bar_trigger_actions"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:textColor="#333333"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/bar_trigger_actions_desc"
-            android:textSize="12sp"
-            android:textColor="#999999"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 单击行为选择 -->
+        <!-- ===== 提示条触发行为设置卡片 ===== -->
         <LinearLayout
-            android:id="@+id/layout_click_action"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="@android:drawable/edit_text"
-            android:padding="12dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:layout_marginBottom="4dp">
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
 
             <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/click_action"
-                android:textSize="14sp"
-                android:textColor="#666666" />
-
-            <TextView
-                android:id="@+id/text_click_action"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/action_none"
-                android:textSize="14sp"
-                android:textColor="#333333"
-                android:gravity="end" />
+                android:text="@string/bar_trigger_actions"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/bar_trigger_actions_desc"
+                android:textSize="12sp"
+                android:textColor="#9E9E9E"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 单击行为选择 -->
+            <LinearLayout
+                android:id="@+id/layout_click_action"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="14dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/click_action"
+                    android:textSize="15sp"
+                    android:textColor="#1A1A1A" />
+
+                <TextView
+                    android:id="@+id/text_click_action"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_none"
+                    android:textSize="14sp"
+                    android:textColor="#757575"
+                    android:gravity="end" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#F0F0F0" />
+
+            <!-- 单击应用选择（仅当单击行为为"打开指定应用"时可见） -->
+            <LinearLayout
+                android:id="@+id/layout_click_app"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="14dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/select_app"
+                    android:textSize="15sp"
+                    android:textColor="#1A1A1A" />
+
+                <TextView
+                    android:id="@+id/text_click_selected_app"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/not_selected"
+                    android:textSize="14sp"
+                    android:textColor="#757575"
+                    android:gravity="end" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#F0F0F0" />
+
+            <!-- 双击行为选择 -->
+            <LinearLayout
+                android:id="@+id/layout_double_click_action"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="14dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/double_click_action"
+                    android:textSize="15sp"
+                    android:textColor="#1A1A1A" />
+
+                <TextView
+                    android:id="@+id/text_double_click_action"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_open_shortcut"
+                    android:textSize="14sp"
+                    android:textColor="#757575"
+                    android:gravity="end" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#F0F0F0" />
+
+            <!-- 双击应用选择（仅当双击行为为"打开指定应用"时可见） -->
+            <LinearLayout
+                android:id="@+id/layout_double_click_app"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="14dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/select_app"
+                    android:textSize="15sp"
+                    android:textColor="#1A1A1A" />
+
+                <TextView
+                    android:id="@+id/text_double_click_selected_app"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/not_selected"
+                    android:textSize="14sp"
+                    android:textColor="#757575"
+                    android:gravity="end" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#F0F0F0" />
+
+            <!-- 长按行为选择 -->
+            <LinearLayout
+                android:id="@+id/layout_long_press_action"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="14dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/long_press_action"
+                    android:textSize="15sp"
+                    android:textColor="#1A1A1A" />
+
+                <TextView
+                    android:id="@+id/text_long_press_action"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_open_ai"
+                    android:textSize="14sp"
+                    android:textColor="#757575"
+                    android:gravity="end" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#F0F0F0" />
+
+            <!-- 长按应用选择（仅当长按行为为"打开指定应用"时可见） -->
+            <LinearLayout
+                android:id="@+id/layout_long_press_app"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="14dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/select_app"
+                    android:textSize="15sp"
+                    android:textColor="#1A1A1A" />
+
+                <TextView
+                    android:id="@+id/text_long_press_selected_app"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/not_selected"
+                    android:textSize="14sp"
+                    android:textColor="#757575"
+                    android:gravity="end" />
+
+            </LinearLayout>
 
         </LinearLayout>
 
-        <!-- 单击应用选择（仅当单击行为为"打开指定应用"时可见） -->
+        <!-- ===== 提示条触发区域设置卡片 ===== -->
         <LinearLayout
-            android:id="@+id/layout_click_app"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="@android:drawable/edit_text"
-            android:padding="12dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:layout_marginBottom="8dp"
-            android:visibility="gone">
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
 
             <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/select_app"
-                android:textSize="14sp"
-                android:textColor="#666666" />
-
-            <TextView
-                android:id="@+id/text_click_selected_app"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/not_selected"
+                android:text="提示条触发区域"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="见黑色区域，为防止烧屏，退出设置页面后将隐藏"
+                android:textSize="12sp"
+                android:textColor="#9E9E9E"
+                android:layout_marginBottom="20dp" />
+
+            <!-- 提示条宽度 -->
+            <TextView
+                android:id="@+id/text_bar_width"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="宽度: 300dp"
                 android:textSize="14sp"
-                android:textColor="#333333"
-                android:gravity="end" />
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_bar_width"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="200"
+                android:max="600"
+                android:progress="300"
+                android:layout_marginBottom="20dp" />
+
+            <!-- 提示条高度 -->
+            <TextView
+                android:id="@+id/text_bar_height"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="高度: 60dp"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_bar_height"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="150"
+                android:progress="60"
+                android:layout_marginBottom="20dp" />
+
+            <!-- 提示条位置 Y -->
+            <TextView
+                android:id="@+id/text_bar_position_y"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="位置 Y: 20dp (距底部)"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_bar_position_y"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="-500"
+                android:max="500"
+                android:progress="20"
+                android:layout_marginBottom="20dp" />
+
+            <!-- 提示条圆角 -->
+            <TextView
+                android:id="@+id/text_bar_corner"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="圆角: 30dp"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_bar_corner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="60"
+                android:progress="30"
+                android:layout_marginBottom="20dp" />
+
+            <!-- 长按触发时间 -->
+            <TextView
+                android:id="@+id/text_long_press_duration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="长按触发时间: 500ms"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_long_press_duration"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="50"
+                android:max="2000"
+                android:progress="500" />
 
         </LinearLayout>
 
-        <!-- 双击行为选择 -->
+        <!-- ===== 提示条按下样式设置卡片 ===== -->
         <LinearLayout
-            android:id="@+id/layout_double_click_action"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="@android:drawable/edit_text"
-            android:padding="12dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:layout_marginBottom="4dp">
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
 
             <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/double_click_action"
-                android:textSize="14sp"
-                android:textColor="#666666" />
-
-            <TextView
-                android:id="@+id/text_double_click_action"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/action_open_shortcut"
+                android:text="提示条按下样式"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="手指按住提示条时的样式变化，调节时可实时显示"
+                android:textSize="12sp"
+                android:textColor="#9E9E9E"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 按下时启用开关 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="启用按下样式变化"
+                    android:textSize="15sp"
+                    android:textColor="#1A1A1A" />
+
+                <Switch
+                    android:id="@+id/switch_pressed_bar_enabled"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="#1976D2"
+                    android:trackTint="#BDBDBD" />
+
+            </LinearLayout>
+
+            <!-- 按下时宽度 -->
+            <TextView
+                android:id="@+id/text_pressed_bar_width"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="按下时宽度: 320dp"
                 android:textSize="14sp"
-                android:textColor="#333333"
-                android:gravity="end" />
+                android:textColor="#424242"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_pressed_bar_width"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="600"
+                android:min="200"
+                android:progress="320"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 按下时高度 -->
+            <TextView
+                android:id="@+id/text_pressed_bar_height"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="按下时高度: 65dp"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_pressed_bar_height"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="150"
+                android:progress="65"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 按下时位置Y -->
+            <TextView
+                android:id="@+id/text_pressed_bar_position_y"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="按下时位置Y: 20dp"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_pressed_bar_position_y"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="-500"
+                android:max="500"
+                android:progress="20"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 按下时圆角 -->
+            <TextView
+                android:id="@+id/text_pressed_bar_corner"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="按下时圆角: 35dp"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_pressed_bar_corner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="60"
+                android:progress="35"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 按下时透明度 -->
+            <TextView
+                android:id="@+id/text_pressed_bar_alpha"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="按下时透明度: 0.60"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_pressed_bar_alpha"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="60"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 按下时颜色 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="按下时颜色 (RGB)"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <EditText
+                android:id="@+id/edit_pressed_bar_color"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:hint="格式：#RRGGBB，默认 #333333"
+                android:inputType="text"
+                android:paddingHorizontal="12dp"
+                android:background="@drawable/card_background"
+                android:textSize="14sp"
+                android:text="#333333"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 边缘羽化宽度 -->
+            <TextView
+                android:id="@+id/text_pressed_bar_feather"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="边缘羽化宽度: 15dp"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_pressed_bar_feather"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="0"
+                android:max="50"
+                android:progress="15" />
 
         </LinearLayout>
 
-        <!-- 双击应用选择（仅当双击行为为"打开指定应用"时可见） -->
+        <!-- ===== 窗口设置卡片 ===== -->
         <LinearLayout
-            android:id="@+id/layout_double_click_app"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="@android:drawable/edit_text"
-            android:padding="12dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:layout_marginBottom="8dp"
-            android:visibility="gone">
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
 
             <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/select_app"
-                android:textSize="14sp"
-                android:textColor="#666666" />
-
-            <TextView
-                android:id="@+id/text_double_click_selected_app"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/not_selected"
+                android:text="窗口设置"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="20dp" />
+
+            <!-- AI 对话窗口设置 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="AI窗口设置"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="16dp" />
+
+            <!-- AI 网页 URL 设置 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="AI 窗口网页 URL"
                 android:textSize="14sp"
-                android:textColor="#333333"
-                android:gravity="end" />
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <EditText
+                android:id="@+id/edit_ai_url"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:hint="输入 AI 网页地址（如：https://www.doubao.com）"
+                android:inputType="textUri"
+                android:paddingHorizontal="12dp"
+                android:background="@drawable/card_background"
+                android:textSize="14sp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- AI 窗口宽度 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="宽度 (dp)"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <EditText
+                android:id="@+id/edit_window_width"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:hint="范围：200-600dp，默认 350dp"
+                android:inputType="number"
+                android:paddingHorizontal="12dp"
+                android:background="@drawable/card_background"
+                android:textSize="14sp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- AI 窗口高度 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="高度 (dp)"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <EditText
+                android:id="@+id/edit_window_height"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:hint="范围：300-900dp，默认 600dp"
+                android:inputType="number"
+                android:paddingHorizontal="12dp"
+                android:background="@drawable/card_background"
+                android:textSize="14sp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- AI 窗口位置 Y -->
+            <TextView
+                android:id="@+id/text_window_position_y"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="窗口位置 Y: 0 (居中)"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_window_position_y"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="-500"
+                android:max="500"
+                android:progress="0"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 窗口圆角半径 -->
+            <TextView
+                android:id="@+id/text_corner_radius"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="窗口圆角: 16dp"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_corner_radius"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="0"
+                android:max="50"
+                android:progress="16"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 边框宽度 -->
+            <TextView
+                android:id="@+id/text_border_width"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="边框宽度: 2dp"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_border_width"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="20"
+                android:progress="2"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 边框颜色 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="边框颜色 (RGB)"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <EditText
+                android:id="@+id/edit_border_color"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:hint="格式：#RRGGBB，默认 #4CAF50"
+                android:inputType="text"
+                android:paddingHorizontal="12dp"
+                android:background="@drawable/card_background"
+                android:textSize="14sp"
+                android:text="#4CAF50"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 边框透明度 -->
+            <TextView
+                android:id="@+id/text_border_alpha"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="边框透明度: 1.00"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_border_alpha"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="100"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 右上角按钮组显示设置 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="右上角按钮组"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="显示/隐藏窗口右上角的返回、刷新、关闭按钮"
+                android:textSize="12sp"
+                android:textColor="#9E9E9E"
+                android:layout_marginBottom="8dp" />
+
+            <!-- 显示关闭按钮 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="显示关闭按钮（默认开启）"
+                    android:textSize="14sp"
+                    android:textColor="#1A1A1A" />
+
+                <Switch
+                    android:id="@+id/switch_show_close_button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="#1976D2"
+                    android:trackTint="#BDBDBD" />
+
+            </LinearLayout>
+
+            <!-- 显示刷新按钮 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="显示刷新按钮（默认开启）"
+                    android:textSize="14sp"
+                    android:textColor="#1A1A1A" />
+
+                <Switch
+                    android:id="@+id/switch_show_refresh_button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="#1976D2"
+                    android:trackTint="#BDBDBD" />
+
+            </LinearLayout>
+
+            <!-- 显示后退按钮 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="显示后退按钮（默认开启）"
+                    android:textSize="14sp"
+                    android:textColor="#1A1A1A" />
+
+                <Switch
+                    android:id="@+id/switch_show_back_button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="#1976D2"
+                    android:trackTint="#BDBDBD" />
+
+            </LinearLayout>
+
+            <!-- 小横条透明度 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="小横条透明度"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/text_top_bar_transparency"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="小横条透明度: 40%"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_top_bar_transparency"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="40"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 点击窗口外关闭窗口 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="点击窗口外关闭窗口"
+                        android:textSize="14sp"
+                        android:textColor="#1A1A1A" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="点击窗口外部区域时关闭窗口（默认开启）"
+                        android:textSize="12sp"
+                        android:textColor="#9E9E9E" />
+
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/switch_close_on_outside_click"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="#1976D2"
+                    android:trackTint="#BDBDBD" />
+
+            </LinearLayout>
+
+            <!-- 侧边返回手势行为 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="侧边返回手势"
+                        android:textSize="14sp"
+                        android:textColor="#1A1A1A" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="侧边返回手势返回网页上一级"
+                        android:textSize="12sp"
+                        android:textColor="#9E9E9E" />
+
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/switch_back_prioritize_webview"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="#1976D2"
+                    android:trackTint="#BDBDBD" />
+
+            </LinearLayout>
 
         </LinearLayout>
 
-        <!-- 长按行为选择 -->
+        <!-- ===== AI 窗口模糊效果设置卡片 ===== -->
         <LinearLayout
-            android:id="@+id/layout_long_press_action"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="@android:drawable/edit_text"
-            android:padding="12dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:layout_marginBottom="4dp">
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
 
             <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/long_press_action"
-                android:textSize="14sp"
-                android:textColor="#666666" />
-
-            <TextView
-                android:id="@+id/text_long_press_action"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/action_open_ai"
+                android:text="AI 窗口模糊效果"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="16dp" />
+
+            <!-- AI 窗口背景样式 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="背景样式"
                 android:textSize="14sp"
-                android:textColor="#333333"
-                android:gravity="end" />
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <Spinner
+                android:id="@+id/spinner_ai_style"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:entries="@array/shortcut_style_entries"
+                android:background="@drawable/card_background"
+                android:paddingHorizontal="12dp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- AI 窗口模糊半径 -->
+            <TextView
+                android:id="@+id/text_ai_blur_radius"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="AI 窗口模糊半径: 25dp"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_ai_blur_radius"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="300"
+                android:progress="25"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 网页背景透明 -->
+            <Switch
+                android:id="@+id/switch_webpage_bg_transparent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="网页背景透明（不保证效果完美，可尝试通过自定义css实现）"
+                android:textSize="14sp"
+                android:paddingVertical="8dp"
+                android:thumbTint="#1976D2"
+                android:trackTint="#BDBDBD"
+                android:layout_marginBottom="8dp"
+                android:visibility="gone" />
+
+            <!-- 网页透明度 -->
+            <TextView
+                android:id="@+id/text_ai_overlay_alpha"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="网页透明度: 80%"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_ai_overlay_alpha"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="255"
+                android:progress="204"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 自定义 CSS -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="自定义 CSS（注入到网页）"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <EditText
+                android:id="@+id/edit_custom_css"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="例如：* { background-color: transparent !important; }"
+                android:inputType="textMultiLine"
+                android:minLines="3"
+                android:maxLines="6"
+                android:gravity="top|start"
+                android:padding="12dp"
+                android:background="@drawable/card_background"
+                android:textSize="12sp"
+                android:typeface="monospace"
+                android:scrollbars="vertical"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 输入法避让设置 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="输入法避让设置"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="当网页调起输入法时，窗口自动上移避免遮挡"
+                android:textSize="12sp"
+                android:textColor="#9E9E9E"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 输入法弹出时窗口上移距离 -->
+            <TextView
+                android:id="@+id/text_keyboard_offset"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="窗口上移距离: 300px"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_keyboard_offset"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="0"
+                android:max="1000"
+                android:progress="300"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 平移动画速度 -->
+            <TextView
+                android:id="@+id/text_keyboard_anim_duration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="平移动画时长: 250ms"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_keyboard_anim_duration"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="50"
+                android:max="800"
+                android:progress="250" />
 
         </LinearLayout>
 
-        <!-- 长按应用选择（仅当长按行为为"打开指定应用"时可见） -->
+        <!-- ===== 快捷方式窗口设置卡片 ===== -->
         <LinearLayout
-            android:id="@+id/layout_long_press_app"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="@android:drawable/edit_text"
-            android:padding="12dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:layout_marginBottom="24dp"
-            android:visibility="gone">
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
 
             <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/select_app"
-                android:textSize="14sp"
-                android:textColor="#666666" />
-
-            <TextView
-                android:id="@+id/text_long_press_selected_app"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/not_selected"
+                android:text="快捷方式窗口设置"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 快捷窗口宽度 -->
+            <TextView
+                android:id="@+id/text_shortcut_window_width"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="快捷窗口宽度: 350dp"
                 android:textSize="14sp"
-                android:textColor="#333333"
-                android:gravity="end" />
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_shortcut_window_width"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="200"
+                android:max="600"
+                android:progress="350"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 快捷窗口高度 -->
+            <TextView
+                android:id="@+id/text_shortcut_window_height"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="快捷窗口最大高度: 350dp"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_shortcut_window_height"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="200"
+                android:max="600"
+                android:progress="350"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 快捷窗口位置 Y -->
+            <TextView
+                android:id="@+id/text_shortcut_window_position_y"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="快捷窗口位置 Y: 0 (居中)"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_shortcut_window_position_y"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="-500"
+                android:max="500"
+                android:progress="0"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 快捷窗口边框宽度 -->
+            <TextView
+                android:id="@+id/text_shortcut_border_width"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="边框宽度: 1dp"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_shortcut_border_width"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="20"
+                android:progress="1"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 快捷窗口圆角 -->
+            <TextView
+                android:id="@+id/text_shortcut_corner_radius"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="窗口圆角: 24dp"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_shortcut_corner_radius"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="0"
+                android:max="50"
+                android:progress="24"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 快捷窗口边框颜色 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="边框颜色 (RGB)"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <EditText
+                android:id="@+id/edit_shortcut_border_color"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:hint="格式：#RRGGBB，默认 #000000"
+                android:inputType="text"
+                android:paddingHorizontal="12dp"
+                android:background="@drawable/card_background"
+                android:textSize="14sp"
+                android:text="#000000"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 快捷窗口边框透明度 -->
+            <TextView
+                android:id="@+id/text_shortcut_border_alpha"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="边框透明度: 0.10"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_shortcut_border_alpha"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="10"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 快捷方式背景样式 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="背景样式"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="8dp" />
+
+            <Spinner
+                android:id="@+id/spinner_shortcut_style"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:entries="@array/shortcut_style_entries"
+                android:background="@drawable/card_background"
+                android:paddingHorizontal="12dp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 模糊半径（仅当样式非不透明时显示） -->
+            <TextView
+                android:id="@+id/text_shortcut_blur_radius"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="模糊半径: 20dp"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp"
+                android:visibility="gone" />
+
+            <SeekBar
+                android:id="@+id/seek_shortcut_blur_radius"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="300"
+                android:progress="20"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone" />
+
+            <!-- 叠加色透明度 -->
+            <TextView
+                android:id="@+id/text_shortcut_overlay_alpha"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="叠加色透明度: 70%"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp"
+                android:visibility="gone" />
+
+            <SeekBar
+                android:id="@+id/seek_shortcut_overlay_alpha"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="255"
+                android:progress="180"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone" />
+
+            <!-- 图标大小 -->
+            <TextView
+                android:id="@+id/text_shortcut_icon_size"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="图标大小: 100%"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_shortcut_icon_size"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="50"
+                android:max="150"
+                android:progress="100"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 编辑快捷方式按钮 -->
+            <Button
+                android:id="@+id/btn_edit_shortcuts"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="编辑快捷方式内容"
+                android:textSize="15sp"
+                android:textColor="#1976D2"
+                android:backgroundTint="#E3F2FD"
+                android:stateListAnimator="@null" />
 
         </LinearLayout>
 
-        <!-- 分隔线 -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#DDDDDD"
-            android:layout_marginBottom="24dp" />
-
-
-
-        <!-- 提示条样式设置 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="提示条触发区域"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:textColor="#333333"
-            android:layout_marginBottom="8dp" />
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="见黑色区域，为防止烧屏，退出设置页面后将隐藏"
-            android:textSize="12sp"
-            android:textColor="#999999"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 提示条宽度 -->
-        <TextView
-            android:id="@+id/text_bar_width"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="宽度: 300dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_bar_width"
+        <!-- ===== 背景遮罩设置卡片 ===== -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:min="200"
-            android:max="600"
-            android:progress="300"
-            android:layout_marginBottom="16dp" />
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
 
-        <!-- 提示条高度 -->
-        <TextView
-            android:id="@+id/text_bar_height"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="高度: 60dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="背景遮罩设置"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="4dp" />
 
-        <SeekBar
-            android:id="@+id/seek_bar_height"
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="窗口外部半透明遮罩，帮助区分窗口与背景"
+                android:textSize="12sp"
+                android:textColor="#9E9E9E"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 遮罩透明度 -->
+            <TextView
+                android:id="@+id/text_overlay_alpha"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="遮罩透明度: 50%"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_overlay_alpha"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="50"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 遮罩颜色 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="遮罩颜色 (RGB)"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <EditText
+                android:id="@+id/edit_overlay_color"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:hint="格式：#RRGGBB，默认 #000000"
+                android:inputType="text"
+                android:paddingHorizontal="12dp"
+                android:background="@drawable/card_background"
+                android:textSize="14sp"
+                android:text="#000000"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 遮罩渐变时长 -->
+            <TextView
+                android:id="@+id/text_overlay_anim_duration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="遮罩渐变时长: 180ms"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_overlay_anim_duration"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="180"
+                android:max="500"
+                android:progress="180" />
+
+        </LinearLayout>
+
+        <!-- ===== 展开/收起动画设置卡片 ===== -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="150"
-            android:progress="60"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 提示条位置 Y -->
-        <TextView
-            android:id="@+id/text_bar_position_y"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="位置 Y: 20dp (距底部)"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_bar_position_y"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="-500"
-            android:max="500"
-            android:progress="20"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 提示条圆角 -->
-        <TextView
-            android:id="@+id/text_bar_corner"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="圆角: 30dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_bar_corner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="60"
-            android:progress="30"
-            android:layout_marginBottom="16dp" />
-
-
-        <!-- 长按触发时间 -->
-        <TextView
-            android:id="@+id/text_long_press_duration"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="长按触发时间: 500ms"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_long_press_duration"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="50"
-            android:max="2000"
-            android:progress="500"
-            android:layout_marginBottom="16dp" />
-
-        <!-- ===== 按下提示条样式设置 ===== -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="提示条按下样式"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textColor="#333333"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="12dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="手指按住提示条时的样式变化，调节时可实时显示"
-            android:textSize="12sp"
-            android:textColor="#999999"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 按下时启用开关 -->
-        <Switch
-            android:id="@+id/switch_pressed_bar_enabled"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="启用按下样式变化"
-            android:textSize="14sp"
-            android:padding="12dp"
-            android:layout_marginBottom="12dp" />
-
-        <!-- 按下时宽度 -->
-        <TextView
-            android:id="@+id/text_pressed_bar_width"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="按下时宽度: 320dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_pressed_bar_width"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="600"
-            android:min="200"
-            android:progress="320"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 按下时高度 -->
-        <TextView
-            android:id="@+id/text_pressed_bar_height"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="按下时高度: 65dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_pressed_bar_height"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="150"
-            android:progress="65"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 按下时位置Y -->
-        <TextView
-            android:id="@+id/text_pressed_bar_position_y"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="按下时位置Y: 20dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_pressed_bar_position_y"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="-500"
-            android:max="500"
-            android:progress="20"
-            android:layout_marginBottom="24dp" />
-
-        <!-- 按下时圆角 -->
-        <TextView
-            android:id="@+id/text_pressed_bar_corner"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="按下时圆角: 35dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_pressed_bar_corner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="60"
-            android:progress="35"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 按下时透明度 -->
-        <TextView
-            android:id="@+id/text_pressed_bar_alpha"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="按下时透明度: 0.60"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_pressed_bar_alpha"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100"
-            android:progress="60"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 按下时颜色 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="按下时颜色 (RGB)"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <EditText
-            android:id="@+id/edit_pressed_bar_color"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="格式：#RRGGBB，默认 #333333"
-            android:inputType="text"
-            android:padding="12dp"
-            android:background="@android:drawable/edit_text"
-            android:textSize="14sp"
-            android:text="#333333"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 边缘羽化宽度 -->
-        <TextView
-            android:id="@+id/text_pressed_bar_feather"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="边缘羽化宽度: 15dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_pressed_bar_feather"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="0"
-            android:max="50"
-            android:progress="15"
-            android:layout_marginBottom="16dp" />
-
-
-
-        <!-- 分隔线 -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#DDDDDD"
-            android:layout_marginBottom="24dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="窗口设置"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:textColor="#333333"
-            android:layout_marginBottom="32dp" />
-
-
-        <!-- AI 对话窗口设置 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="AI窗口设置"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:textColor="#333333"
-            android:layout_marginBottom="16dp" />
-
-        <!-- AI 网页 URL 设置 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="AI 窗口网页 URL"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <EditText
-            android:id="@+id/edit_ai_url"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="输入 AI 网页地址（如：https://www.doubao.com）"
-            android:inputType="textUri"
-            android:padding="12dp"
-            android:background="@android:drawable/edit_text"
-            android:textSize="14sp"
-            android:layout_marginBottom="24dp" />
-
-        <!-- AI 窗口宽度 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="宽度 (dp)"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <EditText
-            android:id="@+id/edit_window_width"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="范围：200-600dp，默认 350dp"
-            android:inputType="number"
-            android:padding="12dp"
-            android:background="@android:drawable/edit_text"
-            android:textSize="14sp"
-            android:layout_marginBottom="16dp" />
-
-        <!-- AI 窗口高度 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="高度 (dp)"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <EditText
-            android:id="@+id/edit_window_height"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="范围：300-900dp，默认 600dp"
-            android:inputType="number"
-            android:padding="12dp"
-            android:background="@android:drawable/edit_text"
-            android:textSize="14sp"
-            android:layout_marginBottom="16dp" />
-
-        <!-- AI 窗口位置 Y -->
-        <TextView
-            android:id="@+id/text_window_position_y"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="窗口位置 Y: 0 (居中)"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_window_position_y"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="-500"
-            android:max="500"
-            android:progress="0"
-            android:layout_marginBottom="24dp" />
-
-        <!-- 窗口圆角半径 -->
-        <TextView
-            android:id="@+id/text_corner_radius"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="窗口圆角: 16dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_corner_radius"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="0"
-            android:max="50"
-            android:progress="16"
-            android:layout_marginBottom="24dp" />
-
-
-        <!-- 边框宽度 -->
-        <TextView
-            android:id="@+id/text_border_width"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="边框宽度: 2dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_border_width"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="20"
-            android:progress="2"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 边框颜色 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="边框颜色 (RGB)"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <EditText
-            android:id="@+id/edit_border_color"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="格式：#RRGGBB，默认 #4CAF50"
-            android:inputType="text"
-            android:padding="12dp"
-            android:background="@android:drawable/edit_text"
-            android:textSize="14sp"
-            android:text="#4CAF50"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 边框透明度 -->
-        <TextView
-            android:id="@+id/text_border_alpha"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="边框透明度: 1.00"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_border_alpha"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100"
-            android:progress="100"
-            android:layout_marginBottom="24dp" />
-
-
-        <!-- 右上角按钮组显示设置 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="右上角按钮组"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="显示/隐藏窗口右上角的返回、刷新、关闭按钮"
-            android:textSize="12sp"
-            android:textColor="#999999"
-            android:layout_marginBottom="12dp" />
-
-        <!-- 显示关闭按钮 -->
-        <Switch
-            android:id="@+id/switch_show_close_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="显示关闭按钮（默认开启）"
-            android:textSize="14sp"
-            android:padding="12dp"
-            android:layout_marginBottom="4dp" />
-
-        <!-- 显示刷新按钮 -->
-        <Switch
-            android:id="@+id/switch_show_refresh_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="显示刷新按钮（默认开启）"
-            android:textSize="14sp"
-            android:padding="12dp"
-            android:layout_marginBottom="4dp" />
-
-        <!-- 显示后退按钮 -->
-        <Switch
-            android:id="@+id/switch_show_back_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="显示后退按钮（默认开启）"
-            android:textSize="14sp"
-            android:padding="12dp"
-            android:layout_marginBottom="4dp" />
-
-        <!-- 小横条透明度 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="小横条透明度"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="#666666"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="4dp" />
-
-        <TextView
-            android:id="@+id/text_top_bar_transparency"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="小横条透明度: 40%"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_top_bar_transparency"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100"
-            android:progress="40"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 点击窗口外关闭窗口 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="点击窗口外关闭窗口"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <Switch
-            android:id="@+id/switch_close_on_outside_click"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="点击窗口外部区域时关闭窗口（默认开启）"
-            android:textSize="14sp"
-            android:padding="12dp"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 侧边返回手势行为 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="侧边返回手势"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <Switch
-            android:id="@+id/switch_back_prioritize_webview"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="侧边返回手势返回网页上一级"
-            android:textSize="14sp"
-            android:padding="12dp"
-            android:layout_marginBottom="24dp" />
-
-        <!-- ===== AI 窗口模糊效果设置 ===== -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="AI 窗口模糊效果"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="#333333"
-            android:layout_marginBottom="16dp" />
-
-        <!-- AI 窗口背景样式 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="背景样式"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <Spinner
-            android:id="@+id/spinner_ai_style"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:entries="@array/shortcut_style_entries"
-            android:layout_marginBottom="16dp" />
-
-        <!-- AI 窗口模糊半径 -->
-        <TextView
-            android:id="@+id/text_ai_blur_radius"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="AI 窗口模糊半径: 25dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_ai_blur_radius"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="300"
-            android:progress="25"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 网页背景透明 -->
-        <Switch
-            android:id="@+id/switch_webpage_bg_transparent"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="网页背景透明（不保证效果完美，可尝试通过自定义css实现）"
-            android:textSize="14sp"
-            android:padding="12dp"
-            android:layout_marginBottom="8dp"
-            android:visibility="gone" />
-
-        <!-- 网页透明度 -->
-        <TextView
-            android:id="@+id/text_ai_overlay_alpha"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="网页透明度: 80%"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_ai_overlay_alpha"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="255"
-            android:progress="204"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 自定义 CSS -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="自定义 CSS（注入到网页）"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <EditText
-            android:id="@+id/edit_custom_css"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="例如：* { background-color: transparent !important; }"
-            android:inputType="textMultiLine"
-            android:minLines="3"
-            android:maxLines="6"
-            android:gravity="top|start"
-            android:padding="12dp"
-            android:background="@android:drawable/edit_text"
-            android:textSize="12sp"
-            android:typeface="monospace"
-            android:scrollbars="vertical"
-            android:layout_marginBottom="24dp" />
-
-        <!-- 输入法避让设置 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="输入法避让设置"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="#333333"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="当网页调起输入法时，窗口自动上移避免遮挡"
-            android:textSize="12sp"
-            android:textColor="#999999"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 输入法弹出时窗口上移距离 -->
-        <TextView
-            android:id="@+id/text_keyboard_offset"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="窗口上移距离: 300px"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_keyboard_offset"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="0"
-            android:max="1000"
-            android:progress="300"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 平移动画速度 -->
-        <TextView
-            android:id="@+id/text_keyboard_anim_duration"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="平移动画时长: 250ms"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_keyboard_anim_duration"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="50"
-            android:max="800"
-            android:progress="250"
-            android:layout_marginBottom="24dp" />
-
-        <!-- 分隔线 -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#DDDDDD"
-            android:layout_marginBottom="24dp" />
-
-
-
-        <!-- ===== 快捷方式窗口设置 ===== -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="快捷方式窗口设置"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:textColor="#333333"
-            android:layout_marginBottom="8dp" />
-
-
-        <!-- 快捷窗口宽度 -->
-        <TextView
-            android:id="@+id/text_shortcut_window_width"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="快捷窗口宽度: 350dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_shortcut_window_width"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="200"
-            android:max="600"
-            android:progress="350"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 快捷窗口高度 -->
-        <TextView
-            android:id="@+id/text_shortcut_window_height"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="快捷窗口最大高度: 350dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_shortcut_window_height"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="200"
-            android:max="600"
-            android:progress="350"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 快捷窗口位置 Y -->
-        <TextView
-            android:id="@+id/text_shortcut_window_position_y"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="快捷窗口位置 Y: 0 (居中)"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_shortcut_window_position_y"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="-500"
-            android:max="500"
-            android:progress="0"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 快捷窗口边框宽度 -->
-        <TextView
-            android:id="@+id/text_shortcut_border_width"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="边框宽度: 1dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_shortcut_border_width"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="20"
-            android:progress="1"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 快捷窗口圆角 -->
-        <TextView
-            android:id="@+id/text_shortcut_corner_radius"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="窗口圆角: 24dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_shortcut_corner_radius"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="0"
-            android:max="50"
-            android:progress="24"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 快捷窗口边框颜色 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="边框颜色 (RGB)"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <EditText
-            android:id="@+id/edit_shortcut_border_color"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="格式：#RRGGBB，默认 #000000"
-            android:inputType="text"
-            android:padding="12dp"
-            android:background="@android:drawable/edit_text"
-            android:textSize="14sp"
-            android:text="#000000"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 快捷窗口边框透明度 -->
-        <TextView
-            android:id="@+id/text_shortcut_border_alpha"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="边框透明度: 0.10"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_shortcut_border_alpha"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100"
-            android:progress="10"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 快捷方式背景样式 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="背景样式"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="8dp" />
-
-        <Spinner
-            android:id="@+id/spinner_shortcut_style"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:entries="@array/shortcut_style_entries"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 模糊半径（仅当样式非不透明时显示） -->
-        <TextView
-            android:id="@+id/text_shortcut_blur_radius"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="模糊半径: 20dp"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp"
-            android:visibility="gone" />
-
-        <SeekBar
-            android:id="@+id/seek_shortcut_blur_radius"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="300"
-            android:progress="20"
-            android:layout_marginBottom="16dp"
-            android:visibility="gone" />
-
-        <!-- 叠加色透明度 -->
-        <TextView
-            android:id="@+id/text_shortcut_overlay_alpha"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="叠加色透明度: 70%"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp"
-            android:visibility="gone" />
-
-        <SeekBar
-            android:id="@+id/seek_shortcut_overlay_alpha"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="255"
-            android:progress="180"
-            android:layout_marginBottom="16dp"
-            android:visibility="gone" />
-
-        <!-- 分隔线 -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#DDDDDD"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="16dp" />
-
-
-
-
-        <!-- 图标大小 -->
-        <TextView
-            android:id="@+id/text_shortcut_icon_size"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="图标大小: 100%"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_shortcut_icon_size"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="50"
-            android:max="150"
-            android:progress="100"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 编辑快捷方式按钮 -->
-        <Button
-            android:id="@+id/btn_edit_shortcuts"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="编辑快捷方式内容"
-            android:textSize="14sp"
-            android:padding="12dp"
-            android:layout_marginBottom="24dp" />
-
-        <!-- 分隔线 -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#DDDDDD"
-            android:layout_marginBottom="24dp" />
-
-        <!-- ===== 背景遮罩设置 ===== -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="背景遮罩设置（对快捷方式和AI窗口同时生效）"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:textColor="#333333"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="窗口外部半透明遮罩，帮助区分窗口与背景"
-            android:textSize="12sp"
-            android:textColor="#999999"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 遮罩透明度 -->
-        <TextView
-            android:id="@+id/text_overlay_alpha"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="遮罩透明度: 50%"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_overlay_alpha"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100"
-            android:progress="50"
-            android:layout_marginBottom="16dp" />
-
-        <!-- 遮罩颜色 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="遮罩颜色 (RGB)"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <EditText
-            android:id="@+id/edit_overlay_color"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="格式：#RRGGBB，默认 #000000"
-            android:inputType="text"
-            android:padding="12dp"
-            android:background="@android:drawable/edit_text"
-            android:textSize="14sp"
-            android:text="#000000"
-            android:layout_marginBottom="24dp" />
-
-        <!-- 遮罩渐变时长 -->
-        <TextView
-            android:id="@+id/text_overlay_anim_duration"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="遮罩渐变时长: 180ms"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_overlay_anim_duration"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="180"
-            android:max="500"
-            android:progress="180"
-            android:layout_marginBottom="24dp" />
-
-        <!-- 分隔线 -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#DDDDDD"
-            android:layout_marginBottom="24dp" />
-
-        <!-- 展开/收起动画速度 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="展开/收起动画设置（对快捷方式和AI窗口同时生效）"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:textColor="#333333"
-            android:layout_marginBottom="16dp" />
-
-        <TextView
-            android:id="@+id/text_anim_duration"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="动画速度: 200ms"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <SeekBar
-            android:id="@+id/seek_anim_duration"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="50"
-            android:max="800"
-            android:progress="200"
-            android:layout_marginBottom="24dp" />
-
-        <Switch
-            android:id="@+id/switch_use_expand_directly"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="悬浮窗模式"
-            android:textSize="14sp"
-            android:padding="12dp"
-            android:layout_marginBottom="24dp" />
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="展开/收起动画设置"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="对快捷方式和AI窗口同时生效"
+                android:textSize="12sp"
+                android:textColor="#9E9E9E"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:id="@+id/text_anim_duration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="动画速度: 200ms"
+                android:textSize="14sp"
+                android:textColor="#424242"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_anim_duration"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="50"
+                android:max="800"
+                android:progress="200"
+                android:layout_marginBottom="16dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="悬浮窗模式"
+                        android:textSize="14sp"
+                        android:textColor="#1A1A1A" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="启用悬浮窗展开/收起动画"
+                        android:textSize="12sp"
+                        android:textColor="#9E9E9E" />
+
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/switch_use_expand_directly"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="#1976D2"
+                    android:trackTint="#BDBDBD" />
+
+            </LinearLayout>
+
+        </LinearLayout>
 
         <!-- 保存并应用按钮 -->
         <Button
             android:id="@+id/btn_save_apply"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="52dp"
             android:text="保存并应用"
             android:textSize="16sp"
             android:textStyle="bold"
-            android:padding="16dp"
-            android:backgroundTint="#4CAF50"
-            android:layout_marginTop="8dp"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#1976D2"
+            android:stateListAnimator="@null"
             android:layout_marginBottom="16dp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="提示：修改设置后点击“保存并应用”即可实时生效"
+            android:text="提示：修改设置后点击保存并应用即可实时生效"
             android:textSize="12sp"
-            android:textColor="#999999"
+            android:textColor="#9E9E9E"
             android:gravity="center"
-            android:layout_gravity="center_horizontal" />
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="24dp" />
 
     </LinearLayout>
 

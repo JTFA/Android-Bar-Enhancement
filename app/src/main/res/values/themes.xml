@@ -14,6 +14,20 @@
         <!-- Customize your theme here. -->
     </style>
 
+    <!-- 现代风格主题：用于MainActivity、SettingsActivity等页面 -->
+    <style name="Theme.ModernSettings" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#1976D2</item>
+        <item name="colorPrimaryVariant">#1565C0</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">#1976D2</item>
+        <item name="colorSecondaryVariant">#1565C0</item>
+        <item name="colorOnSecondary">@color/white</item>
+        <item name="android:statusBarColor">#F5F5F5</item>
+        <item name="android:windowBackground">#F5F5F5</item>
+        <item name="android:navigationBarColor">#F5F5F5</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
+    </style>
+
     <!-- Transparent proxy Activity theme: visually transparent but NOT system-translucent -->
     <!-- This ensures the Activity is the focused foreground task, so back gestures route to it -->
     <style name="Theme.TransparentHost" parent="Theme.MaterialComponents.DayNight.NoActionBar">

@@ -1,96 +1,247 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:padding="24dp"
-    android:background="#F5F5F5">
+    android:background="#F5F5F5"
+    android:fillViewport="true">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="悬浮窗应用"
-        android:textSize="28sp"
-        android:textStyle="bold"
-        android:textColor="#333333"
-        android:layout_marginBottom="40dp" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="请先授予悬浮窗权限，然后启动服务"
-        android:textSize="14sp"
-        android:textColor="#666666"
-        android:layout_marginBottom="32dp"
-        android:gravity="center" />
-
-    <Button
-        android:id="@+id/btn_check_permission"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="检查权限"
-        android:textSize="16sp"
-        android:padding="16dp"
-        android:layout_marginBottom="16dp"
-        android:backgroundTint="#2196F3" />
+        android:orientation="vertical"
+        android:padding="16dp">
 
-    <Switch
-        android:id="@+id/switch_service"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="启动悬浮窗服务"
-        android:textSize="16sp"
-        android:padding="16dp"
-        android:layout_marginBottom="16dp"
-        android:backgroundTint="#4CAF50" />
+        <!-- 页面标题 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="悬浮窗应用"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="#1A1A1A"
+            android:layout_marginBottom="4dp" />
 
-    <Switch
-        android:id="@+id/switch_boot_start"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="开机自启"
-        android:textSize="16sp"
-        android:padding="16dp"
-        android:backgroundTint="#2196F3" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="请先授予悬浮窗权限，然后启动服务"
+            android:textSize="14sp"
+            android:textColor="#757575"
+            android:layout_marginBottom="24dp" />
 
-    <Switch
-        android:id="@+id/switch_exclude_recents"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="在最近任务中隐藏"
-        android:textSize="16sp"
-        android:padding="16dp"
-        android:layout_marginTop="16dp"
-        android:backgroundTint="#9C27B0" />
+        <!-- 权限与服务卡片 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
 
-    <Button
-        android:id="@+id/btn_open_settings"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="打开样式设置"
-        android:textSize="16sp"
-        android:padding="16dp"
-        android:layout_marginTop="16dp"
-        android:backgroundTint="#FF9800" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="权限与服务"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="16dp" />
 
-    <Button
-        android:id="@+id/btn_test_simple"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="🔧 测试：显示红色条（简化版）"
-        android:textSize="16sp"
-        android:padding="16dp"
-        android:layout_marginTop="16dp"
-        android:backgroundTint="#F44336" />
+            <Button
+                android:id="@+id/btn_check_permission"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="检查权限"
+                android:textSize="15sp"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#1976D2"
+                android:stateListAnimator="@null"
+                android:layout_marginBottom="16dp" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="提示：启动服务后，Activity将关闭，悬浮窗将在后台运行"
-        android:textSize="12sp"
-        android:textColor="#999999"
-        android:layout_marginTop="24dp"
-        android:gravity="center" />
+            <!-- 启动悬浮窗服务 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="12dp">
 
-</LinearLayout>
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="启动悬浮窗服务"
+                        android:textSize="15sp"
+                        android:textColor="#1A1A1A" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="开启后悬浮窗将在后台运行"
+                        android:textSize="12sp"
+                        android:textColor="#9E9E9E"
+                        android:layout_marginTop="2dp" />
+
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/switch_service"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="#1976D2"
+                    android:trackTint="#BDBDBD" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#F0F0F0" />
+
+            <!-- 开机自启 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="12dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="开机自启"
+                        android:textSize="15sp"
+                        android:textColor="#1A1A1A" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="设备启动时自动运行悬浮窗"
+                        android:textSize="12sp"
+                        android:textColor="#9E9E9E"
+                        android:layout_marginTop="2dp" />
+
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/switch_boot_start"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="#1976D2"
+                    android:trackTint="#BDBDBD" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#F0F0F0" />
+
+            <!-- 在最近任务中隐藏 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="12dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="在最近任务中隐藏"
+                        android:textSize="15sp"
+                        android:textColor="#1A1A1A" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="不在最近任务列表中显示"
+                        android:textSize="12sp"
+                        android:textColor="#9E9E9E"
+                        android:layout_marginTop="2dp" />
+
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/switch_exclude_recents"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="#1976D2"
+                    android:trackTint="#BDBDBD" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- 功能设置卡片 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="功能设置"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:layout_marginBottom="16dp" />
+
+            <Button
+                android:id="@+id/btn_open_settings"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="打开样式设置"
+                android:textSize="15sp"
+                android:textColor="#1976D2"
+                android:backgroundTint="#E3F2FD"
+                android:stateListAnimator="@null"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/btn_test_simple"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="测试：显示红色条（简化版）"
+                android:textSize="15sp"
+                android:textColor="#D32F2F"
+                android:backgroundTint="#FFEBEE"
+                android:stateListAnimator="@null" />
+
+        </LinearLayout>
+
+        <!-- 提示信息 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="提示：启动服务后，Activity将关闭，悬浮窗将在后台运行"
+            android:textSize="12sp"
+            android:textColor="#9E9E9E"
+            android:gravity="center"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="8dp" />
+
+    </LinearLayout>
+
+</ScrollView>
