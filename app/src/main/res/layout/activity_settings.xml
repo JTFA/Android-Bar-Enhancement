@@ -746,6 +746,34 @@
             android:text="显示后退按钮（默认开启）"
             android:textSize="14sp"
             android:padding="12dp"
+            android:layout_marginBottom="4dp" />
+
+        <!-- 小横条透明度 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="小横条透明度"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="#666666"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/text_top_bar_transparency"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="小横条透明度: 40%"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="8dp" />
+
+        <SeekBar
+            android:id="@+id/seek_top_bar_transparency"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progress="40"
             android:layout_marginBottom="16dp" />
 
         <!-- 点击窗口外关闭窗口 -->

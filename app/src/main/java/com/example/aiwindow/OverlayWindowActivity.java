@@ -118,6 +118,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
     public static final String EXTRA_SHORTCUT_STYLE = "shortcut_style";
     public static final String EXTRA_SHORTCUT_BLUR_RADIUS = "shortcut_blur_radius";
     public static final String EXTRA_SHORTCUT_OVERLAY_ALPHA = "shortcut_overlay_alpha";
+    // 顶部小横条透明度
+    public static final String EXTRA_TOP_BAR_TRANSPARENCY = "top_bar_transparency";
 
     public static final int WINDOW_TYPE_AI = 0;
     public static final int WINDOW_TYPE_SHORTCUT = 1;
@@ -137,6 +139,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private String borderColor;
     private float borderAlpha;
     private boolean showCloseButton, showRefreshButton, showBackButton;
+    private int topBarTransparency = 40; // 顶部小横条背景透明度 0-100
+    private boolean isTopBarExpanded = false;
     private boolean closeOnOutside, backPrioritizeWebview;
     private String aiUrl;
     private int shortcutIconSize, shortcutStyle, shortcutBlurRadius, shortcutOverlayAlpha;
@@ -158,6 +162,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private View overlayView; // 背景遮罩视图
     private WebView webView;
     private ImageView backButtonRef;
+    // 顶部小横条/按钮组
+    private FrameLayout topBarView;
+    private View topBarIndicator;
+    private LinearLayout topBarButtonRow;
+    private int topBarExpandedW, topBarExpandedH; // 展开尺寸（px）
+    private int topBarCollapsedW, topBarCollapsedH; // 收起尺寸（px）
     private boolean isExpanded = false;
     private boolean isCollapsing = false;
     private BroadcastReceiver restoreBarReceiver;
@@ -183,7 +193,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // ─── 动画初始值 ───
     private float initScaleX, initScaleY;
     private float initTranslationX, initTranslationY;
-    
+
+
     // ─── 待启动快捷方式（收起动画完成后启动，避免 startActivity 立即触发 onUserLeaveHint 中断动画） ───
     private ShortcutItem pendingShortcutItem = null;
 
@@ -230,10 +241,31 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 6. 注册广播
         registerRestoreReceiver();
 
+        // 7. 为AI窗口添加WebView触摸监听（点击网页收起展开的小横条）
+        if (windowType == WINDOW_TYPE_AI) {
+            contentContainer.post(() -> {
+                if (webView != null) {
+                    webView.setOnTouchListener((v, event) -> {
+                        if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                            if (isTopBarExpanded) {
+                                collapseTopBar();
+                            }
+                        }
+                        return false;
+                    });
+                }
+            });
+        }
+
         // 8. 返回键处理
+        // 如果小横条处于展开状态，先收回小横条再执行返回
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
+                if (isTopBarExpanded) {
+                    collapseTopBar();
+                    return;
+                }
                 if (windowType == WINDOW_TYPE_AI && backPrioritizeWebview
                         && webView != null && webView.canGoBack()) {
                     webView.goBack();
@@ -244,7 +276,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             }
         });
 
-        // 9. 布局完成后，延迟500ms执行展开动画（诊断用：判断透明度淡入是否来自系统过渡动画）
+        // 9. 布局完成后，延迟执行展开动画
         contentContainer.postDelayed(this::performExpandAnimation, 180);
 
         // 10. 设置输入法检测监听器
@@ -500,6 +532,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             shortcutOverlayAlpha = intent.getIntExtra(EXTRA_SHORTCUT_OVERLAY_ALPHA, 180);
         }
 
+        // 读取顶部小横条透明度
+        topBarTransparency = intent.getIntExtra(EXTRA_TOP_BAR_TRANSPARENCY, 40);
+
         // 加载背景遮罩设置（所有窗口类型）
         loadOverlaySettings();
     }
@@ -594,8 +629,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 根据类型添加内容
         if (windowType == WINDOW_TYPE_AI) {
             addAiContent(contentContainer);
-            // AI 窗口添加关闭/刷新/返回按钮
-            addButtons(contentContainer);
+            // AI 窗口添加顶部小横条按钮组
+            addTopBar(contentContainer);
         } else {
             addShortcutContent(contentContainer);
             // 快捷窗口无按钮，点击外部关闭
@@ -1327,63 +1362,69 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // 按钮
     // ═══════════════════════════════════════════════════════════
 
-    private void addButtons(FrameLayout container) {
-        int buttonSize = dpToPx(32);
-        int gap = dpToPx(10);
-        int rightMargin = dpToPx(10);
+    private void addTopBar(FrameLayout container) {
+        // 只有AI窗口需要顶部小横条
+        if (windowType != WINDOW_TYPE_AI) return;
 
-        // 关闭按钮（最右侧）
-        if (showCloseButton) {
-            ImageView closeBtn = createButton(android.R.drawable.ic_menu_close_clear_cancel, "#666666");
-            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(buttonSize, buttonSize);
-            lp.gravity = Gravity.TOP | Gravity.END;
-            lp.setMargins(dpToPx(10), dpToPx(10), rightMargin, dpToPx(10));
-            closeBtn.setLayoutParams(lp);
-            closeBtn.setOnClickListener(v -> collapseAndFinish());
-            container.addView(closeBtn);
-            rightMargin += buttonSize + gap;
-        }
+        // 统计启用的按钮数量
+        boolean hasClose = showCloseButton;
+        boolean hasRefresh = showRefreshButton;
+        boolean hasBack = showBackButton;
+        int activeCount = (hasClose ? 1 : 0) + (hasRefresh ? 1 : 0) + (hasBack ? 1 : 0);
+        if (activeCount == 0) return; // 所有按钮都关闭时不显示小横条
 
-        // 刷新按钮
-        if (windowType == WINDOW_TYPE_AI && showRefreshButton) {
-            ImageView refreshBtn = createButton(android.R.drawable.ic_menu_rotate, "#666666");
-            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(buttonSize, buttonSize);
-            lp.gravity = Gravity.TOP | Gravity.END;
-            lp.setMargins(dpToPx(10), dpToPx(10), rightMargin, dpToPx(10));
-            refreshBtn.setLayoutParams(lp);
-            refreshBtn.setOnClickListener(v -> {
-                if (webView != null) {
-                    webView.reload();
+        final float density = getResources().getDisplayMetrics().density;
+        final int btnSize = dpToPx(32);
+        final int pad = dpToPx(8);
+        final int gap = dpToPx(10);
+        topBarCollapsedW = Math.round(60 * density);
+        topBarCollapsedH = Math.round(6 * density);
 
+        // 计算展开尺寸
+        int btnsWidth = activeCount * btnSize + Math.max(0, activeCount - 1) * gap;
+        topBarExpandedW = btnsWidth + pad * 2;
+        topBarExpandedH = btnSize + pad * 2;
+        final int expandedCorner = Math.round(10 * density);
 
-//
-//                    // 如果是亚克力/液态玻璃模式且开启了网页背景透明，立即注入透明背景 CSS
-//                    if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
-//                        injectTransparentBackground(webView);
-//                    }else{
-//                        removeTransparentBackground(webView);
-//                    }
-                    //                     最后注入深色模式 CSS（确保不被覆盖）
-//                    injectDarkModeCSS(webView);
-                    // 注入自定义 CSS
-//                    if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
-//                        injectCustomCss(webView);
-//                    }
-//                    webView.invalidate();
+        // ── 主容器（LayoutParams始终为展开尺寸，收起时通过scale缩小） ──
+        topBarView = new FrameLayout(this);
+        FrameLayout.LayoutParams barLp = new FrameLayout.LayoutParams(topBarExpandedW, topBarExpandedH);
+        barLp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        barLp.topMargin = dpToPx(8);
+        topBarView.setLayoutParams(barLp);
+        topBarView.setClipChildren(false);
 
-                }
-            });
-            container.addView(refreshBtn);
-            rightMargin += buttonSize + gap;
-        }
+        // 背景Drawable（灰色半透明圆角矩形）
+        int bgAlpha255 = (int)(Math.min(100, Math.max(0, topBarTransparency)) * 255.0f / 100.0f);
+        GradientDrawable barBg = new GradientDrawable();
+        barBg.setShape(GradientDrawable.RECTANGLE);
+        barBg.setCornerRadius(expandedCorner);
+        barBg.setColor(Color.argb(bgAlpha255, 0x88, 0x88, 0x88));
+        topBarView.setBackground(barBg);
 
-        // 返回按钮
-        if (windowType == WINDOW_TYPE_AI && showBackButton) {
-            final ImageView backBtn = createButton(android.R.drawable.ic_menu_revert, "#666666");
-            backButtonRef = backBtn;
-            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(buttonSize, buttonSize);
-            lp.gravity = Gravity.TOP | Gravity.END;
-            lp.setMargins(dpToPx(10), dpToPx(10), rightMargin, dpToPx(10));
+        // ── 收起状态指示器（灰色小圆条） ──
+        topBarIndicator = new View(this);
+        FrameLayout.LayoutParams indLp = new FrameLayout.LayoutParams(topBarCollapsedW, topBarCollapsedH);
+        indLp.gravity = Gravity.CENTER;
+        topBarIndicator.setLayoutParams(indLp);
+        GradientDrawable indBg = new GradientDrawable();
+        indBg.setShape(GradientDrawable.RECTANGLE);
+        indBg.setCornerRadius(topBarCollapsedH / 2f);
+        int indicatorColor = Color.argb(Math.min(255, bgAlpha255 + 50), 0xCC, 0xCC, 0xCC);
+        indBg.setColor(indicatorColor);
+        topBarIndicator.setBackground(indBg);
+        topBarView.addView(topBarIndicator);
+
+        // ── 展开状态的按钮行 ──
+        topBarButtonRow = new LinearLayout(this);
+        topBarButtonRow.setOrientation(LinearLayout.HORIZONTAL);
+        topBarButtonRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        // 从左到右：返回、刷新、关闭
+        if (hasBack) {
+            ImageView backBtn = createTopBarButton(android.R.drawable.ic_menu_revert);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(btnSize, btnSize);
+            if (hasRefresh || hasClose) lp.rightMargin = gap;
             backBtn.setLayoutParams(lp);
             backBtn.setOnClickListener(v -> {
                 if (webView != null && webView.canGoBack()) {
@@ -1391,23 +1432,106 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     updateBackButtonState();
                 }
             });
-            container.addView(backBtn);
-            updateBackButtonState();
+            backButtonRef = backBtn;
+            topBarButtonRow.addView(backBtn);
+        } else {
+            backButtonRef = null;
         }
+
+        if (hasRefresh) {
+            ImageView refreshBtn = createTopBarButton(android.R.drawable.ic_menu_rotate);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(btnSize, btnSize);
+            if (hasClose) lp.rightMargin = gap;
+            refreshBtn.setLayoutParams(lp);
+            refreshBtn.setOnClickListener(v -> {
+                if (webView != null) webView.reload();
+            });
+            topBarButtonRow.addView(refreshBtn);
+        }
+
+        if (hasClose) {
+            ImageView closeBtn = createTopBarButton(android.R.drawable.ic_menu_close_clear_cancel);
+            closeBtn.setLayoutParams(new LinearLayout.LayoutParams(btnSize, btnSize));
+            closeBtn.setOnClickListener(v -> collapseAndFinish());
+            topBarButtonRow.addView(closeBtn);
+        }
+
+        topBarView.addView(topBarButtonRow);
+
+        // ── 初始化为收起状态 ──
+        topBarView.setPivotX(topBarExpandedW / 2f);
+        topBarView.setPivotY(0);
+        float initSx = (float) topBarCollapsedW / topBarExpandedW;
+        float initSy = (float) topBarCollapsedH / topBarExpandedH;
+        topBarView.setScaleX(initSx);
+        topBarView.setScaleY(initSy);
+        topBarIndicator.setAlpha(1f);
+        topBarButtonRow.setAlpha(0f);
+        isTopBarExpanded = false;
+
+        // ── 点击小横条切换展开/收起 ──
+        topBarView.setOnClickListener(v -> {
+            if (isTopBarExpanded) {
+                collapseTopBar();
+            } else {
+                expandTopBar();
+            }
+        });
+
+        container.addView(topBarView);
     }
 
-    private ImageView createButton(int iconRes, String tintColor) {
+    private ImageView createTopBarButton(int iconRes) {
         ImageView btn = new ImageView(this);
         btn.setImageResource(iconRes);
-        btn.setColorFilter(Color.parseColor(tintColor));
+        btn.setColorFilter(Color.parseColor("#DDDDDD"));
         btn.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         btn.setPadding(dpToPx(6), dpToPx(6), dpToPx(6), dpToPx(6));
 
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
-        bg.setColor(Color.parseColor("#22000000"));
+        bg.setColor(Color.parseColor("#33000000"));
         btn.setBackground(bg);
         return btn;
+    }
+
+    private void expandTopBar() {
+        if (isTopBarExpanded) return;
+        isTopBarExpanded = true;
+
+        topBarView.animate()
+                .scaleX(1f).scaleY(1f)
+                .setDuration(250)
+                .setInterpolator(new OvershootInterpolator(0.5f))
+                .start();
+
+        topBarIndicator.animate()
+                .alpha(0f).setDuration(150).start();
+
+        topBarButtonRow.animate()
+                .alpha(1f).setDuration(250).start();
+
+        updateBackButtonState();
+    }
+
+    private void collapseTopBar() {
+        if (!isTopBarExpanded) return;
+        isTopBarExpanded = false;
+
+        float sx = (float) topBarCollapsedW / topBarExpandedW;
+        float sy = (float) topBarCollapsedH / topBarExpandedH;
+
+        topBarView.animate()
+                .scaleX(sx).scaleY(sy)
+                .setDuration(250)
+                .setInterpolator(new DecelerateInterpolator())
+                .start();
+
+        topBarIndicator.animate()
+                .alpha(1f).setDuration(250).start();
+
+        topBarButtonRow.animate()
+                .alpha(0f).setDuration(150).start();
     }
 
     private void updateBackButtonState() {

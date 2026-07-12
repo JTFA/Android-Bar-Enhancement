@@ -136,6 +136,9 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_CUSTOM_CSS = "custom_css"; // 自定义 CSS
     private static final String KEY_WEBPAGE_BG_TRANSPARENT = "webpage_bg_transparent"; // 网页背景透明
     
+    // 顶部小横条透明度
+    private static final String KEY_TOP_BAR_TRANSPARENCY = "top_bar_transparency";
+    
     // AI URL 输入框
     private EditText editAiUrl;
     
@@ -242,6 +245,10 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView textAiBlurRadius, textAiOverlayAlpha;
     private EditText editCustomCss; // 自定义 CSS
     private Switch switchWebpageBgTransparent; // 网页背景透明
+    
+    // 顶部小横条透明度控件
+    private SeekBar seekTopBarTransparency;
+    private TextView textTopBarTransparency;
     
     // 保存按钮
     private Button btnSave;
@@ -407,6 +414,10 @@ public class SettingsActivity extends AppCompatActivity {
         editCustomCss = findViewById(R.id.edit_custom_css);
         switchWebpageBgTransparent = findViewById(R.id.switch_webpage_bg_transparent);
         switchUseExpandDirectly = findViewById(R.id.switch_use_expand_directly);
+        
+        // 顶部小横条透明度控件
+        seekTopBarTransparency = findViewById(R.id.seek_top_bar_transparency);
+        textTopBarTransparency = findViewById(R.id.text_top_bar_transparency);
         
         // 保存按钮
         btnSave = findViewById(R.id.btn_save_apply);
@@ -677,6 +688,11 @@ public class SettingsActivity extends AppCompatActivity {
 
         boolean useExpand = preferences.getBoolean("use_expand_directly", false);
         switchUseExpandDirectly.setChecked(useExpand);
+        
+        // 加载顶部小横条透明度
+        int topBarTransparency = preferences.getInt(KEY_TOP_BAR_TRANSPARENCY, 40);
+        seekTopBarTransparency.setProgress(topBarTransparency);
+        textTopBarTransparency.setText("小横条透明度: " + topBarTransparency + "%");
     }
     
     /**
@@ -843,6 +859,9 @@ public class SettingsActivity extends AppCompatActivity {
         // 保存网页背景透明设置
         editor.putBoolean(KEY_WEBPAGE_BG_TRANSPARENT, switchWebpageBgTransparent.isChecked());
 
+        // 保存顶部小横条透明度
+        editor.putInt(KEY_TOP_BAR_TRANSPARENCY, seekTopBarTransparency.getProgress());
+
         editor.putBoolean("use_expand_directly", switchUseExpandDirectly.isChecked());
         
         // 提交保存
@@ -989,6 +1008,12 @@ public class SettingsActivity extends AppCompatActivity {
         aiBlurIntent.putExtra("ai_blur_radius", seekAiBlurRadius.getProgress());
         aiBlurIntent.putExtra("ai_overlay_alpha", aiOverlayAlphaToSend);
         startService(aiBlurIntent);
+
+        // 更新顶部小横条透明度
+        Intent barTpIntent = new Intent(this, FloatWindowService.class);
+        barTpIntent.setAction("UPDATE_TOP_BAR_TRANSPARENCY");
+        barTpIntent.putExtra("top_bar_transparency", seekTopBarTransparency.getProgress());
+        startService(barTpIntent);
     }
 
     /**
@@ -1512,6 +1537,17 @@ public class SettingsActivity extends AppCompatActivity {
             // 实时保存设置
             preferences.edit().putBoolean(KEY_WEBPAGE_BG_TRANSPARENT, isChecked).apply();
         });
+
+        // 顶部小横条透明度 - 实时更新
+        seekTopBarTransparency.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textTopBarTransparency.setText("小横条透明度: " + progress + "%");
+                applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
     }
 
     private void updateShortcutStyleVisibility(int style) {
@@ -1667,6 +1703,12 @@ public class SettingsActivity extends AppCompatActivity {
         shortcutIntent.putExtra("shortcut_blur_radius", seekShortcutBlurRadius.getProgress());
         shortcutIntent.putExtra("shortcut_overlay_alpha", seekShortcutOverlayAlpha.getProgress());
         startService(shortcutIntent);
+
+        // 更新顶部小横条透明度
+        Intent barTransparencyIntent = new Intent(this, FloatWindowService.class);
+        barTransparencyIntent.setAction("UPDATE_TOP_BAR_TRANSPARENCY");
+        barTransparencyIntent.putExtra("top_bar_transparency", seekTopBarTransparency.getProgress());
+        startService(barTransparencyIntent);
     }
     
     /**

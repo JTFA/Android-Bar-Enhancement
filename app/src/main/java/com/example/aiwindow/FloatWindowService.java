@@ -63,6 +63,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.Toast;
 import android.view.animation.OvershootInterpolator;
+import android.view.animation.DecelerateInterpolator;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -180,6 +181,8 @@ public class FloatWindowService extends Service {
     private boolean showCloseButton = true; // 默认显示关闭按钮
     private boolean showRefreshButton = true; // 默认显示刷新按钮
     private boolean showBackButton = true; // 默认显示后退按钮
+    private int topBarTransparency = 40; // 顶部小横条背景透明度 0-100
+    private boolean isTopBarExpanded = false;
 
     // 返回上一级按钮引用（用于在页面加载后更新状态）
     private ImageView backButtonRef;
@@ -761,6 +764,17 @@ public class FloatWindowService extends Service {
             }
             
             Log.d(TAG, "AI 窗口模糊效果已更新: style=" + aiStyle + ", blurRadius=" + aiBlurRadius + ", overlayAlpha=" + aiOverlayAlpha);
+        }
+        // 处理顶部小横条透明度更新
+        else if (intent != null && "UPDATE_TOP_BAR_TRANSPARENCY".equals(intent.getAction())) {
+            topBarTransparency = intent.getIntExtra("top_bar_transparency", topBarTransparency);
+            Log.d(TAG, "顶部小横条透明度已更新: " + topBarTransparency);
+            // 如果topBarView已存在，立即更新背景
+            if (topBarView != null && topBarView.getBackground() instanceof GradientDrawable) {
+                int bgAlpha255 = (int)(Math.min(100, Math.max(0, topBarTransparency)) * 255.0f / 100.0f);
+                GradientDrawable bg = (GradientDrawable) topBarView.getBackground();
+                bg.setColor(Color.argb(bgAlpha255, 0x88, 0x88, 0x88));
+            }
         }
         // 处理单击打开应用设置更新
         else if (intent != null && "UPDATE_CLICK_APP".equals(intent.getAction())) {
@@ -1959,6 +1973,7 @@ public class FloatWindowService extends Service {
         intent.putExtra(OverlayWindowActivity.EXTRA_AI_STYLE, aiStyle);
         intent.putExtra(OverlayWindowActivity.EXTRA_AI_BLUR_RADIUS, aiBlurRadius);
         intent.putExtra(OverlayWindowActivity.EXTRA_AI_OVERLAY_ALPHA, aiOverlayAlpha);
+        intent.putExtra(OverlayWindowActivity.EXTRA_TOP_BAR_TRANSPARENCY, topBarTransparency);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent);
         // 隐藏底部提示条（透明度设为0）
@@ -2272,59 +2287,8 @@ public class FloatWindowService extends Service {
         proxyIme.setBackground(null);
         contentContainer.addView(proxyIme);
 
-        // ===== 创建右上角按钮组（返回、刷新、关闭），根据设置控制显示 =====
-        // 从右到左依次添加，自动右对齐：只显示可见的按钮，右侧紧密排列
-        int buttonSize = dpToPx(32);
-        int gap = dpToPx(10);
-        int rightMargin = dpToPx(10); // 最右侧按钮的右边距
-
-        // 关闭按钮（最右侧）
-        if (showCloseButton) {
-            ImageView closeButton = createCloseButton();
-            FrameLayout.LayoutParams closeBtnParams = new FrameLayout.LayoutParams(
-                    buttonSize,
-                    buttonSize
-            );
-            closeBtnParams.gravity = Gravity.TOP | Gravity.END;
-            closeBtnParams.setMargins(dpToPx(10), dpToPx(10), rightMargin, dpToPx(10));
-            closeButton.setLayoutParams(closeBtnParams);
-            contentContainer.addView(closeButton);
-            rightMargin += buttonSize + gap;
-            Log.d(TAG, "关闭按钮已显示");
-        }
-
-        // 创建刷新按钮（中间）
-        if (showRefreshButton) {
-            ImageView refreshButton = createRefreshButton();
-            FrameLayout.LayoutParams refreshBtnParams = new FrameLayout.LayoutParams(
-                    buttonSize,
-                    buttonSize
-            );
-            refreshBtnParams.gravity = Gravity.TOP | Gravity.END;
-            refreshBtnParams.setMargins(dpToPx(10), dpToPx(10), rightMargin, dpToPx(10));
-            refreshButton.setLayoutParams(refreshBtnParams);
-            contentContainer.addView(refreshButton);
-            rightMargin += buttonSize + gap;
-        }
-
-        // 创建返回按钮（最左侧）
-        if (showBackButton) {
-            final ImageView backButton = createBackButton();
-            backButtonRef = backButton;
-            FrameLayout.LayoutParams backBtnParams = new FrameLayout.LayoutParams(
-                    buttonSize,
-                    buttonSize
-            );
-            backBtnParams.gravity = Gravity.TOP | Gravity.END;
-            backBtnParams.setMargins(dpToPx(10), dpToPx(10), rightMargin, dpToPx(10));
-            backButton.setLayoutParams(backBtnParams);
-            contentContainer.addView(backButton);
-
-            // 更新返回按钮状态（根据 WebView 能否返回）
-            updateBackButtonState(backButton);
-        } else {
-            backButtonRef = null;
-        }
+        // ===== 创建顶部小横条按钮组（居中显示的小灰条，点击展开为圆角矩形） =====
+        addTopBar(contentContainer);
 
         Log.d(TAG, "✅ contentContainer 已设置 clipToOutline，WebView 有相同圆角背景");
 
@@ -3141,6 +3105,11 @@ public class FloatWindowService extends Service {
         webView.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
+                // 收起展开的小横条
+                if (event.getAction() == MotionEvent.ACTION_DOWN && isTopBarExpanded) {
+                    collapseTopBar();
+                }
+
                 gestureDetector.onTouchEvent(event);
 
                 if (isLongPressing) {
@@ -3631,153 +3600,189 @@ public class FloatWindowService extends Service {
         }
     }
 
-    /**
-     * 创建刷新按钮
-     */
-    private ImageView createRefreshButton() {
-        ImageView refreshButton = new ImageView(this);
+    // ═══════════════════════════════════════════════════════════
+    // 顶部小横条（AI窗口顶部居中灰色小条，点击展开为按钮组）
+    // ═══════════════════════════════════════════════════════════
 
-        // 用 Canvas 渲染 Unicode 刷新符号到 Bitmap 作为图标，与关闭按钮风格一致
-        refreshButton.setImageDrawable(createRefreshIconDrawable());
-        refreshButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        refreshButton.setPadding(dpToPx(2), dpToPx(0), dpToPx(2), dpToPx(2));
+    private FrameLayout topBarView;
+    private View topBarIndicator;
+    private LinearLayout topBarButtonRow;
+    private int topBarExpandedW, topBarExpandedH;
+    private int topBarCollapsedW, topBarCollapsedH;
 
-        // 圆形灰色背景（与关闭按钮一致）
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.OVAL);
-        bg.setColor(Color.parseColor("#F0F0F0"));
-        refreshButton.setBackground(bg);
+    private void addTopBar(FrameLayout container) {
+        // 统计启用的按钮数量
+        boolean hasClose = showCloseButton;
+        boolean hasRefresh = showRefreshButton;
+        boolean hasBack = showBackButton;
+        int activeCount = (hasClose ? 1 : 0) + (hasRefresh ? 1 : 0) + (hasBack ? 1 : 0);
+        if (activeCount == 0) return; // 所有按钮都关闭时不显示小横条
 
-        refreshButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Log.d(TAG, "刷新按钮被点击，刷新网页");
-                if (aiWebView != null) {
-                    aiWebView.reload();
-                }
-            }
-        });
-        return refreshButton;
-    }
+        final float density = getResources().getDisplayMetrics().density;
+        final int btnSize = dpToPx(32);
+        final int pad = dpToPx(8);
+        final int gap = dpToPx(10);
+        topBarCollapsedW = Math.round(60 * density);
+        topBarCollapsedH = Math.round(6 * density);
 
-    /**
-     * 创建返回上一级按钮
-     */
-    private ImageView createBackButton() {
-        ImageView backButton = new ImageView(this);
+        // 计算展开尺寸
+        int btnsWidth = activeCount * btnSize + Math.max(0, activeCount - 1) * gap;
+        topBarExpandedW = btnsWidth + pad * 2;
+        topBarExpandedH = btnSize + pad * 2;
+        final int expandedCorner = Math.round(10 * density);
 
-        // 用 Canvas 渲染左箭头符号到 Bitmap 作为图标，与刷新按钮风格一致
-        backButton.setImageDrawable(createBackIconDrawable());
-        backButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        backButton.setPadding(dpToPx(2), dpToPx(0), dpToPx(2), dpToPx(2));
+        // ── 主容器 ──
+        topBarView = new FrameLayout(this);
+        FrameLayout.LayoutParams barLp = new FrameLayout.LayoutParams(topBarExpandedW, topBarExpandedH);
+        barLp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        barLp.topMargin = dpToPx(8);
+        topBarView.setLayoutParams(barLp);
+        topBarView.setClipChildren(false);
 
-        // 圆形灰色背景（与刷新/关闭按钮一致）
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.OVAL);
-        bg.setColor(Color.parseColor("#F0F0F0"));
-        backButton.setBackground(bg);
+        // 背景Drawable（灰色半透明圆角矩形）
+        int bgAlpha255 = (int)(Math.min(100, Math.max(0, topBarTransparency)) * 255.0f / 100.0f);
+        GradientDrawable barBg = new GradientDrawable();
+        barBg.setShape(GradientDrawable.RECTANGLE);
+        barBg.setCornerRadius(expandedCorner);
+        barBg.setColor(Color.argb(bgAlpha255, 0x88, 0x88, 0x88));
+        topBarView.setBackground(barBg);
 
-        backButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Log.d(TAG, "返回按钮被点击，返回网页上一级");
+        // ── 收起状态指示器（灰色小圆条） ──
+        topBarIndicator = new View(this);
+        FrameLayout.LayoutParams indLp = new FrameLayout.LayoutParams(topBarCollapsedW, topBarCollapsedH);
+        indLp.gravity = Gravity.CENTER;
+        topBarIndicator.setLayoutParams(indLp);
+        GradientDrawable indBg = new GradientDrawable();
+        indBg.setShape(GradientDrawable.RECTANGLE);
+        indBg.setCornerRadius(topBarCollapsedH / 2f);
+        int indicatorColor = Color.argb(Math.min(255, bgAlpha255 + 50), 0xCC, 0xCC, 0xCC);
+        indBg.setColor(indicatorColor);
+        topBarIndicator.setBackground(indBg);
+        topBarView.addView(topBarIndicator);
+
+        // ── 展开状态的按钮行 ──
+        topBarButtonRow = new LinearLayout(this);
+        topBarButtonRow.setOrientation(LinearLayout.HORIZONTAL);
+        topBarButtonRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        if (hasBack) {
+            ImageView backBtn = createTopBarButton(android.R.drawable.ic_menu_revert);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(btnSize, btnSize);
+            if (hasRefresh || hasClose) lp.rightMargin = gap;
+            backBtn.setLayoutParams(lp);
+            backBtn.setOnClickListener(v -> {
                 if (aiWebView != null && aiWebView.canGoBack()) {
                     aiWebView.goBack();
-                    // 在 goBack 完成后更新按钮状态
-                    new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            updateBackButtonState((ImageView) v);
-                        }
-                    }, 100);
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> updateBackButtonState(backBtn), 100);
                 }
+            });
+            backButtonRef = backBtn;
+            topBarButtonRow.addView(backBtn);
+        } else {
+            backButtonRef = null;
+        }
+
+        if (hasRefresh) {
+            ImageView refreshBtn = createTopBarButton(android.R.drawable.ic_menu_rotate);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(btnSize, btnSize);
+            if (hasClose) lp.rightMargin = gap;
+            refreshBtn.setLayoutParams(lp);
+            refreshBtn.setOnClickListener(v -> {
+                if (aiWebView != null) aiWebView.reload();
+            });
+            topBarButtonRow.addView(refreshBtn);
+        }
+
+        if (hasClose) {
+            ImageView closeBtn = createTopBarButton(android.R.drawable.ic_menu_close_clear_cancel);
+            closeBtn.setLayoutParams(new LinearLayout.LayoutParams(btnSize, btnSize));
+            closeBtn.setOnClickListener(v -> collapseToBottomBar());
+            topBarButtonRow.addView(closeBtn);
+        }
+
+        topBarView.addView(topBarButtonRow);
+
+        // ── 初始化为收起状态 ──
+        topBarView.setPivotX(topBarExpandedW / 2f);
+        topBarView.setPivotY(0);
+        float initSx = (float) topBarCollapsedW / topBarExpandedW;
+        float initSy = (float) topBarCollapsedH / topBarExpandedH;
+        topBarView.setScaleX(initSx);
+        topBarView.setScaleY(initSy);
+        topBarIndicator.setAlpha(1f);
+        topBarButtonRow.setAlpha(0f);
+        isTopBarExpanded = false;
+
+        // ── 点击小横条切换展开/收起 ──
+        topBarView.setOnClickListener(v -> {
+            if (isTopBarExpanded) {
+                collapseTopBar();
+            } else {
+                expandTopBar();
             }
         });
-        return backButton;
+
+        container.addView(topBarView);
     }
 
-    /**
-     * 更新返回按钮的启用状态
-     */
+    private ImageView createTopBarButton(int iconRes) {
+        ImageView btn = new ImageView(this);
+        btn.setImageResource(iconRes);
+        btn.setColorFilter(Color.parseColor("#DDDDDD"));
+        btn.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        btn.setPadding(dpToPx(6), dpToPx(6), dpToPx(6), dpToPx(6));
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setShape(GradientDrawable.OVAL);
+        bg.setColor(Color.parseColor("#33000000"));
+        btn.setBackground(bg);
+        return btn;
+    }
+
+    private void expandTopBar() {
+        if (isTopBarExpanded) return;
+        isTopBarExpanded = true;
+
+        topBarView.animate()
+                .scaleX(1f).scaleY(1f)
+                .setDuration(250)
+                .setInterpolator(new OvershootInterpolator(0.5f))
+                .start();
+
+        topBarIndicator.animate()
+                .alpha(0f).setDuration(150).start();
+
+        topBarButtonRow.animate()
+                .alpha(1f).setDuration(250).start();
+
+        updateBackButtonState(backButtonRef);
+    }
+
+    private void collapseTopBar() {
+        if (!isTopBarExpanded) return;
+        isTopBarExpanded = false;
+
+        float sx = (float) topBarCollapsedW / topBarExpandedW;
+        float sy = (float) topBarCollapsedH / topBarExpandedH;
+
+        topBarView.animate()
+                .scaleX(sx).scaleY(sy)
+                .setDuration(250)
+                .setInterpolator(new DecelerateInterpolator())
+                .start();
+
+        topBarIndicator.animate()
+                .alpha(1f).setDuration(250).start();
+
+        topBarButtonRow.animate()
+                .alpha(0f).setDuration(150).start();
+    }
+
     private void updateBackButtonState(ImageView backButton) {
         if (backButton == null) return;
         boolean canGoBack = aiWebView != null && aiWebView.canGoBack();
         backButton.setEnabled(canGoBack);
-        backButton.setAlpha(canGoBack ? 1.0f : 0.35f);
-        Log.d(TAG, "返回按钮状态更新: enabled=" + canGoBack);
-    }
-
-    /**
-     * 用 Canvas 将 Unicode 左箭头绘制到 Bitmap，居中无偏移
-     */
-    private Drawable createBackIconDrawable() {
-        int size = dpToPx(30);
-        Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(bmp);
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(Color.parseColor("#888888"));
-        p.setTypeface(Typeface.DEFAULT_BOLD);
-        p.setTextAlign(Paint.Align.CENTER);
-        p.setTextSize(size * 0.8f);
-
-        Paint.FontMetrics fm = p.getFontMetrics();
-        float x = size / 2f;
-        float y = size / 2f - (fm.ascent + fm.descent) / 2f;
-        c.drawText("\u2190", x, y, p);
-
-        return new BitmapDrawable(getResources(), bmp);
-    }
-
-    /**
-     * 用 Canvas 将 Unicode 刷新符号绘制到 Bitmap，居中无偏移
-     */
-    private Drawable createRefreshIconDrawable() {
-        int size = dpToPx(30);
-        Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(bmp);
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(Color.parseColor("#888888"));
-        p.setTypeface(Typeface.DEFAULT_BOLD);
-        p.setTextAlign(Paint.Align.CENTER);
-        p.setTextSize(size * 0.8f);
-
-        Paint.FontMetrics fm = p.getFontMetrics();
-        float x = size / 2f;
-        float y = size / 2f - (fm.ascent + fm.descent) / 2f;
-        c.drawText("\u21BB", x, y, p);
-
-        return new BitmapDrawable(getResources(), bmp);
-    }
-
-    /**
-     * 创建关闭按钮
-     */
-
-    private ImageView createCloseButton() {
-        ImageView closeButton = new ImageView(this);
-
-        // 设置关闭图标（使用系统图标）
-        closeButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
-        closeButton.setColorFilter(Color.parseColor("#666666"));
-        closeButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        closeButton.setPadding(dpToPx(4), dpToPx(4), dpToPx(4), dpToPx(4));
-
-        // 设置背景为圆形
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.OVAL);
-        bg.setColor(Color.parseColor("#F0F0F0"));
-        closeButton.setBackground(bg);
-
-        // 点击事件：收起为底部提示条
-        closeButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Log.d(TAG, "关闭按钮被点击，准备收起为提示条");
-                collapseToBottomBar();
-            }
-        });
-
-        return closeButton;
+        backButton.setAlpha(canGoBack ? 1.0f : 0.3f);
     }
 
     /**
@@ -6731,6 +6736,9 @@ public class FloatWindowService extends Service {
 
             // 加载显示后退按钮设置
             showBackButton = prefs.getBoolean("show_back_button", showBackButton);
+
+            // 加载顶部小横条透明度
+            topBarTransparency = prefs.getInt("top_bar_transparency", topBarTransparency);
 
             // 加载输入法避让设置
             keyboardOffset = prefs.getInt("keyboard_offset", keyboardOffset);
