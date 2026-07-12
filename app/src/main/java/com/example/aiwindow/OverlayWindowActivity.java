@@ -812,7 +812,23 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 injectCustomCss(sPersistentWebView);
             }
 
-            // —— 新增：重新设置 WebViewClient，确保回调使用当前 Activity 实例 ——
+            // —— 新增：重新设置 WebChromeClient，确保文件上传回调使用当前 Activity 实例 ——
+            sPersistentWebView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public void onPermissionRequest(PermissionRequest request) {
+                    try { request.grant(request.getResources()); } catch (Exception ignored) {}
+                }
+
+                // Android 5.0+ 文件选择
+                @Override
+                public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
+                                                 FileChooserParams fileChooserParams) {
+                    openFileChooser(filePathCallback);
+                    return true;
+                }
+            });
+
+            // —— 重新设置 WebViewClient，确保回调使用当前 Activity 实例 ——
             sPersistentWebView.setWebViewClient(new WebViewClient() {
                 @Override
                 public void onPageStarted(WebView view, String url, Bitmap favicon) {
@@ -2548,12 +2564,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
             public void onReceiveValue(Uri[] value) {
                 Log.d(TAG, "File chooser callback invoked, files=" + (value != null ? value.length : 0));
                 // 将 content:// URI 复制到临时文件，转为 file:// URI
-                // 避免 FileChooserActivity 结束后 content URI 权限失效导致上传失败
-                Uri[] fileUris = copyContentUrisToTempFiles(value);
+                final Uri[] fileUris = copyContentUrisToTempFiles(value);
                 if (originalCallback != null) {
                     try {
-                        originalCallback.onReceiveValue(fileUris);
-                        Log.d(TAG, "WebView callback invoked successfully");
+                        // 使用 Handler.post 延迟到 Activity 回到前台后再执行回调，
+                        // 确保 WebView 渲染器在接收到上传请求时处于完全活跃状态。
+                        new Handler(Looper.getMainLooper()).post(() -> {
+                            originalCallback.onReceiveValue(fileUris);
+                            Log.d(TAG, "WebView callback invoked successfully");
+                        });
                     } catch (Exception e) {
                         Log.e(TAG, "Error invoking WebView callback", e);
                     }
