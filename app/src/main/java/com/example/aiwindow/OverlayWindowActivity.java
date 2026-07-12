@@ -1478,6 +1478,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
             }
         });
 
+        // ── 为 WebView 添加顶部边距，避免小横条遮挡网页内容 ──
+        // 让小横条区域不重叠 WebView，方便点击小横条不误触网页
+        if (webView != null) {
+            FrameLayout.LayoutParams wvLp = (FrameLayout.LayoutParams) webView.getLayoutParams();
+            wvLp.topMargin = dpToPx(8);
+            webView.setLayoutParams(wvLp);
+        }
+
         container.addView(topBarView);
     }
 
