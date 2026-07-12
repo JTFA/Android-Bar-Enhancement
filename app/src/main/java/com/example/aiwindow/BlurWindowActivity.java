@@ -97,7 +97,7 @@ public class BlurWindowActivity extends Activity {
         if (cornerRadius > 0) {
             android.graphics.drawable.GradientDrawable windowBackground = new android.graphics.drawable.GradientDrawable();
             windowBackground.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-            windowBackground.setCornerRadius(cornerRadius);
+            windowBackground.setCornerRadius(cornerRadius-5);
             // 使用完全透明的颜色，让模糊效果穿透显示
             windowBackground.setColor(Color.TRANSPARENT);
             getWindow().setBackgroundDrawable(windowBackground);
@@ -156,7 +156,7 @@ public class BlurWindowActivity extends Activity {
                     if (newCornerRadius > 0) {
                         android.graphics.drawable.GradientDrawable windowBackground = new android.graphics.drawable.GradientDrawable();
                         windowBackground.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-                        windowBackground.setCornerRadius(newCornerRadius);
+                        windowBackground.setCornerRadius(newCornerRadius-5);
                         windowBackground.setColor(Color.TRANSPARENT);
                         getWindow().setBackgroundDrawable(windowBackground);
                         Log.d(TAG, "模糊窗口圆角已更新: " + newCornerRadius + "px");
