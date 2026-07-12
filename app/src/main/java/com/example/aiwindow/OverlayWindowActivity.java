@@ -74,6 +74,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import org.json.JSONArray;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.util.ArrayList;
 
 /**
@@ -166,6 +168,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // ─── 模糊窗口渐变标志 ───
     private boolean blurWindowFadeInSent = false; // 标记是否已发送模糊窗口渐变显示广播
     private boolean blurFadeOutStarted = false; // 标记收起动画中是否已触发模糊淡出
+    // ─── 文件上传相关 ───
+    private boolean mIsStartingFileChooser = false; // 标记是否正在启动文件选择器
 
     // ─── 输入法避让相关 ───
     private ViewTreeObserver.OnGlobalLayoutListener keyboardLayoutListener;
@@ -265,6 +269,43 @@ public class OverlayWindowActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        mIsStartingFileChooser = false;
+    }
+
+    @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        // 用户主动离开（Home键/最近任务/底部上滑手势）→ 销毁窗口
+        // 替换原来 Manifest 中 noHistory="true" 的效果，
+        // 但跳过文件选择器启动时的场景，保证文件上传流程不中断
+        if (!mIsStartingFileChooser && !isFinishing()) {
+            // 立即隐藏内容，防止窗口在异步 finish 过程中仍显示在 SurfaceFlinger 上
+            if (rootLayout != null) rootLayout.setVisibility(View.GONE);
+            // 立即隐藏模糊层 + 启动淡出动画（fadeOutIfAlive 会立即 setVisibility(INVISIBLE) + 淡出）
+            BlurWindowActivity.fadeOutIfAlive();
+            sendRestoreBarBroadcast();
+            finish();
+            overridePendingTransition(0, 0);
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // 兜底清理：某些 ROM/场景下 onUserLeaveHint 可能不被调用，
+        // 通过 onStop 确保离开窗口时自动销毁（跳过文件选择期间）
+        if (!mIsStartingFileChooser && !isFinishing()) {
+            if (rootLayout != null) rootLayout.setVisibility(View.GONE);
+            BlurWindowActivity.fadeOutIfAlive();
+            sendRestoreBarBroadcast();
+            finish();
+            overridePendingTransition(0, 0);
+        }
+    }
+    
     // ═══════════════════════════════════════════════════════════
     // 窗口配置（亚克力模糊）
     // ═══════════════════════════════════════════════════════════
@@ -2379,49 +2420,163 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
     }
     
-    // 文件选择回调
-    private ValueCallback<Uri[]> mFilePathCallback;
-    private static final int FILE_CHOOSER_REQUEST_CODE = 1001;
+    // ═══════════════════════════════════════════════════════════
+    // content:// URI → file:// 临时文件转换
+    // ═══════════════════════════════════════════════════════════
     
     /**
-     * 打开文件选择器
+     * 将 content:// URI 复制到临时文件，转为 file:// URI
+     * 避免 FileChooserActivity 结束后 content URI 权限失效导致上传失败
      */
-    private void openFileChooser(ValueCallback<Uri[]> filePathCallback) {
-        mFilePathCallback = filePathCallback;
-        
-        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("*/*");
-        
-        try {
-            startActivityForResult(Intent.createChooser(intent, "选择文件"), FILE_CHOOSER_REQUEST_CODE);
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to open file chooser", e);
-            if (mFilePathCallback != null) {
-                mFilePathCallback.onReceiveValue(null);
-                mFilePathCallback = null;
+    private Uri[] copyContentUrisToTempFiles(Uri[] uris) {
+        if (uris == null || uris.length == 0) return uris;
+    
+        Uri[] result = new Uri[uris.length];
+        for (int i = 0; i < uris.length; i++) {
+            Uri uri = uris[i];
+            if (uri == null) {
+                result[i] = null;
+                continue;
+            }
+            // 只有 content:// 或 android.resource:// 等非 file 协议的需要复制
+            String scheme = uri.getScheme();
+            if ("file".equals(scheme)) {
+                result[i] = uri;
+                continue;
+            }
+            try {
+                // 生成临时文件：根据原始文件名或 content type 生成后缀
+                String fileName = "upload_" + System.currentTimeMillis() + "_" + i;
+                String extension = getFileExtension(uri);
+                if (extension != null) fileName += extension;
+    
+                File cacheDir = new File(getCacheDir(), "webview_uploads");
+                if (!cacheDir.exists()) cacheDir.mkdirs();
+                File tempFile = new File(cacheDir, fileName);
+    
+                // 复制内容
+                InputStream in = null;
+                FileOutputStream out = null;
+                try {
+                    in = getContentResolver().openInputStream(uri);
+                    if (in == null) {
+                        Log.w(TAG, "Cannot open input stream for " + uri);
+                        result[i] = uri;
+                        continue;
+                    }
+                    out = new FileOutputStream(tempFile);
+                    byte[] buffer = new byte[65536];
+                    int len;
+                    while ((len = in.read(buffer)) > 0) {
+                        out.write(buffer, 0, len);
+                    }
+                    out.flush();
+                    Log.d(TAG, "Copied " + uri + " -> " + tempFile.getAbsolutePath() + " (" + tempFile.length() + " bytes)");
+                } finally {
+                    if (in != null) try {
+                        in.close();
+                    } catch (Exception ignored) {
+                    }
+                    if (out != null) try {
+                        out.close();
+                    } catch (Exception ignored) {
+                    }
+                }
+    
+                result[i] = Uri.fromFile(tempFile);
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to copy " + uri + " to temp file, using original", e);
+                result[i] = uri; // fallback to original URI
             }
         }
+        return result;
     }
     
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
+    /**
+     * 从 content URI 推断文件扩展名
+     */
+    private String getFileExtension(Uri uri) {
+        try {
+            String mimeType = getContentResolver().getType(uri);
+            if (mimeType != null) {
+                if (mimeType.equals("image/jpeg")) return ".jpg";
+                if (mimeType.equals("image/png")) return ".png";
+                if (mimeType.equals("image/gif")) return ".gif";
+                if (mimeType.equals("image/webp")) return ".webp";
+                if (mimeType.equals("video/mp4")) return ".mp4";
+                if (mimeType.equals("audio/mpeg")) return ".mp3";
+                // 从 MIME 类型提取常见后缀
+                if (mimeType.startsWith("image/")) return "." + mimeType.substring(6);
+                if (mimeType.startsWith("video/")) return "." + mimeType.substring(6);
+                if (mimeType.startsWith("audio/")) return "." + mimeType.substring(6);
+            }
+            // 从 URI 路径最后一段提取扩展名
+            String path = uri.getPath();
+            if (path != null) {
+                int dot = path.lastIndexOf('.');
+                if (dot >= 0) return path.substring(dot);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to get file extension for " + uri, e);
+        }
+        return null;
+    }
+    
+    /**
+     * 使用 FileChooserActivity 代理打开文件选择器
+     * 使用 Activity 实例启动，FileChooserActivity 将在同一 Task 中运行，
+     * Activity 会进入 onPause/onStop 但不会被销毁（noHistory 已移除），
+     * 因此文件上传完成后能自然返回当前窗口。
+     */
+    private void openFileChooser(ValueCallback<Uri[]> filePathCallback) {
+        Log.d(TAG, "File chooser requested via FileChooserActivity proxy");
         
-        if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
-            if (mFilePathCallback == null) return;
-            
-            Uri[] results = null;
-            
-            if (resultCode == RESULT_OK && data != null) {
-                String dataString = data.getDataString();
-                if (dataString != null) {
-                    results = new Uri[]{Uri.parse(dataString)};
+        // 标记正在启动文件选择器，onUserLeaveHint 检测到此标志时不销毁窗口
+        mIsStartingFileChooser = true;
+        
+        // 取消上一次未完成的回调
+        if (FileChooserActivity.uploadCallback != null) {
+            try {
+                FileChooserActivity.uploadCallback.onReceiveValue(null);
+            } catch (Exception ignored) {}
+        }
+        
+        // 包装回调：直接转发到 WebView 回调
+        final ValueCallback<Uri[]> originalCallback = filePathCallback;
+        FileChooserActivity.uploadCallback = new ValueCallback<Uri[]>() {
+            @Override
+            public void onReceiveValue(Uri[] value) {
+                Log.d(TAG, "File chooser callback invoked, files=" + (value != null ? value.length : 0));
+                // 将 content:// URI 复制到临时文件，转为 file:// URI
+                // 避免 FileChooserActivity 结束后 content URI 权限失效导致上传失败
+                Uri[] fileUris = copyContentUrisToTempFiles(value);
+                if (originalCallback != null) {
+                    try {
+                        originalCallback.onReceiveValue(fileUris);
+                        Log.d(TAG, "WebView callback invoked successfully");
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error invoking WebView callback", e);
+                    }
                 }
             }
-            
-            mFilePathCallback.onReceiveValue(results);
-            mFilePathCallback = null;
+        };
+        
+        try {
+            // 使用 Activity 实例而非 Application Context 启动，
+            // 确保 FileChooserActivity 在当前 Task 中运行，
+            // 选择文件后能自然返回当前 Activity
+            Intent proxyIntent = new Intent(this, FileChooserActivity.class);
+            proxyIntent.putExtra("accept_types", new String[]{"*/*"});
+            proxyIntent.putExtra("allow_multiple", false);
+            startActivity(proxyIntent);
+            Log.d(TAG, "File chooser proxy started");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to start file chooser proxy", e);
+            if (FileChooserActivity.uploadCallback != null) {
+                FileChooserActivity.uploadCallback.onReceiveValue(null);
+                FileChooserActivity.uploadCallback = null;
+            }
+            mIsStartingFileChooser = false;
         }
     }
 }
