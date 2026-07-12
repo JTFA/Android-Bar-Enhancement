@@ -81,26 +81,51 @@ public class ShortcutEditActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         // 创建根布局
-        ScrollView scrollView = new ScrollView(this);
-        scrollView.setLayoutParams(new ViewGroup.LayoutParams(
+        LinearLayout rootContainer = new LinearLayout(this);
+        rootContainer.setLayoutParams(new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
-        scrollView.setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16));
+        rootContainer.setOrientation(LinearLayout.VERTICAL);
+        rootContainer.setBackgroundColor(0xFFF5F5F5);
 
-        LinearLayout rootLayout = new LinearLayout(this);
-        rootLayout.setLayoutParams(new LinearLayout.LayoutParams(
+        // 固定标题栏
+        LinearLayout titleBarContainer = new LinearLayout(this);
+        titleBarContainer.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
-        rootLayout.setOrientation(LinearLayout.VERTICAL);
+        titleBarContainer.setOrientation(LinearLayout.VERTICAL);
+        titleBarContainer.setBackgroundColor(0xFFF5F5F5);
+        titleBarContainer.setElevation(dpToPx(2));
 
-        // 标题
         TextView titleView = new TextView(this);
         titleView.setText("管理快捷方式");
         titleView.setTextSize(28);
         titleView.setTextColor(0xFF1A1A1A);
         titleView.setTypeface(null, android.graphics.Typeface.BOLD);
-        titleView.setPadding(0, 0, 0, dpToPx(4));
-        rootLayout.addView(titleView);
+        titleView.setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(12));
+        titleBarContainer.addView(titleView);
+
+        // 标题分割线
+        View titleDivider = new View(this);
+        titleDivider.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(1)));
+        titleDivider.setBackgroundColor(0xFFE0E0E0);
+        titleBarContainer.addView(titleDivider);
+
+        rootContainer.addView(titleBarContainer);
+
+        // 内容滚动区域
+        ScrollView scrollView = new ScrollView(this);
+        scrollView.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+
+        LinearLayout contentLayout = new LinearLayout(this);
+        contentLayout.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        contentLayout.setOrientation(LinearLayout.VERTICAL);
+        contentLayout.setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16));
 
         // 说明
         TextView descView = new TextView(this);
@@ -108,7 +133,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         descView.setTextSize(14);
         descView.setTextColor(0xFF757575);
         descView.setPadding(0, 0, 0, dpToPx(20));
-        rootLayout.addView(descView);
+        contentLayout.addView(descView);
 
         // 列表卡片容器
         LinearLayout listCard = new LinearLayout(this);
@@ -118,7 +143,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         listCard.setOrientation(LinearLayout.VERTICAL);
         listCard.setBackground(createCardBackground());
         listCard.setPadding(dpToPx(16), dpToPx(8), dpToPx(16), dpToPx(8));
-        rootLayout.addView(listCard);
+        contentLayout.addView(listCard);
 
         // 列表容器
         listContainer = new LinearLayout(this);
@@ -177,10 +202,11 @@ public class ShortcutEditActivity extends AppCompatActivity {
         addButton.setText("+ 添加快捷方式");
         stylePrimaryButton(addButton);
         addButton.setOnClickListener(v -> showEditDialog(null, -1));
-        rootLayout.addView(addButton);
+        contentLayout.addView(addButton);
 
-        scrollView.addView(rootLayout);
-        setContentView(scrollView);
+        scrollView.addView(contentLayout);
+        rootContainer.addView(scrollView);
+        setContentView(rootContainer);
 
         // 加载数据
         loadShortcuts();

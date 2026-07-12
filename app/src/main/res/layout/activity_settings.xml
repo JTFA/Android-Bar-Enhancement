@@ -1,24 +1,65 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     android:background="#F5F5F5">
+
+    <!-- 固定标题栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#F5F5F5"
+        android:elevation="2dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="提示条设置"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A" />
+
+            <Button
+                android:id="@+id/btn_save_apply"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:text="保存"
+                android:textSize="14sp"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#1976D2"
+                android:stateListAnimator="@null"
+                android:paddingHorizontal="20dp" />
+
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#E0E0E0" />
+
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="16dp">
-
-        <!-- 页面标题 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="提示条设置"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:textColor="#1A1A1A"
-            android:layout_marginBottom="24dp" />
 
         <!-- ===== 提示条触发行为设置卡片 ===== -->
         <LinearLayout
@@ -1532,19 +1573,6 @@
 
         </LinearLayout>
 
-        <!-- 保存并应用按钮 -->
-        <Button
-            android:id="@+id/btn_save_apply"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:text="保存并应用"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="#FFFFFF"
-            android:backgroundTint="#1976D2"
-            android:stateListAnimator="@null"
-            android:layout_marginBottom="16dp" />
-
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -1557,4 +1585,6 @@
 
     </LinearLayout>
 
-</ScrollView>
+    </ScrollView>
+
+</LinearLayout>
