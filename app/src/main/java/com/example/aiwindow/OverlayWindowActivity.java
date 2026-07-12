@@ -1409,7 +1409,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
         topBarIndicator.setLayoutParams(indLp);
         GradientDrawable indBg = new GradientDrawable();
         indBg.setShape(GradientDrawable.RECTANGLE);
-        indBg.setCornerRadius(topBarCollapsedH / 2f);
+//        indBg.setCornerRadius(topBarCollapsedH / 2f);
+        indBg.setCornerRadius(Math.round(1 * density));
         int indicatorColor = Color.argb(Math.min(255, bgAlpha255 + 50), 0xCC, 0xCC, 0xCC);
         indBg.setColor(indicatorColor);
         topBarIndicator.setBackground(indBg);
@@ -1424,6 +1425,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         if (hasBack) {
             ImageView backBtn = createTopBarButton(android.R.drawable.ic_menu_revert);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(btnSize, btnSize);
+            lp.leftMargin = pad;
             if (hasRefresh || hasClose) lp.rightMargin = gap;
             backBtn.setLayoutParams(lp);
             backBtn.setOnClickListener(v -> {
@@ -1441,6 +1443,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         if (hasRefresh) {
             ImageView refreshBtn = createTopBarButton(android.R.drawable.ic_menu_rotate);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(btnSize, btnSize);
+            if(!hasBack) lp.leftMargin = pad;
             if (hasClose) lp.rightMargin = gap;
             refreshBtn.setLayoutParams(lp);
             refreshBtn.setOnClickListener(v -> {
@@ -1451,6 +1454,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         if (hasClose) {
             ImageView closeBtn = createTopBarButton(android.R.drawable.ic_menu_close_clear_cancel);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(btnSize, btnSize);
+            if(!hasBack && !hasRefresh) lp.leftMargin = pad;
             closeBtn.setLayoutParams(new LinearLayout.LayoutParams(btnSize, btnSize));
             closeBtn.setOnClickListener(v -> collapseAndFinish());
             topBarButtonRow.addView(closeBtn);
