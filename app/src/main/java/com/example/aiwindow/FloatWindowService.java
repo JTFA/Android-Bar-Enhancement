@@ -62,6 +62,8 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.Toast;
+import android.animation.ValueAnimator;
+
 import android.view.animation.OvershootInterpolator;
 import android.view.animation.DecelerateInterpolator;
 
@@ -3605,7 +3607,6 @@ public class FloatWindowService extends Service {
     // ═══════════════════════════════════════════════════════════
 
     private FrameLayout topBarView;
-    private View topBarIndicator;
     private LinearLayout topBarButtonRow;
     private int topBarExpandedW, topBarExpandedH;
     private int topBarCollapsedW, topBarCollapsedH;
@@ -3643,25 +3644,12 @@ public class FloatWindowService extends Service {
         int bgAlpha255 = (int)(Math.min(100, Math.max(0, topBarTransparency)) * 255.0f / 100.0f);
         GradientDrawable barBg = new GradientDrawable();
         barBg.setShape(GradientDrawable.RECTANGLE);
-        barBg.setCornerRadius(expandedCorner);
         barBg.setColor(Color.argb(bgAlpha255, 0x88, 0x88, 0x88));
         topBarView.setBackground(barBg);
 
-        // ── 收起状态指示器（灰色小圆条） ──
-        topBarIndicator = new View(this);
-        FrameLayout.LayoutParams indLp = new FrameLayout.LayoutParams(topBarCollapsedW, topBarCollapsedH);
-        indLp.gravity = Gravity.CENTER;
-        topBarIndicator.setLayoutParams(indLp);
-        GradientDrawable indBg = new GradientDrawable();
-        indBg.setShape(GradientDrawable.RECTANGLE);
-        indBg.setCornerRadius(topBarCollapsedH / 2f);
-        int indicatorColor = Color.argb(Math.min(255, bgAlpha255 + 50), 0xCC, 0xCC, 0xCC);
-        indBg.setColor(indicatorColor);
-        topBarIndicator.setBackground(indBg);
-        topBarView.addView(topBarIndicator);
-
         // ── 展开状态的按钮行 ──
         topBarButtonRow = new LinearLayout(this);
+        topBarButtonRow.setPadding(pad,pad,pad,pad);
         topBarButtonRow.setOrientation(LinearLayout.HORIZONTAL);
         topBarButtonRow.setGravity(Gravity.CENTER_VERTICAL);
 
@@ -3703,14 +3691,25 @@ public class FloatWindowService extends Service {
         topBarView.addView(topBarButtonRow);
 
         // ── 初始化为收起状态 ──
+        // 使用 GradientDrawable.setCornerRadii 分别设置 x/y 预失真圆角，
+        // 补偿非等比 scale：rx = (collapsedH/2)/initSx, ry = (collapsedH/2)/initSy
+        // 经 scale 后视觉 rx=ry=collapsedH/2，呈纯正胶囊形。
         topBarView.setPivotX(topBarExpandedW / 2f);
         topBarView.setPivotY(0);
         float initSx = (float) topBarCollapsedW / topBarExpandedW;
         float initSy = (float) topBarCollapsedH / topBarExpandedH;
         topBarView.setScaleX(initSx);
         topBarView.setScaleY(initSy);
-        topBarIndicator.setAlpha(1f);
+        float collapsedRX = (topBarCollapsedH / 2f) / initSx;
+        float collapsedRY = (topBarCollapsedH / 2f) / initSy;
+        barBg.setCornerRadii(new float[]{
+                collapsedRX, collapsedRY,
+                collapsedRX, collapsedRY,
+                collapsedRX, collapsedRY,
+                collapsedRX, collapsedRY
+        });
         topBarButtonRow.setAlpha(0f);
+        topBarButtonRow.setVisibility(View.INVISIBLE);
         isTopBarExpanded = false;
 
         // ── 点击小横条切换展开/收起 ──
@@ -3782,9 +3781,24 @@ public class FloatWindowService extends Service {
                 .setInterpolator(new OvershootInterpolator(0.5f))
                 .start();
 
-        topBarIndicator.animate()
-                .alpha(0f).setDuration(150).start();
+        GradientDrawable bg = (GradientDrawable) topBarView.getBackground();
+        if (bg != null) {
+            float sx = (float) topBarCollapsedW / topBarExpandedW;
+            float sy = (float) topBarCollapsedH / topBarExpandedH;
+            float collapsedRX = (topBarCollapsedH / 2f) / sx;
+            float collapsedRY = (topBarCollapsedH / 2f) / sy;
+            float expandedR = dpToPx(10);
+            ValueAnimator cornerAnim = ValueAnimator.ofFloat(0f, 1f);
+            cornerAnim.addUpdateListener(a -> {
+                float t = (float) a.getAnimatedValue();
+                float rx = collapsedRX + (expandedR - collapsedRX) * t;
+                float ry = collapsedRY + (expandedR - collapsedRY) * t;
+                bg.setCornerRadii(new float[]{rx, ry, rx, ry, rx, ry, rx, ry});
+            });
+            cornerAnim.setDuration(250).start();
+        }
 
+        topBarButtonRow.setVisibility(View.VISIBLE);
         topBarButtonRow.animate()
                 .alpha(1f).setDuration(250).start();
 
@@ -3804,11 +3818,25 @@ public class FloatWindowService extends Service {
                 .setInterpolator(new DecelerateInterpolator())
                 .start();
 
-        topBarIndicator.animate()
-                .alpha(1f).setDuration(250).start();
+        GradientDrawable bg = (GradientDrawable) topBarView.getBackground();
+        if (bg != null) {
+            float collapsedRX = (topBarCollapsedH / 2f) / sx;
+            float collapsedRY = (topBarCollapsedH / 2f) / sy;
+            float expandedR = dpToPx(10);
+            ValueAnimator cornerAnim = ValueAnimator.ofFloat(0f, 1f);
+            cornerAnim.addUpdateListener(a -> {
+                float t = (float) a.getAnimatedValue();
+                float rx = expandedR + (collapsedRX - expandedR) * t;
+                float ry = expandedR + (collapsedRY - expandedR) * t;
+                bg.setCornerRadii(new float[]{rx, ry, rx, ry, rx, ry, rx, ry});
+            });
+            cornerAnim.setDuration(250).start();
+        }
 
         topBarButtonRow.animate()
-                .alpha(0f).setDuration(150).start();
+                .alpha(0f).setDuration(150)
+                .withEndAction(() -> topBarButtonRow.setVisibility(View.INVISIBLE))
+                .start();
     }
 
     private void updateBackButtonState(ImageView backButton) {

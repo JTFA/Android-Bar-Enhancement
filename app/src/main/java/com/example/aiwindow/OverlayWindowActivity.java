@@ -5,6 +5,7 @@ import static android.webkit.WebSettings.FORCE_DARK_ON;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.UiModeManager;
@@ -164,7 +165,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private ImageView backButtonRef;
     // 顶部小横条/按钮组
     private FrameLayout topBarView;
-    private View topBarIndicator;
     private LinearLayout topBarButtonRow;
     private int topBarExpandedW, topBarExpandedH; // 展开尺寸（px）
     private int topBarCollapsedW, topBarCollapsedH; // 收起尺寸（px）
@@ -1398,26 +1398,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
         int bgAlpha255 = (int)(Math.min(100, Math.max(0, topBarTransparency)) * 255.0f / 100.0f);
         GradientDrawable barBg = new GradientDrawable();
         barBg.setShape(GradientDrawable.RECTANGLE);
-        barBg.setCornerRadius(expandedCorner);
         barBg.setColor(Color.argb(bgAlpha255, 0x88, 0x88, 0x88));
         topBarView.setBackground(barBg);
 
-        // ── 收起状态指示器（灰色小圆条） ──
-        topBarIndicator = new View(this);
-        FrameLayout.LayoutParams indLp = new FrameLayout.LayoutParams(topBarCollapsedW, topBarCollapsedH);
-        indLp.gravity = Gravity.CENTER;
-        topBarIndicator.setLayoutParams(indLp);
-        GradientDrawable indBg = new GradientDrawable();
-        indBg.setShape(GradientDrawable.RECTANGLE);
-//        indBg.setCornerRadius(topBarCollapsedH / 2f);
-        indBg.setCornerRadius(Math.round(1 * density));
-        int indicatorColor = Color.argb(Math.min(255, bgAlpha255 + 50), 0xCC, 0xCC, 0xCC);
-        indBg.setColor(indicatorColor);
-        topBarIndicator.setBackground(indBg);
-        topBarView.addView(topBarIndicator);
-
         // ── 展开状态的按钮行 ──
         topBarButtonRow = new LinearLayout(this);
+        topBarButtonRow.setPadding(pad,pad,pad,pad);
         topBarButtonRow.setOrientation(LinearLayout.HORIZONTAL);
         topBarButtonRow.setGravity(Gravity.CENTER_VERTICAL);
 
@@ -1425,7 +1411,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
         if (hasBack) {
             ImageView backBtn = createTopBarButton(android.R.drawable.ic_menu_revert);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(btnSize, btnSize);
-            lp.leftMargin = pad;
             if (hasRefresh || hasClose) lp.rightMargin = gap;
             backBtn.setLayoutParams(lp);
             backBtn.setOnClickListener(v -> {
@@ -1443,7 +1428,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
         if (hasRefresh) {
             ImageView refreshBtn = createTopBarButton(android.R.drawable.ic_menu_rotate);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(btnSize, btnSize);
-            if(!hasBack) lp.leftMargin = pad;
             if (hasClose) lp.rightMargin = gap;
             refreshBtn.setLayoutParams(lp);
             refreshBtn.setOnClickListener(v -> {
@@ -1454,8 +1438,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         if (hasClose) {
             ImageView closeBtn = createTopBarButton(android.R.drawable.ic_menu_close_clear_cancel);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(btnSize, btnSize);
-            if(!hasBack && !hasRefresh) lp.leftMargin = pad;
             closeBtn.setLayoutParams(new LinearLayout.LayoutParams(btnSize, btnSize));
             closeBtn.setOnClickListener(v -> collapseAndFinish());
             topBarButtonRow.addView(closeBtn);
@@ -1464,14 +1446,25 @@ public class OverlayWindowActivity extends AppCompatActivity {
         topBarView.addView(topBarButtonRow);
 
         // ── 初始化为收起状态 ──
+        // 使用 GradientDrawable.setCornerRadii 分别设置 x/y 预失真圆角，
+        // 补偿非等比 scale：rx = (collapsedH/2)/initSx, ry = (collapsedH/2)/initSy
+        // 经 scale 后视觉 rx=ry=collapsedH/2，呈纯正胶囊形。
         topBarView.setPivotX(topBarExpandedW / 2f);
         topBarView.setPivotY(0);
         float initSx = (float) topBarCollapsedW / topBarExpandedW;
         float initSy = (float) topBarCollapsedH / topBarExpandedH;
         topBarView.setScaleX(initSx);
         topBarView.setScaleY(initSy);
-        topBarIndicator.setAlpha(1f);
+        float collapsedRX = (topBarCollapsedH / 2f) / initSx;
+        float collapsedRY = (topBarCollapsedH / 2f) / initSy;
+        barBg.setCornerRadii(new float[]{
+                collapsedRX, collapsedRY,
+                collapsedRX, collapsedRY,
+                collapsedRX, collapsedRY,
+                collapsedRX, collapsedRY
+        });
         topBarButtonRow.setAlpha(0f);
+        topBarButtonRow.setVisibility(View.INVISIBLE);
         isTopBarExpanded = false;
 
         // ── 点击小横条切换展开/收起 ──
@@ -1537,15 +1530,31 @@ public class OverlayWindowActivity extends AppCompatActivity {
         if (isTopBarExpanded) return;
         isTopBarExpanded = true;
 
+        // scale展开，同时 GradientDrawable 圆角从预失真值过渡到展开圆角
         topBarView.animate()
                 .scaleX(1f).scaleY(1f)
                 .setDuration(250)
                 .setInterpolator(new OvershootInterpolator(0.5f))
                 .start();
 
-        topBarIndicator.animate()
-                .alpha(0f).setDuration(150).start();
+        GradientDrawable bg = (GradientDrawable) topBarView.getBackground();
+        if (bg != null) {
+            float sx = (float) topBarCollapsedW / topBarExpandedW;
+            float sy = (float) topBarCollapsedH / topBarExpandedH;
+            float collapsedRX = (topBarCollapsedH / 2f) / sx;
+            float collapsedRY = (topBarCollapsedH / 2f) / sy;
+            float expandedR = dpToPx(10);
+            ValueAnimator cornerAnim = ValueAnimator.ofFloat(0f, 1f);
+            cornerAnim.addUpdateListener(a -> {
+                float t = (float) a.getAnimatedValue();
+                float rx = collapsedRX + (expandedR - collapsedRX) * t;
+                float ry = collapsedRY + (expandedR - collapsedRY) * t;
+                bg.setCornerRadii(new float[]{rx, ry, rx, ry, rx, ry, rx, ry});
+            });
+            cornerAnim.setDuration(250).start();
+        }
 
+        topBarButtonRow.setVisibility(View.VISIBLE);
         topBarButtonRow.animate()
                 .alpha(1f).setDuration(250).start();
 
@@ -1559,17 +1568,32 @@ public class OverlayWindowActivity extends AppCompatActivity {
         float sx = (float) topBarCollapsedW / topBarExpandedW;
         float sy = (float) topBarCollapsedH / topBarExpandedH;
 
+        // scale缩小，同时 GradientDrawable 圆角从展开圆角过渡到预失真值
         topBarView.animate()
                 .scaleX(sx).scaleY(sy)
                 .setDuration(250)
                 .setInterpolator(new DecelerateInterpolator())
                 .start();
 
-        topBarIndicator.animate()
-                .alpha(1f).setDuration(250).start();
+        GradientDrawable bg = (GradientDrawable) topBarView.getBackground();
+        if (bg != null) {
+            float collapsedRX = (topBarCollapsedH / 2f) / sx;
+            float collapsedRY = (topBarCollapsedH / 2f) / sy;
+            float expandedR = dpToPx(10);
+            ValueAnimator cornerAnim = ValueAnimator.ofFloat(0f, 1f);
+            cornerAnim.addUpdateListener(a -> {
+                float t = (float) a.getAnimatedValue();
+                float rx = expandedR + (collapsedRX - expandedR) * t;
+                float ry = expandedR + (collapsedRY - expandedR) * t;
+                bg.setCornerRadii(new float[]{rx, ry, rx, ry, rx, ry, rx, ry});
+            });
+            cornerAnim.setDuration(250).start();
+        }
 
         topBarButtonRow.animate()
-                .alpha(0f).setDuration(150).start();
+                .alpha(0f).setDuration(150)
+                .withEndAction(() -> topBarButtonRow.setVisibility(View.INVISIBLE))
+                .start();
     }
 
     private void updateBackButtonState() {
