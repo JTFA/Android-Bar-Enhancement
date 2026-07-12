@@ -36,7 +36,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Looper;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
@@ -70,6 +69,7 @@ import android.widget.Toast;
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
 
 import org.json.JSONArray;
 
@@ -170,6 +170,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private boolean blurFadeOutStarted = false; // 标记收起动画中是否已触发模糊淡出
     // ─── 文件上传相关 ───
     private boolean mIsStartingFileChooser = false; // 标记是否正在启动文件选择器
+    private static ValueCallback<Uri[]> sPendingUploadCallback; // 待投递的 WebView 回调
+    private static Uri[] sPendingFileUris; // 待投递的文件 URI
 
     // ─── 输入法避让相关 ───
     private ViewTreeObserver.OnGlobalLayoutListener keyboardLayoutListener;
@@ -272,21 +274,54 @@ public class OverlayWindowActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        Log.d(TAG, "onResume: sPendingUploadCallback=" + (sPendingUploadCallback != null ? "SET" : "null")
+                + ", mIsStartingFileChooser was=" + mIsStartingFileChooser);
         mIsStartingFileChooser = false;
+        // 有挂起的文件上传回调 → 用 evaluateJavascript 探测 WebView 渲染器是否就绪
+        // 渲染器响应后才投递回调，避免 Handler.post 时序不可靠导致的竞态条件
+        if (sPendingUploadCallback != null) {
+            final ValueCallback<Uri[]> cb = sPendingUploadCallback;
+            final Uri[] uris = sPendingFileUris;
+            sPendingUploadCallback = null;
+            sPendingFileUris = null;
+            Log.d(TAG, "onResume: probing WebView renderer before callback, uris=" + (uris != null ? uris.length : 0));
+
+            if (sPersistentWebView != null) {
+                sPersistentWebView.evaluateJavascript("1+1",
+                    new android.webkit.ValueCallback<String>() {
+                        @Override
+                        public void onReceiveValue(String value) {
+                            Log.d(TAG, "Renderer probe returned: " + value + ", now delivering callback");
+                            try {
+                                cb.onReceiveValue(uris);
+                                Log.d(TAG, "WebView callback invoked successfully (after renderer probe)");
+                            } catch (Exception e) {
+                                Log.e(TAG, "Error invoking WebView callback", e);
+                            }
+                        }
+                    });
+            } else {
+                try {
+                    cb.onReceiveValue(uris);
+                    Log.d(TAG, "WebView callback invoked (no persistent WebView)");
+                } catch (Exception e) {
+                    Log.e(TAG, "Error invoking WebView callback", e);
+                }
+            }
+        }
     }
 
     @Override
     protected void onUserLeaveHint() {
         super.onUserLeaveHint();
+        Log.d(TAG, "onUserLeaveHint: mIsStartingFileChooser=" + mIsStartingFileChooser
+                + ", isFinishing=" + isFinishing());
         // 用户主动离开（Home键/最近任务/底部上滑手势）→ 销毁窗口
-        // 替换原来 Manifest 中 noHistory="true" 的效果，
-        // 但跳过文件选择器启动时的场景，保证文件上传流程不中断
         if (!mIsStartingFileChooser && !isFinishing()) {
-            // 立即隐藏内容，防止窗口在异步 finish 过程中仍显示在 SurfaceFlinger 上
             if (rootLayout != null) rootLayout.setVisibility(View.GONE);
-            // 立即隐藏模糊层 + 启动淡出动画（fadeOutIfAlive 会立即 setVisibility(INVISIBLE) + 淡出）
             BlurWindowActivity.fadeOutIfAlive();
             sendRestoreBarBroadcast();
+            Log.d(TAG, "onUserLeaveHint: finishing activity");
             finish();
             overridePendingTransition(0, 0);
         }
@@ -295,12 +330,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
-        // 兜底清理：某些 ROM/场景下 onUserLeaveHint 可能不被调用，
-        // 通过 onStop 确保离开窗口时自动销毁（跳过文件选择期间）
+        Log.d(TAG, "onStop: mIsStartingFileChooser=" + mIsStartingFileChooser
+                + ", isFinishing=" + isFinishing()
+                + ", sPendingUploadCallback=" + (sPendingUploadCallback != null ? "SET" : "null"));
         if (!mIsStartingFileChooser && !isFinishing()) {
             if (rootLayout != null) rootLayout.setVisibility(View.GONE);
             BlurWindowActivity.fadeOutIfAlive();
             sendRestoreBarBroadcast();
+            Log.d(TAG, "onStop: finishing activity");
             finish();
             overridePendingTransition(0, 0);
         }
@@ -702,7 +739,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 @Override
                 public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
                                                  FileChooserParams fileChooserParams) {
-                    openFileChooser(filePathCallback);
+                    openFileChooser(filePathCallback, fileChooserParams);
                     return true;
                 }
             });
@@ -769,12 +806,22 @@ public class OverlayWindowActivity extends AppCompatActivity {
             sPersistentWebView.setFocusable(true);
             sPersistentWebView.setFocusableInTouchMode(true);
 
-            // 添加 JavaScript 桥接接口用于 blob 下载
+            // 添加 JavaScript 桥接接口
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
                 sPersistentWebView.addJavascriptInterface(new Object() {
                     @android.webkit.JavascriptInterface
                     public void downloadFile(String base64Data, String mimetype) {
                         runOnUiThread(() -> saveBlobFile(base64Data, mimetype));
+                    }
+
+                    @android.webkit.JavascriptInterface
+                    public void onInputFocus() {
+                        // 空实现——OverlayWindowActivity 无需 IME 代理
+                    }
+
+                    @android.webkit.JavascriptInterface
+                    public void onInputBlur() {
+                        // 空实现——OverlayWindowActivity 无需 IME 代理
                     }
                 }, "AndroidBridge");
             }
@@ -823,7 +870,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 @Override
                 public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
                                                  FileChooserParams fileChooserParams) {
-                    openFileChooser(filePathCallback);
+                    openFileChooser(filePathCallback, fileChooserParams);
                     return true;
                 }
             });
@@ -2445,8 +2492,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
      * 避免 FileChooserActivity 结束后 content URI 权限失效导致上传失败
      */
     private Uri[] copyContentUrisToTempFiles(Uri[] uris) {
-        if (uris == null || uris.length == 0) return uris;
-    
+        if (uris == null || uris.length == 0) {
+            Log.d(TAG, "copyContentUrisToTempFiles: null or empty input");
+            return uris;
+        }
+        Log.d(TAG, "copyContentUrisToTempFiles: copying " + uris.length + " URIs");
+        
         Uri[] result = new Uri[uris.length];
         for (int i = 0; i < uris.length; i++) {
             Uri uri = uris[i];
@@ -2454,14 +2505,13 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 result[i] = null;
                 continue;
             }
-            // 只有 content:// 或 android.resource:// 等非 file 协议的需要复制
             String scheme = uri.getScheme();
             if ("file".equals(scheme)) {
+                Log.d(TAG, "copyContentUrisToTempFiles[" + i + "]: already file://, skip");
                 result[i] = uri;
                 continue;
             }
             try {
-                // 生成临时文件：根据原始文件名或 content type 生成后缀
                 String fileName = "upload_" + System.currentTimeMillis() + "_" + i;
                 String extension = getFileExtension(uri);
                 if (extension != null) fileName += extension;
@@ -2470,39 +2520,35 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 if (!cacheDir.exists()) cacheDir.mkdirs();
                 File tempFile = new File(cacheDir, fileName);
     
-                // 复制内容
                 InputStream in = null;
                 FileOutputStream out = null;
                 try {
                     in = getContentResolver().openInputStream(uri);
                     if (in == null) {
-                        Log.w(TAG, "Cannot open input stream for " + uri);
+                        Log.w(TAG, "copyContentUrisToTempFiles[" + i + "]: openInputStream returned null for " + uri);
                         result[i] = uri;
                         continue;
                     }
                     out = new FileOutputStream(tempFile);
                     byte[] buffer = new byte[65536];
-                    int len;
+                    int total = 0, len;
                     while ((len = in.read(buffer)) > 0) {
                         out.write(buffer, 0, len);
+                        total += len;
                     }
                     out.flush();
-                    Log.d(TAG, "Copied " + uri + " -> " + tempFile.getAbsolutePath() + " (" + tempFile.length() + " bytes)");
+                    Log.d(TAG, "copyContentUrisToTempFiles[" + i + "]: SUCCESS "
+                            + uri + " -> " + tempFile.getAbsolutePath()
+                            + " (" + total + " bytes, file=" + tempFile.length() + ")");
                 } finally {
-                    if (in != null) try {
-                        in.close();
-                    } catch (Exception ignored) {
-                    }
-                    if (out != null) try {
-                        out.close();
-                    } catch (Exception ignored) {
-                    }
+                    if (in != null) try { in.close(); } catch (Exception ignored) {}
+                    if (out != null) try { out.close(); } catch (Exception ignored) {}
                 }
     
-                result[i] = Uri.fromFile(tempFile);
+                result[i] = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", tempFile);
             } catch (Exception e) {
-                Log.e(TAG, "Failed to copy " + uri + " to temp file, using original", e);
-                result[i] = uri; // fallback to original URI
+                Log.e(TAG, "copyContentUrisToTempFiles[" + i + "]: FAILED for " + uri, e);
+                result[i] = uri;
             }
         }
         return result;
@@ -2544,51 +2590,64 @@ public class OverlayWindowActivity extends AppCompatActivity {
      * Activity 会进入 onPause/onStop 但不会被销毁（noHistory 已移除），
      * 因此文件上传完成后能自然返回当前窗口。
      */
-    private void openFileChooser(ValueCallback<Uri[]> filePathCallback) {
-        Log.d(TAG, "File chooser requested via FileChooserActivity proxy");
+    private void openFileChooser(ValueCallback<Uri[]> filePathCallback,
+                                   WebChromeClient.FileChooserParams fileChooserParams) {
+        Log.d(TAG, "openFileChooser: callback=" + filePathCallback
+                + ", params=" + fileChooserParams
+                + ", isFinishing=" + isFinishing()
+                + ", mIsStartingFileChooser=" + mIsStartingFileChooser);
         
-        // 标记正在启动文件选择器，onUserLeaveHint 检测到此标志时不销毁窗口
+        if (fileChooserParams != null) {
+            String[] acceptTypes = fileChooserParams.getAcceptTypes();
+            Log.d(TAG, "openFileChooser: acceptTypes=" + java.util.Arrays.toString(acceptTypes)
+                    + ", mode=" + fileChooserParams.getMode());
+        }
+        
         mIsStartingFileChooser = true;
         
-        // 取消上一次未完成的回调
         if (FileChooserActivity.uploadCallback != null) {
+            Log.d(TAG, "openFileChooser: cancelling previous pending callback");
             try {
                 FileChooserActivity.uploadCallback.onReceiveValue(null);
             } catch (Exception ignored) {}
         }
         
-        // 包装回调：直接转发到 WebView 回调
+        cleanupOldTempFiles();
+        
         final ValueCallback<Uri[]> originalCallback = filePathCallback;
         FileChooserActivity.uploadCallback = new ValueCallback<Uri[]>() {
             @Override
             public void onReceiveValue(Uri[] value) {
-                Log.d(TAG, "File chooser callback invoked, files=" + (value != null ? value.length : 0));
-                // 将 content:// URI 复制到临时文件，转为 file:// URI
-                final Uri[] fileUris = copyContentUrisToTempFiles(value);
-                if (originalCallback != null) {
-                    try {
-                        // 使用 Handler.post 延迟到 Activity 回到前台后再执行回调，
-                        // 确保 WebView 渲染器在接收到上传请求时处于完全活跃状态。
-                        new Handler(Looper.getMainLooper()).post(() -> {
-                            originalCallback.onReceiveValue(fileUris);
-                            Log.d(TAG, "WebView callback invoked successfully");
-                        });
-                    } catch (Exception e) {
-                        Log.e(TAG, "Error invoking WebView callback", e);
+                Log.d(TAG, "FCA callback onReceiveValue: value=" + (value != null ? value.length : "null"));
+                if (value != null) {
+                    for (Uri u : value) {
+                        Log.d(TAG, "FCA callback: uri=" + u + ", scheme=" + u.getScheme());
+                        try {
+                            Log.d(TAG, "FCA callback: type=" + getContentResolver().getType(u));
+                        } catch (Exception e) {
+                            Log.w(TAG, "FCA callback: cannot get type for " + u);
+                        }
                     }
                 }
+                final Uri[] fileUris = copyContentUrisToTempFiles(value);
+                if (fileUris != value) {
+                    Log.d(TAG, "FCA callback: copied to temp files:");
+                    for (Uri u : fileUris) {
+                        Log.d(TAG, "FCA callback: temp=" + u);
+                    }
+                }
+                sPendingUploadCallback = originalCallback;
+                sPendingFileUris = fileUris;
+                Log.d(TAG, "FCA callback: stored pending callback, sPendingFileUris=" + (sPendingFileUris != null ? sPendingFileUris.length : 0));
             }
         };
         
         try {
-            // 使用 Activity 实例而非 Application Context 启动，
-            // 确保 FileChooserActivity 在当前 Task 中运行，
-            // 选择文件后能自然返回当前 Activity
             Intent proxyIntent = new Intent(this, FileChooserActivity.class);
             proxyIntent.putExtra("accept_types", new String[]{"*/*"});
             proxyIntent.putExtra("allow_multiple", false);
             startActivity(proxyIntent);
-            Log.d(TAG, "File chooser proxy started");
+            Log.d(TAG, "openFileChooser: FileChooserActivity started");
         } catch (Exception e) {
             Log.e(TAG, "Failed to start file chooser proxy", e);
             if (FileChooserActivity.uploadCallback != null) {
@@ -2596,6 +2655,31 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 FileChooserActivity.uploadCallback = null;
             }
             mIsStartingFileChooser = false;
+        }
+    }
+    
+    /**
+     * 清理 webview_uploads 目录中过期的临时文件
+     */
+    private void cleanupOldTempFiles() {
+        try {
+            File cacheDir = new File(getCacheDir(), "webview_uploads");
+            if (!cacheDir.exists()) {
+                Log.d(TAG, "cleanupOldTempFiles: dir not exists, skip");
+                return;
+            }
+            File[] files = cacheDir.listFiles();
+            if (files == null) return;
+            int deleted = 0;
+            long now = System.currentTimeMillis();
+            for (File f : files) {
+                if (f.isFile() && (now - f.lastModified()) > 5 * 60 * 1000) {
+                    if (f.delete()) deleted++;
+                }
+            }
+            Log.d(TAG, "cleanupOldTempFiles: deleted " + deleted + " old temp files");
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to cleanup old temp files", e);
         }
     }
 }

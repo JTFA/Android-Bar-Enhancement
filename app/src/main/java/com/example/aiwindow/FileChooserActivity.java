@@ -102,6 +102,10 @@ public class FileChooserActivity extends Activity {
         Log.d(TAG, "onActivityResult: requestCode=" + requestCode
                 + ", resultCode=" + resultCode
                 + ", data=" + (data != null ? "yes" : "null"));
+        if (data != null) {
+            Log.d(TAG, "onActivityResult: data.getData()=" + data.getData()
+                    + ", clipData=" + (data.getClipData() != null ? data.getClipData().getItemCount() + " items" : "null"));
+        }
 
         waitingForResult = false;
 
@@ -117,7 +121,7 @@ public class FileChooserActivity extends Activity {
             results = extractUris(data);
         }
 
-        Log.d(TAG, "Result: " + (results != null ? results.length + " file(s)" : "cancelled/null"));
+        Log.d(TAG, "onActivityResult: extracted " + (results != null ? results.length + " file(s)" : "null"));
         invokeCallback(results);
         finish();
     }
