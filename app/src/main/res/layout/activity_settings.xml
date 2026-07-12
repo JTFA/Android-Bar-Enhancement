@@ -542,7 +542,7 @@
                 android:hint="格式：#RRGGBB，默认 #333333"
                 android:inputType="text"
                 android:paddingHorizontal="12dp"
-                android:background="@drawable/card_background"
+                android:background="@drawable/input_background"
                 android:textSize="14sp"
                 android:text="#333333"
                 android:layout_marginBottom="16dp" />
@@ -611,7 +611,7 @@
                 android:hint="输入 AI 网页地址（如：https://www.doubao.com）"
                 android:inputType="textUri"
                 android:paddingHorizontal="12dp"
-                android:background="@drawable/card_background"
+                android:background="@drawable/input_background"
                 android:textSize="14sp"
                 android:layout_marginBottom="16dp" />
 
@@ -631,7 +631,7 @@
                 android:hint="范围：200-600dp，默认 350dp"
                 android:inputType="number"
                 android:paddingHorizontal="12dp"
-                android:background="@drawable/card_background"
+                android:background="@drawable/input_background"
                 android:textSize="14sp"
                 android:layout_marginBottom="16dp" />
 
@@ -651,7 +651,7 @@
                 android:hint="范围：300-900dp，默认 600dp"
                 android:inputType="number"
                 android:paddingHorizontal="12dp"
-                android:background="@drawable/card_background"
+                android:background="@drawable/input_background"
                 android:textSize="14sp"
                 android:layout_marginBottom="16dp" />
 
@@ -727,7 +727,7 @@
                 android:hint="格式：#RRGGBB，默认 #4CAF50"
                 android:inputType="text"
                 android:paddingHorizontal="12dp"
-                android:background="@drawable/card_background"
+                android:background="@drawable/input_background"
                 android:textSize="14sp"
                 android:text="#4CAF50"
                 android:layout_marginBottom="16dp" />
@@ -984,7 +984,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:entries="@array/shortcut_style_entries"
-                android:background="@drawable/card_background"
+                android:background="@drawable/input_background"
                 android:paddingHorizontal="12dp"
                 android:layout_marginBottom="16dp" />
 
@@ -1056,7 +1056,7 @@
                 android:maxLines="6"
                 android:gravity="top|start"
                 android:padding="12dp"
-                android:background="@drawable/card_background"
+                android:background="@drawable/input_background"
                 android:textSize="12sp"
                 android:typeface="monospace"
                 android:scrollbars="vertical"
@@ -1248,7 +1248,7 @@
                 android:hint="格式：#RRGGBB，默认 #000000"
                 android:inputType="text"
                 android:paddingHorizontal="12dp"
-                android:background="@drawable/card_background"
+                android:background="@drawable/input_background"
                 android:textSize="14sp"
                 android:text="#000000"
                 android:layout_marginBottom="16dp" />
@@ -1286,7 +1286,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:entries="@array/shortcut_style_entries"
-                android:background="@drawable/card_background"
+                android:background="@drawable/input_background"
                 android:paddingHorizontal="12dp"
                 android:layout_marginBottom="16dp" />
 
@@ -1423,7 +1423,7 @@
                 android:hint="格式：#RRGGBB，默认 #000000"
                 android:inputType="text"
                 android:paddingHorizontal="12dp"
-                android:background="@drawable/card_background"
+                android:background="@drawable/input_background"
                 android:textSize="14sp"
                 android:text="#000000"
                 android:layout_marginBottom="16dp" />

@@ -26,6 +26,7 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import android.app.Dialog;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -501,7 +502,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         selectImageBtn.setText("选择图片");
         selectImageBtn.setTextSize(14);
         selectImageBtn.setTextColor(0xFFFFFFFF);
-        selectImageBtn.setBackgroundColor(0xFF1976D2);
+        selectImageBtn.setBackground(createRoundedButtonBg(0xFF1976D2, dpToPx(10)));
         selectImageBtn.setPadding(dpToPx(16), dpToPx(10), dpToPx(16), dpToPx(10));
         selectImageBtn.setStateListAnimator(null);
 
@@ -594,7 +595,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         selectAppBtn.setText("选择应用");
         selectAppBtn.setTextSize(13);
         selectAppBtn.setTextColor(0xFFFFFFFF);
-        selectAppBtn.setBackgroundColor(0xFF1976D2);
+        selectAppBtn.setBackground(createRoundedButtonBg(0xFF1976D2, dpToPx(10)));
         selectAppBtn.setPadding(dpToPx(16), dpToPx(10), dpToPx(16), dpToPx(10));
         selectAppBtn.setStateListAnimator(null);
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
@@ -690,7 +691,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         addExtraBtn.setText("+ 添加 Extra");
         addExtraBtn.setTextSize(13);
         addExtraBtn.setTextColor(0xFFFFFFFF);
-        addExtraBtn.setBackgroundColor(0xFF1976D2);
+        addExtraBtn.setBackground(createRoundedButtonBg(0xFF1976D2, dpToPx(10)));
         addExtraBtn.setPadding(dpToPx(16), dpToPx(10), dpToPx(16), dpToPx(10));
         addExtraBtn.setStateListAnimator(null);
         LinearLayout.LayoutParams addBtnLp = new LinearLayout.LayoutParams(
@@ -753,7 +754,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 deleteBtn.setText("×");
                 deleteBtn.setTextSize(16);
                 deleteBtn.setTextColor(0xFFFFFFFF);
-                deleteBtn.setBackgroundColor(0xFFF44336);
+                deleteBtn.setBackground(createRoundedButtonBg(0xFFF44336, dpToPx(8)));
                 deleteBtn.setPadding(dpToPx(10), dpToPx(6), dpToPx(10), dpToPx(6));
                 deleteBtn.setStateListAnimator(null);
                 deleteBtn.setLayoutParams(new LinearLayout.LayoutParams(dpToPx(36), ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -819,7 +820,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 resetBtn.setText("恢复默认图标");
                 resetBtn.setTextSize(14);
                 resetBtn.setTextColor(0xFFFFFFFF);
-                resetBtn.setBackgroundColor(0xFF4CAF50);
+                resetBtn.setBackground(createRoundedButtonBg(0xFF4CAF50, dpToPx(10)));
                 resetBtn.setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(12));
                 resetBtn.setStateListAnimator(null);
                 LinearLayout.LayoutParams resetLp = new LinearLayout.LayoutParams(
@@ -888,95 +889,163 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT));
         dialogScrollView.addView(formLayout);
 
-        // 创建对话框
+        // 创建自定义对话框（现代卡片风格）
         boolean isNew = existing == null;
-        new AlertDialog.Builder(this)
-                .setTitle(isNew ? "添加快捷方式" : "编辑快捷方式")
-                .setView(dialogScrollView)
-                .setPositiveButton("保存", (dialog, which) -> {
-                    String name = nameInput.getText().toString().trim();
-                    String pkg = pkgInput.getText().toString().trim();
-                    String cls = clsInput.getText().toString().trim();
 
-                    if (TextUtils.isEmpty(name)) {
-                        Toast.makeText(this, "请输入名称", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    if (TextUtils.isEmpty(pkg)) {
-                        Toast.makeText(this, "请输入包名", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
+        // 外层容器：白色圆角卡片
+        LinearLayout dialogContainer = new LinearLayout(this);
+        dialogContainer.setOrientation(LinearLayout.VERTICAL);
+        dialogContainer.setBackground(createCardBackground());
+        dialogContainer.setClipToOutline(true);
 
-                    // 判断图标类型：如果用户输入了 emoji 则优先使用 emoji
-                    String emojiText = dialogIconInput.getText().toString().trim();
-                    String iconPath = dialogIconPathInput.getText().toString().trim();
-                    String iconType;
-                    String icon;
+        // 对话框标题栏（标题 + 取消/保存按钮）
+        LinearLayout titleBar = new LinearLayout(this);
+        titleBar.setOrientation(LinearLayout.HORIZONTAL);
+        titleBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        titleBar.setPadding(dpToPx(20), dpToPx(14), dpToPx(16), dpToPx(14));
 
-                    if (!TextUtils.isEmpty(emojiText)) {
-                        // 用户输入了 emoji → 使用 emoji 类型
-                        iconType = "emoji";
-                        icon = emojiText;
-                        iconPath = "";
-                    } else if (!TextUtils.isEmpty(iconPath)) {
-                        // 用户选择了图片 → 使用图片类型
-                        iconType = "image";
-                        icon = "";
-                    } else {
-                        // 都没有 → 默认使用 emoji
-                        iconType = "emoji";
-                        icon = "⚡";
-                        iconPath = "";
-                    }
+        TextView dialogTitle = new TextView(this);
+        dialogTitle.setText(isNew ? "添加快捷方式" : "编辑快捷方式");
+        dialogTitle.setTextSize(18);
+        dialogTitle.setTextColor(0xFF1A1A1A);
+        dialogTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        dialogTitle.setLayoutParams(titleLp);
+        titleBar.addView(dialogTitle);
 
-                    ShortcutItem targetItem;
-                    if (isNew) {
-                        // 添加
-                        targetItem = new ShortcutItem(shortcutId, name, icon, iconType, iconPath, pkg, cls);
-                        shortcutList.add(targetItem);
-                        Toast.makeText(this, "快捷方式已添加", Toast.LENGTH_SHORT).show();
-                    } else {
-                        // 更新
-                        targetItem = existing;
-                        existing.setName(name);
-                        existing.setIcon(icon);
-                        existing.setIconType(iconType);
-                        existing.setIconPath(iconPath);
-                        existing.setPackageName(pkg);
-                        existing.setClassName(cls);
-                        Toast.makeText(this, "快捷方式已更新", Toast.LENGTH_SHORT).show();
-                    }
+        // 取消按钮
+        Button cancelBtn = new Button(this);
+        cancelBtn.setText("取消");
+        cancelBtn.setTextSize(13);
+        cancelBtn.setTextColor(0xFF757575);
+        cancelBtn.setBackground(createRoundedButtonBg(0xFFF5F5F5, dpToPx(10)));
+        cancelBtn.setPadding(dpToPx(14), dpToPx(8), dpToPx(14), dpToPx(8));
+        cancelBtn.setStateListAnimator(null);
+        titleBar.addView(cancelBtn);
 
-                    saveShortcuts();
-                    // 保存启动配置
-                    int modePos = spinnerMode.getSelectedItemPosition();
-                    launchConfig.launchMode = modes[modePos];
-                    launchConfig.uri = editUri.getText().toString().trim();
-                    launchConfig.targetPackage = pkg;
-                    // MODE_INTENT 时 targetClass 由启动配置自行管理（如 LauncherUI + Extra），
-                    // 不应被 ShortcutItem 的 className（如 BaseScanUI）覆盖
-                    if (!ShortcutLaunchConfig.MODE_INTENT.equals(launchConfig.launchMode)) {
-                        launchConfig.targetClass = cls;
-                    }
-                    
-                    // 收集所有 extras
-                    launchConfig.extras.clear();
-                    for (int i = 0; i < extraKeyInputs.size(); i++) {
-                        String key = extraKeyInputs.get(i).getText().toString().trim();
-                        String value = extraValueInputs.get(i).getText().toString().trim();
-                        if (!TextUtils.isEmpty(key)) {
-                            String[] types = {"string", "boolean", "int", "long", "float"};
-                            String type = types[extraTypeSpinners.get(i).getSelectedItemPosition()];
-                            launchConfig.extras.add(new ShortcutLaunchConfig.ExtraItem(key, value, type));
-                        }
-                    }
-                    
-                    ShortcutLaunchConfig.save(getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit(), shortcutId, launchConfig).apply();
+        // 保存按钮
+        Button saveBtn = new Button(this);
+        saveBtn.setText("保存");
+        saveBtn.setTextSize(13);
+        saveBtn.setTextColor(0xFFFFFFFF);
+        saveBtn.setBackground(createRoundedButtonBg(0xFF1976D2, dpToPx(10)));
+        saveBtn.setPadding(dpToPx(18), dpToPx(8), dpToPx(18), dpToPx(8));
+        saveBtn.setStateListAnimator(null);
+        LinearLayout.LayoutParams saveBtnLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        saveBtnLp.setMargins(dpToPx(8), 0, 0, 0);
+        saveBtn.setLayoutParams(saveBtnLp);
+        titleBar.addView(saveBtn);
 
-                    refreshList();
-                })
-                .setNegativeButton("取消", null)
-                .show();
+        dialogContainer.addView(titleBar);
+
+        // 标题分隔线
+        View titleDivider = new View(this);
+        titleDivider.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        titleDivider.setBackgroundColor(0xFFE0E0E0);
+        dialogContainer.addView(titleDivider);
+
+        // 内容区域
+        dialogContainer.addView(dialogScrollView);
+
+        // 创建自定义 Dialog
+        final Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        dialog.setContentView(dialogContainer);
+        dialog.setCancelable(true);
+
+        // 设置对话框窗口样式
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+            dialog.getWindow().setLayout(
+                    (int) (getResources().getDisplayMetrics().widthPixels * 0.92),
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+
+        // 保存按钮逻辑
+        saveBtn.setOnClickListener(v -> {
+            String name = nameInput.getText().toString().trim();
+            String pkg = pkgInput.getText().toString().trim();
+            String cls = clsInput.getText().toString().trim();
+
+            if (TextUtils.isEmpty(name)) {
+                Toast.makeText(this, "请输入名称", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            if (TextUtils.isEmpty(pkg)) {
+                Toast.makeText(this, "请输入包名", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            // 判断图标类型
+            String emojiText = dialogIconInput.getText().toString().trim();
+            String iconPath = dialogIconPathInput.getText().toString().trim();
+            String iconType;
+            String icon;
+
+            if (!TextUtils.isEmpty(emojiText)) {
+                iconType = "emoji";
+                icon = emojiText;
+                iconPath = "";
+            } else if (!TextUtils.isEmpty(iconPath)) {
+                iconType = "image";
+                icon = "";
+            } else {
+                iconType = "emoji";
+                icon = "⚡";
+                iconPath = "";
+            }
+
+            ShortcutItem targetItem;
+            if (isNew) {
+                targetItem = new ShortcutItem(shortcutId, name, icon, iconType, iconPath, pkg, cls);
+                shortcutList.add(targetItem);
+                Toast.makeText(this, "快捷方式已添加", Toast.LENGTH_SHORT).show();
+            } else {
+                targetItem = existing;
+                existing.setName(name);
+                existing.setIcon(icon);
+                existing.setIconType(iconType);
+                existing.setIconPath(iconPath);
+                existing.setPackageName(pkg);
+                existing.setClassName(cls);
+                Toast.makeText(this, "快捷方式已更新", Toast.LENGTH_SHORT).show();
+            }
+
+            saveShortcuts();
+            int modePos = spinnerMode.getSelectedItemPosition();
+            launchConfig.launchMode = modes[modePos];
+            launchConfig.uri = editUri.getText().toString().trim();
+            launchConfig.targetPackage = pkg;
+            // MODE_INTENT 时 targetClass 由启动配置自行管理（如 LauncherUI + Extra），
+            // 不应被 ShortcutItem 的 className（如 BaseScanUI）覆盖
+            if (!ShortcutLaunchConfig.MODE_INTENT.equals(launchConfig.launchMode)) {
+                launchConfig.targetClass = cls;
+            }
+
+            // 收集所有 extras
+            launchConfig.extras.clear();
+            for (int i = 0; i < extraKeyInputs.size(); i++) {
+                String key = extraKeyInputs.get(i).getText().toString().trim();
+                String value = extraValueInputs.get(i).getText().toString().trim();
+                if (!TextUtils.isEmpty(key)) {
+                    String[] types = {"string", "boolean", "int", "long", "float"};
+                    String type = types[extraTypeSpinners.get(i).getSelectedItemPosition()];
+                    launchConfig.extras.add(new ShortcutLaunchConfig.ExtraItem(key, value, type));
+                }
+            }
+
+            ShortcutLaunchConfig.save(getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit(), shortcutId, launchConfig).apply();
+
+            refreshList();
+            dialog.dismiss();
+        });
+
+        // 取消按钮逻辑
+        cancelBtn.setOnClickListener(v -> dialog.dismiss());
+
+        dialog.show();
     }
 
     /**
@@ -1481,7 +1550,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
     private void stylePrimaryButton(Button button) {
         button.setTextSize(15);
         button.setTextColor(0xFFFFFFFF);
-        button.setBackgroundColor(0xFF1976D2);
+        button.setBackground(createRoundedButtonBg(0xFF1976D2, dpToPx(12)));
         button.setPadding(0, 0, 0, 0);
         button.setStateListAnimator(null);
     }
@@ -1492,9 +1561,20 @@ public class ShortcutEditActivity extends AppCompatActivity {
     private void styleSecondaryButton(Button button) {
         button.setTextSize(15);
         button.setTextColor(0xFF1976D2);
-        button.setBackgroundColor(0xFFE3F2FD);
+        button.setBackground(createRoundedButtonBg(0xFFE3F2FD, dpToPx(12)));
         button.setPadding(0, 0, 0, 0);
         button.setStateListAnimator(null);
+    }
+
+    /**
+     * 创建圆角按钮背景
+     */
+    private GradientDrawable createRoundedButtonBg(int color, int cornerRadius) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setShape(GradientDrawable.RECTANGLE);
+        drawable.setColor(color);
+        drawable.setCornerRadius(cornerRadius);
+        return drawable;
     }
 
     /**
@@ -1504,6 +1584,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setShape(GradientDrawable.RECTANGLE);
         drawable.setColor(0xFFFFFFFF);
+        drawable.setStroke(dpToPx(1), 0xFFD0D0D0);
         drawable.setCornerRadius(dpToPx(12));
         return drawable;
     }
