@@ -21,7 +21,7 @@
             android:textStyle="bold"
             android:textColor="#1A1A1A"
             android:paddingHorizontal="16dp"
-            android:paddingTop="16dp"
+            android:paddingTop="46dp"
             android:paddingBottom="4dp" />
 
         <TextView

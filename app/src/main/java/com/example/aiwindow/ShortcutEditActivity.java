@@ -95,6 +95,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT));
         titleBarContainer.setOrientation(LinearLayout.VERTICAL);
         titleBarContainer.setBackgroundColor(0xFFF5F5F5);
+        titleBarContainer.setPadding(dpToPx(0), dpToPx(0), dpToPx(30), dpToPx(0));
         titleBarContainer.setElevation(dpToPx(2));
 
         TextView titleView = new TextView(this);
