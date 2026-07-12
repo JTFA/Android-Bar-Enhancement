@@ -29,7 +29,7 @@
         android:id="@+id/btn_check_permission"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="检查/申请悬浮窗权限"
+        android:text="检查权限"
         android:textSize="16sp"
         android:padding="16dp"
         android:layout_marginBottom="16dp"

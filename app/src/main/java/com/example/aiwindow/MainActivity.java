@@ -43,8 +43,10 @@ public class MainActivity extends AppCompatActivity {
         Button btnOpenSettings = findViewById(R.id.btn_open_settings);
         Button btnTestSimple = findViewById(R.id.btn_test_simple);
 
-        // 检查权限按钮点击事件
-        btnCheckPermission.setOnClickListener(v -> checkOverlayPermission());
+        // 检查权限按钮点击事件：跳转到权限管理页面
+        btnCheckPermission.setOnClickListener(v -> {
+            startActivity(new Intent(MainActivity.this, PermissionCheckActivity.class));
+        });
 
         // 悬浮窗服务开关
         updateServiceSwitchState();

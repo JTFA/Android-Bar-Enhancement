@@ -60,6 +60,12 @@
             android:exported="false">
         </activity>
 
+        <!-- 权限管理页面 -->
+        <activity
+            android:name=".PermissionCheckActivity"
+            android:exported="false"
+            android:label="权限管理" />
+
         <!-- 设置页面（可选） -->
         <activity
             android:name=".SettingsActivity"
