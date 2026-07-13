@@ -71,4 +71,11 @@
         <item>液态玻璃透明</item>
     </string-array>
 
+    <string-array name="action_entries">
+        <item>无</item>
+        <item>打开指定应用</item>
+        <item>打开快捷方式</item>
+        <item>打开AI窗口</item>
+    </string-array>
+
 </resources>

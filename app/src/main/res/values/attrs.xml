@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="bgPage" format="color" />
+    <attr name="bgCard" format="color" />
+    <attr name="textPrimary" format="color" />
+    <attr name="textSecondary" format="color" />
+    <attr name="textHint" format="color" />
+    <attr name="dividerColor" format="color" />
+    <attr name="dividerLight" format="color" />
+    <attr name="colorPrimaryBrand" format="color" />
+    <attr name="btnSecondaryBg" format="color" />
+    <attr name="btnSecondaryText" format="color" />
+    <attr name="trackColor" format="color" />
+    <attr name="inputBg" format="color" />
+    <attr name="inputStroke" format="color" />
+</resources>

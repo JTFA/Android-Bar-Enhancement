@@ -173,8 +173,7 @@ public class SettingsActivity extends AppCompatActivity {
     private Switch switchUseExpandDirectly;
     
     // 提示条触发行为配置
-    private LinearLayout layoutClickAction, layoutDoubleClickAction, layoutLongPressAction;
-    private TextView textClickAction, textDoubleClickAction, textLongPressAction;
+    private Spinner spinnerClickAction, spinnerDoubleClickAction, spinnerLongPressAction;
     private LinearLayout layoutClickApp, layoutDoubleClickApp, layoutLongPressApp;
     private TextView textClickSelectedApp, textDoubleClickSelectedApp, textLongPressSelectedApp;
     private String clickAction = "";
@@ -326,18 +325,15 @@ public class SettingsActivity extends AppCompatActivity {
         switchBackPrioritizeWebview = findViewById(R.id.switch_back_prioritize_webview);
         
         // 提示条触发行为配置
-        layoutClickAction = findViewById(R.id.layout_click_action);
-        textClickAction = findViewById(R.id.text_click_action);
+        spinnerClickAction = findViewById(R.id.spinner_click_action);
         layoutClickApp = findViewById(R.id.layout_click_app);
         textClickSelectedApp = findViewById(R.id.text_click_selected_app);
         
-        layoutDoubleClickAction = findViewById(R.id.layout_double_click_action);
-        textDoubleClickAction = findViewById(R.id.text_double_click_action);
+        spinnerDoubleClickAction = findViewById(R.id.spinner_double_click_action);
         layoutDoubleClickApp = findViewById(R.id.layout_double_click_app);
         textDoubleClickSelectedApp = findViewById(R.id.text_double_click_selected_app);
         
-        layoutLongPressAction = findViewById(R.id.layout_long_press_action);
-        textLongPressAction = findViewById(R.id.text_long_press_action);
+        spinnerLongPressAction = findViewById(R.id.spinner_long_press_action);
         layoutLongPressApp = findViewById(R.id.layout_long_press_app);
         textLongPressSelectedApp = findViewById(R.id.text_long_press_selected_app);
         
@@ -514,15 +510,15 @@ public class SettingsActivity extends AppCompatActivity {
             String savedPkg = preferences.getString(KEY_CLICK_APP_PACKAGE, "");
             clickAction = TextUtils.isEmpty(savedPkg) ? ACTION_NONE : ACTION_APP;
         }
-        textClickAction.setText(getActionDisplayName(clickAction));
+        spinnerClickAction.setSelection(getActionIndex(clickAction));
         
         // 双击行为（向后兼容：默认快捷方式）
         doubleClickAction = preferences.getString(KEY_DOUBLE_CLICK_ACTION, ACTION_SHORTCUT);
-        textDoubleClickAction.setText(getActionDisplayName(doubleClickAction));
+        spinnerDoubleClickAction.setSelection(getActionIndex(doubleClickAction));
         
         // 长按行为（向后兼容：默认AI窗口）
         longPressAction = preferences.getString(KEY_LONG_PRESS_ACTION, ACTION_AI);
-        textLongPressAction.setText(getActionDisplayName(longPressAction));
+        spinnerLongPressAction.setSelection(getActionIndex(longPressAction));
         
         // 加载单击打开的应用
         clickAppPackage = preferences.getString(KEY_CLICK_APP_PACKAGE, "");
@@ -1405,14 +1401,30 @@ public class SettingsActivity extends AppCompatActivity {
             }
         });
         
-        // ===== 提示条触发行为点击监听器 =====
-        // 单击行为选择
-        layoutClickAction.setOnClickListener(new View.OnClickListener() {
+        // ===== 提示条触发行为Spinner监听器 =====
+        final String[] actionKeys = {ACTION_NONE, ACTION_APP, ACTION_SHORTCUT, ACTION_AI};
+        
+        AdapterView.OnItemSelectedListener actionListener = new AdapterView.OnItemSelectedListener() {
             @Override
-            public void onClick(View v) {
-                showActionPicker("click");
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                int spinnerId = parent.getId();
+                String selectedAction = actionKeys[position];
+                if (spinnerId == R.id.spinner_click_action) {
+                    clickAction = selectedAction;
+                } else if (spinnerId == R.id.spinner_double_click_action) {
+                    doubleClickAction = selectedAction;
+                } else if (spinnerId == R.id.spinner_long_press_action) {
+                    longPressAction = selectedAction;
+                }
+                updateAppSelectorVisibility();
+                applyCurrentSettings();
             }
-        });
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        };
+        
+        spinnerClickAction.setOnItemSelectedListener(actionListener);
+        spinnerDoubleClickAction.setOnItemSelectedListener(actionListener);
+        spinnerLongPressAction.setOnItemSelectedListener(actionListener);
         
         // 单击应用选择
         layoutClickApp.setOnClickListener(new View.OnClickListener() {
@@ -1428,14 +1440,6 @@ public class SettingsActivity extends AppCompatActivity {
             }
         });
         
-        // 双击行为选择
-        layoutDoubleClickAction.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showActionPicker("double_click");
-            }
-        });
-        
         // 双击应用选择
         layoutDoubleClickApp.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -1447,14 +1451,6 @@ public class SettingsActivity extends AppCompatActivity {
                 } else {
                     showAppPicker();
                 }
-            }
-        });
-        
-        // 长按行为选择
-        layoutLongPressAction.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showActionPicker("long_press");
             }
         });
         
@@ -2193,16 +2189,27 @@ public class SettingsActivity extends AppCompatActivity {
     private void setGestureAction(String gesture, String action) {
         if ("click".equals(gesture)) {
             clickAction = action;
-            textClickAction.setText(getActionDisplayName(action));
+            spinnerClickAction.setSelection(getActionIndex(action));
         } else if ("double_click".equals(gesture)) {
             doubleClickAction = action;
-            textDoubleClickAction.setText(getActionDisplayName(action));
+            spinnerDoubleClickAction.setSelection(getActionIndex(action));
         } else if ("long_press".equals(gesture)) {
             longPressAction = action;
-            textLongPressAction.setText(getActionDisplayName(action));
+            spinnerLongPressAction.setSelection(getActionIndex(action));
         }
         updateAppSelectorVisibility();
         applyCurrentSettings();
+    }
+    
+    /**
+     * 获取行为类型对应的Spinner索引
+     */
+    private int getActionIndex(String action) {
+        if (ACTION_NONE.equals(action)) return 0;
+        else if (ACTION_APP.equals(action)) return 1;
+        else if (ACTION_SHORTCUT.equals(action)) return 2;
+        else if (ACTION_AI.equals(action)) return 3;
+        return 0;
     }
     
     /**
