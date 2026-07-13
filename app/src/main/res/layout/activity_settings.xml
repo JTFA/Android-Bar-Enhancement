@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="#F5F5F5"
+        android:background="?attr/bgPage"
         android:elevation="2dp">
 
         <LinearLayout
@@ -38,7 +38,7 @@
                 android:text="保存"
                 android:textSize="14sp"
                 android:textColor="#FFFFFF"
-                android:backgroundTint="#1976D2"
+                android:backgroundTint="?attr/colorPrimaryBrand"
                 android:stateListAnimator="@null"
                 android:paddingHorizontal="20dp" />
 
@@ -47,7 +47,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="#E0E0E0" />
+            android:background="?attr/dividerColor" />
 
     </LinearLayout>
 
@@ -76,7 +76,7 @@
                 android:text="@string/bar_trigger_actions"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="4dp" />
 
             <TextView
@@ -84,7 +84,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/bar_trigger_actions_desc"
                 android:textSize="12sp"
-                android:textColor="#9E9E9E"
+                android:textColor="?attr/textHint"
                 android:layout_marginBottom="16dp" />
 
             <!-- 单击行为选择 -->
@@ -113,7 +113,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_none"
                     android:textSize="14sp"
-                    android:textColor="#757575"
+                    android:textColor="?attr/textSecondary"
                     android:gravity="end" />
 
             </LinearLayout>
@@ -121,7 +121,7 @@
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#F0F0F0" />
+                android:background="?attr/dividerLight" />
 
             <!-- 单击应用选择（仅当单击行为为"打开指定应用"时可见） -->
             <LinearLayout
@@ -150,7 +150,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/not_selected"
                     android:textSize="14sp"
-                    android:textColor="#757575"
+                    android:textColor="?attr/textSecondary"
                     android:gravity="end" />
 
             </LinearLayout>
@@ -158,7 +158,7 @@
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#F0F0F0" />
+                android:background="?attr/dividerLight" />
 
             <!-- 双击行为选择 -->
             <LinearLayout
@@ -186,7 +186,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_open_shortcut"
                     android:textSize="14sp"
-                    android:textColor="#757575"
+                    android:textColor="?attr/textSecondary"
                     android:gravity="end" />
 
             </LinearLayout>
@@ -194,7 +194,7 @@
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#F0F0F0" />
+                android:background="?attr/dividerLight" />
 
             <!-- 双击应用选择（仅当双击行为为"打开指定应用"时可见） -->
             <LinearLayout
@@ -223,7 +223,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/not_selected"
                     android:textSize="14sp"
-                    android:textColor="#757575"
+                    android:textColor="?attr/textSecondary"
                     android:gravity="end" />
 
             </LinearLayout>
@@ -231,7 +231,7 @@
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#F0F0F0" />
+                android:background="?attr/dividerLight" />
 
             <!-- 长按行为选择 -->
             <LinearLayout
@@ -259,7 +259,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/action_open_ai"
                     android:textSize="14sp"
-                    android:textColor="#757575"
+                    android:textColor="?attr/textSecondary"
                     android:gravity="end" />
 
             </LinearLayout>
@@ -267,7 +267,7 @@
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#F0F0F0" />
+                android:background="?attr/dividerLight" />
 
             <!-- 长按应用选择（仅当长按行为为"打开指定应用"时可见） -->
             <LinearLayout
@@ -296,7 +296,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/not_selected"
                     android:textSize="14sp"
-                    android:textColor="#757575"
+                    android:textColor="?attr/textSecondary"
                     android:gravity="end" />
 
             </LinearLayout>
@@ -318,7 +318,7 @@
                 android:text="提示条触发区域"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="4dp" />
 
             <TextView
@@ -326,7 +326,7 @@
                 android:layout_height="wrap_content"
                 android:text="见黑色区域，为防止烧屏，退出设置页面后将隐藏"
                 android:textSize="12sp"
-                android:textColor="#9E9E9E"
+                android:textColor="?attr/textHint"
                 android:layout_marginBottom="20dp" />
 
             <!-- 提示条宽度 -->
@@ -438,7 +438,7 @@
                 android:text="提示条按下样式"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="4dp" />
 
             <TextView
@@ -446,7 +446,7 @@
                 android:layout_height="wrap_content"
                 android:text="手指按住提示条时的样式变化，调节时可实时显示"
                 android:textSize="12sp"
-                android:textColor="#9E9E9E"
+                android:textColor="?attr/textHint"
                 android:layout_marginBottom="16dp" />
 
             <!-- 按下时启用开关 -->
@@ -469,7 +469,7 @@
                     android:id="@+id/switch_pressed_bar_enabled"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:thumbTint="#1976D2"
+                    android:thumbTint="?attr/colorPrimaryBrand"
                     android:trackTint="#BDBDBD" />
 
             </LinearLayout>
@@ -623,7 +623,7 @@
                 android:text="窗口设置"
                 android:textSize="22sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="20dp" />
 
             <!-- AI 对话窗口设置 -->
@@ -633,7 +633,7 @@
                 android:text="AI窗口设置"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="16dp" />
 
             <!-- AI 网页 URL 设置 -->
@@ -798,7 +798,7 @@
                 android:text="右上角按钮组"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginTop="8dp"
                 android:layout_marginBottom="4dp" />
 
@@ -807,7 +807,7 @@
                 android:layout_height="wrap_content"
                 android:text="显示/隐藏窗口右上角的返回、刷新、关闭按钮"
                 android:textSize="12sp"
-                android:textColor="#9E9E9E"
+                android:textColor="?attr/textHint"
                 android:layout_marginBottom="8dp" />
 
             <!-- 显示关闭按钮 -->
@@ -830,7 +830,7 @@
                     android:id="@+id/switch_show_close_button"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:thumbTint="#1976D2"
+                    android:thumbTint="?attr/colorPrimaryBrand"
                     android:trackTint="#BDBDBD" />
 
             </LinearLayout>
@@ -855,7 +855,7 @@
                     android:id="@+id/switch_show_refresh_button"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:thumbTint="#1976D2"
+                    android:thumbTint="?attr/colorPrimaryBrand"
                     android:trackTint="#BDBDBD" />
 
             </LinearLayout>
@@ -880,7 +880,7 @@
                     android:id="@+id/switch_show_back_button"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:thumbTint="#1976D2"
+                    android:thumbTint="?attr/colorPrimaryBrand"
                     android:trackTint="#BDBDBD" />
 
             </LinearLayout>
@@ -892,7 +892,7 @@
                 android:text="小横条透明度"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginTop="12dp"
                 android:layout_marginBottom="4dp" />
 
@@ -947,7 +947,7 @@
                     android:id="@+id/switch_close_on_outside_click"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:thumbTint="#1976D2"
+                    android:thumbTint="?attr/colorPrimaryBrand"
                     android:trackTint="#BDBDBD" />
 
             </LinearLayout>
@@ -986,7 +986,7 @@
                     android:id="@+id/switch_back_prioritize_webview"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:thumbTint="#1976D2"
+                    android:thumbTint="?attr/colorPrimaryBrand"
                     android:trackTint="#BDBDBD" />
 
             </LinearLayout>
@@ -1008,7 +1008,7 @@
                 android:text="AI 窗口模糊效果"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="16dp" />
 
             <!-- AI 窗口背景样式 -->
@@ -1055,8 +1055,8 @@
                 android:text="网页背景透明（不保证效果完美，可尝试通过自定义css实现）"
                 android:textSize="14sp"
                 android:paddingVertical="8dp"
-                android:thumbTint="#1976D2"
-                android:trackTint="#BDBDBD"
+                android:thumbTint="?attr/colorPrimaryBrand"
+                android:trackTint="?attr/trackColor" />
                 android:layout_marginBottom="8dp"
                 android:visibility="gone" />
 
@@ -1110,7 +1110,7 @@
                 android:text="输入法避让设置"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginTop="8dp"
                 android:layout_marginBottom="4dp" />
 
@@ -1119,7 +1119,7 @@
                 android:layout_height="wrap_content"
                 android:text="当网页调起输入法时，窗口自动上移避免遮挡"
                 android:textSize="12sp"
-                android:textColor="#9E9E9E"
+                android:textColor="?attr/textHint"
                 android:layout_marginBottom="16dp" />
 
             <!-- 输入法弹出时窗口上移距离 -->
@@ -1176,7 +1176,7 @@
                 android:text="快捷方式窗口设置"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="16dp" />
 
             <!-- 快捷窗口宽度 -->
@@ -1419,7 +1419,7 @@
                 android:text="背景遮罩设置"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="4dp" />
 
             <TextView
@@ -1427,7 +1427,7 @@
                 android:layout_height="wrap_content"
                 android:text="窗口外部半透明遮罩，帮助区分窗口与背景"
                 android:textSize="12sp"
-                android:textColor="#9E9E9E"
+                android:textColor="?attr/textHint"
                 android:layout_marginBottom="16dp" />
 
             <!-- 遮罩透明度 -->
@@ -1504,7 +1504,7 @@
                 android:text="展开/收起动画设置"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="4dp" />
 
             <TextView
@@ -1512,7 +1512,7 @@
                 android:layout_height="wrap_content"
                 android:text="对快捷方式和AI窗口同时生效"
                 android:textSize="12sp"
-                android:textColor="#9E9E9E"
+                android:textColor="?attr/textHint"
                 android:layout_marginBottom="16dp" />
 
             <TextView
@@ -1566,7 +1566,7 @@
                     android:id="@+id/switch_use_expand_directly"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:thumbTint="#1976D2"
+                    android:thumbTint="?attr/colorPrimaryBrand"
                     android:trackTint="#BDBDBD" />
 
             </LinearLayout>
@@ -1578,7 +1578,7 @@
             android:layout_height="wrap_content"
             android:text="提示：修改设置后点击保存并应用即可实时生效"
             android:textSize="12sp"
-            android:textColor="#9E9E9E"
+            android:textColor="?attr/textHint"
             android:gravity="center"
             android:layout_gravity="center_horizontal"
             android:layout_marginBottom="24dp" />

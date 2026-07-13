@@ -86,7 +86,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         rootContainer.setOrientation(LinearLayout.VERTICAL);
-        rootContainer.setBackgroundColor(0xFFF5F5F5);
+        rootContainer.setBackgroundColor(resolveThemeColor(R.attr.bgPage));
 
         // 固定标题栏
         LinearLayout titleBarContainer = new LinearLayout(this);
@@ -94,14 +94,14 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
         titleBarContainer.setOrientation(LinearLayout.VERTICAL);
-        titleBarContainer.setBackgroundColor(0xFFF5F5F5);
-        titleBarContainer.setPadding(dpToPx(0), dpToPx(0), dpToPx(30), dpToPx(0));
+        titleBarContainer.setBackgroundColor(resolveThemeColor(R.attr.bgPage));
+        titleBarContainer.setPadding(dpToPx(0), dpToPx(30), dpToPx(0), dpToPx(0));
         titleBarContainer.setElevation(dpToPx(2));
 
         TextView titleView = new TextView(this);
         titleView.setText("管理快捷方式");
         titleView.setTextSize(28);
-        titleView.setTextColor(0xFF1A1A1A);
+        titleView.setTextColor(resolveThemeColor(R.attr.textPrimary));
         titleView.setTypeface(null, android.graphics.Typeface.BOLD);
         titleView.setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(12));
         titleBarContainer.addView(titleView);
@@ -110,7 +110,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         View titleDivider = new View(this);
         titleDivider.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(1)));
-        titleDivider.setBackgroundColor(0xFFE0E0E0);
+        titleDivider.setBackgroundColor(resolveThemeColor(R.attr.dividerColor));
         titleBarContainer.addView(titleDivider);
 
         rootContainer.addView(titleBarContainer);
@@ -132,7 +132,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         TextView descView = new TextView(this);
         descView.setText("添加、编辑或删除快捷方式。双击提示条弹出快捷方式窗口。\n图标支持 emoji 和自定义图片。");
         descView.setTextSize(14);
-        descView.setTextColor(0xFF757575);
+        descView.setTextColor(resolveThemeColor(R.attr.textSecondary));
         descView.setPadding(0, 0, 0, dpToPx(20));
         contentLayout.addView(descView);
 
@@ -297,7 +297,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
             TextView emptyView = new TextView(this);
             emptyView.setText("暂无快捷方式，请点击下方按钮添加");
             emptyView.setTextSize(15);
-            emptyView.setTextColor(0xFF9E9E9E);
+            emptyView.setTextColor(resolveThemeColor(R.attr.textHint));
             emptyView.setPadding(0, dpToPx(30), 0, dpToPx(30));
             emptyView.setGravity(android.view.Gravity.CENTER);
             listContainer.addView(emptyView);
@@ -336,8 +336,8 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            enableSwitch.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFF1976D2));
-            enableSwitch.setTrackTintList(android.content.res.ColorStateList.valueOf(0xFFBDBDBD));
+            enableSwitch.setThumbTintList(android.content.res.ColorStateList.valueOf(resolveThemeColor(R.attr.colorPrimaryBrand)));
+            enableSwitch.setTrackTintList(android.content.res.ColorStateList.valueOf(resolveThemeColor(R.attr.trackColor)));
         }
         enableSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             item.setEnabled(isChecked);
@@ -382,7 +382,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         TextView nameView = new TextView(this);
         nameView.setText(item.getName());
         nameView.setTextSize(15);
-        nameView.setTextColor(0xFF1A1A1A);
+        nameView.setTextColor(resolveThemeColor(R.attr.textPrimary));
         nameView.setMaxLines(1);
         nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         infoLayout.addView(nameView);
@@ -391,7 +391,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         TextView detailView = new TextView(this);
         detailView.setText(item.getPackageName() + "\n" + item.getClassName() + typeHint);
         detailView.setTextSize(12);
-        detailView.setTextColor(0xFF9E9E9E);
+        detailView.setTextColor(resolveThemeColor(R.attr.textHint));
         detailView.setMaxLines(1);
         detailView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         detailView.setPadding(0, dpToPx(2), 0, 0);
@@ -403,7 +403,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         TextView editBtn = new TextView(this);
         editBtn.setText("编辑");
         editBtn.setTextSize(13);
-        editBtn.setTextColor(0xFF1976D2);
+        editBtn.setTextColor(resolveThemeColor(R.attr.colorPrimaryBrand));
         editBtn.setPadding(dpToPx(12), dpToPx(6), dpToPx(12), dpToPx(6));
         editBtn.setClickable(true);
         editBtn.setOnClickListener(v -> showEditDialog(shortcutList.get(index), index));
@@ -474,7 +474,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         TextView nameLabel = new TextView(this);
         nameLabel.setText("名称");
         nameLabel.setTextSize(14);
-        nameLabel.setTextColor(0xFF424242);
+        nameLabel.setTextColor(resolveThemeColor(R.attr.textPrimary));
         nameLabel.setPadding(0, 0, 0, dpToPx(6));
         formLayout.addView(nameLabel);
 
@@ -496,7 +496,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         TextView iconLabel = new TextView(this);
         iconLabel.setText("图标");
         iconLabel.setTextSize(14);
-        iconLabel.setTextColor(0xFF424242);
+        iconLabel.setTextColor(resolveThemeColor(R.attr.textPrimary));
         iconLabel.setPadding(0, 0, 0, dpToPx(6));
         formLayout.addView(iconLabel);
 
@@ -506,7 +506,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         dialogTypeIndicator = new TextView(this);
         dialogTypeIndicator.setText(existingIsImage ? "当前：图片图标" : "当前：Emoji 图标");
         dialogTypeIndicator.setTextSize(12);
-        dialogTypeIndicator.setTextColor(0xFF9E9E9E);
+        dialogTypeIndicator.setTextColor(resolveThemeColor(R.attr.textHint));
         dialogTypeIndicator.setPadding(0, 0, 0, dpToPx(8));
         formLayout.addView(dialogTypeIndicator);
 
@@ -529,7 +529,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         selectImageBtn.setText("选择图片");
         selectImageBtn.setTextSize(14);
         selectImageBtn.setTextColor(0xFFFFFFFF);
-        selectImageBtn.setBackground(createRoundedButtonBg(0xFF1976D2, dpToPx(10)));
+        selectImageBtn.setBackground(createRoundedButtonBg(resolveThemeColor(R.attr.colorPrimaryBrand), dpToPx(10)));
         selectImageBtn.setPadding(dpToPx(16), dpToPx(10), dpToPx(16), dpToPx(10));
         selectImageBtn.setStateListAnimator(null);
 
@@ -543,7 +543,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         GradientDrawable previewBg = new GradientDrawable();
         previewBg.setShape(GradientDrawable.RECTANGLE);
         previewBg.setCornerRadius(dpToPx(8));
-        previewBg.setColor(0xFFF5F5F5);
+        previewBg.setColor(resolveThemeColor(R.attr.bgPage));
         dialogImagePreview.setBackground(previewBg);
         dialogImagePreview.setVisibility(View.GONE);
 
@@ -583,7 +583,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         TextView pkgLabel = new TextView(this);
         pkgLabel.setText("应用包名");
         pkgLabel.setTextSize(14);
-        pkgLabel.setTextColor(0xFF424242);
+        pkgLabel.setTextColor(resolveThemeColor(R.attr.textPrimary));
         pkgLabel.setPadding(0, 0, 0, dpToPx(6));
         formLayout.addView(pkgLabel);
 
@@ -591,7 +591,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         TextView clsLabel = new TextView(this);
         clsLabel.setText("Activity 类名");
         clsLabel.setTextSize(14);
-        clsLabel.setTextColor(0xFF424242);
+        clsLabel.setTextColor(resolveThemeColor(R.attr.textPrimary));
         clsLabel.setPadding(0, 0, 0, dpToPx(6));
 
         EditText clsInput = new EditText(this);
@@ -622,7 +622,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         selectAppBtn.setText("选择应用");
         selectAppBtn.setTextSize(13);
         selectAppBtn.setTextColor(0xFFFFFFFF);
-        selectAppBtn.setBackground(createRoundedButtonBg(0xFF1976D2, dpToPx(10)));
+        selectAppBtn.setBackground(createRoundedButtonBg(resolveThemeColor(R.attr.colorPrimaryBrand), dpToPx(10)));
         selectAppBtn.setPadding(dpToPx(16), dpToPx(10), dpToPx(16), dpToPx(10));
         selectAppBtn.setStateListAnimator(null);
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
@@ -660,14 +660,14 @@ public class ShortcutEditActivity extends AppCompatActivity {
         View line = new View(this);
         line.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 1));
-        line.setBackgroundColor(0xFFE0E0E0);
+        line.setBackgroundColor(resolveThemeColor(R.attr.dividerColor));
         line.setPadding(0, 0, 0, 0);
         formLayout.addView(line);
 
         TextView configTitle = new TextView(this);
         configTitle.setText("启动方式");
         configTitle.setTextSize(16);
-        configTitle.setTextColor(0xFF1A1A1A);
+        configTitle.setTextColor(resolveThemeColor(R.attr.textPrimary));
         configTitle.setTypeface(null, android.graphics.Typeface.BOLD);
         configTitle.setPadding(0, dpToPx(16), 0, dpToPx(12));
         formLayout.addView(configTitle);
@@ -718,7 +718,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         addExtraBtn.setText("+ 添加 Extra");
         addExtraBtn.setTextSize(13);
         addExtraBtn.setTextColor(0xFFFFFFFF);
-        addExtraBtn.setBackground(createRoundedButtonBg(0xFF1976D2, dpToPx(10)));
+        addExtraBtn.setBackground(createRoundedButtonBg(resolveThemeColor(R.attr.colorPrimaryBrand), dpToPx(10)));
         addExtraBtn.setPadding(dpToPx(16), dpToPx(10), dpToPx(16), dpToPx(10));
         addExtraBtn.setStateListAnimator(null);
         LinearLayout.LayoutParams addBtnLp = new LinearLayout.LayoutParams(
@@ -934,7 +934,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         TextView dialogTitle = new TextView(this);
         dialogTitle.setText(isNew ? "添加快捷方式" : "编辑快捷方式");
         dialogTitle.setTextSize(18);
-        dialogTitle.setTextColor(0xFF1A1A1A);
+        dialogTitle.setTextColor(resolveThemeColor(R.attr.textPrimary));
         dialogTitle.setTypeface(null, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
         dialogTitle.setLayoutParams(titleLp);
@@ -944,8 +944,8 @@ public class ShortcutEditActivity extends AppCompatActivity {
         Button cancelBtn = new Button(this);
         cancelBtn.setText("取消");
         cancelBtn.setTextSize(13);
-        cancelBtn.setTextColor(0xFF757575);
-        cancelBtn.setBackground(createRoundedButtonBg(0xFFF5F5F5, dpToPx(10)));
+        cancelBtn.setTextColor(resolveThemeColor(R.attr.textSecondary));
+        cancelBtn.setBackground(createRoundedButtonBg(resolveThemeColor(R.attr.bgPage), dpToPx(10)));
         cancelBtn.setPadding(dpToPx(14), dpToPx(8), dpToPx(14), dpToPx(8));
         cancelBtn.setStateListAnimator(null);
         titleBar.addView(cancelBtn);
@@ -955,7 +955,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         saveBtn.setText("保存");
         saveBtn.setTextSize(13);
         saveBtn.setTextColor(0xFFFFFFFF);
-        saveBtn.setBackground(createRoundedButtonBg(0xFF1976D2, dpToPx(10)));
+        saveBtn.setBackground(createRoundedButtonBg(resolveThemeColor(R.attr.colorPrimaryBrand), dpToPx(10)));
         saveBtn.setPadding(dpToPx(18), dpToPx(8), dpToPx(18), dpToPx(8));
         saveBtn.setStateListAnimator(null);
         LinearLayout.LayoutParams saveBtnLp = new LinearLayout.LayoutParams(
@@ -970,7 +970,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         View titleDivider = new View(this);
         titleDivider.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 1));
-        titleDivider.setBackgroundColor(0xFFE0E0E0);
+        titleDivider.setBackgroundColor(resolveThemeColor(R.attr.dividerColor));
         dialogContainer.addView(titleDivider);
 
         // 内容区域
@@ -1378,8 +1378,8 @@ public class ShortcutEditActivity extends AppCompatActivity {
         switchSystemApps.setChecked(getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
                 .getBoolean("include_system_apps", false));
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            switchSystemApps.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFF1976D2));
-            switchSystemApps.setTrackTintList(android.content.res.ColorStateList.valueOf(0xFFBDBDBD));
+            switchSystemApps.setThumbTintList(android.content.res.ColorStateList.valueOf(resolveThemeColor(R.attr.colorPrimaryBrand)));
+            switchSystemApps.setTrackTintList(android.content.res.ColorStateList.valueOf(resolveThemeColor(R.attr.trackColor)));
         }
         switchSystemApps.setOnCheckedChangeListener((buttonView, isChecked) -> {
             getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
@@ -1432,7 +1432,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
                     TextView nameView = new TextView(ShortcutEditActivity.this);
                     nameView.setId(View.generateViewId());
                     nameView.setTextSize(15);
-                    nameView.setTextColor(0xFF1A1A1A);
+                    nameView.setTextColor(resolveThemeColor(R.attr.textPrimary));
                     nameView.setPadding(dpToPx(12), 0, 0, 0);
                     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
@@ -1555,6 +1555,12 @@ public class ShortcutEditActivity extends AppCompatActivity {
         return null;
     }
 
+    private int resolveThemeColor(int attrResId) {
+        android.util.TypedValue typedValue = new android.util.TypedValue();
+        getTheme().resolveAttribute(attrResId, typedValue, true);
+        return typedValue.data;
+    }
+
     private int dpToPx(int dp) {
         float density = getResources().getDisplayMetrics().density;
         return Math.round(dp * density);
@@ -1566,7 +1572,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
     private GradientDrawable createCardBackground() {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setShape(GradientDrawable.RECTANGLE);
-        drawable.setColor(0xFFFFFFFF);
+        drawable.setColor(resolveThemeColor(R.attr.bgCard));
         drawable.setCornerRadius(dpToPx(16));
         return drawable;
     }
@@ -1577,7 +1583,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
     private void stylePrimaryButton(Button button) {
         button.setTextSize(15);
         button.setTextColor(0xFFFFFFFF);
-        button.setBackground(createRoundedButtonBg(0xFF1976D2, dpToPx(12)));
+        button.setBackground(createRoundedButtonBg(resolveThemeColor(R.attr.colorPrimaryBrand), dpToPx(12)));
         button.setPadding(0, 0, 0, 0);
         button.setStateListAnimator(null);
     }
@@ -1587,8 +1593,8 @@ public class ShortcutEditActivity extends AppCompatActivity {
      */
     private void styleSecondaryButton(Button button) {
         button.setTextSize(15);
-        button.setTextColor(0xFF1976D2);
-        button.setBackground(createRoundedButtonBg(0xFFE3F2FD, dpToPx(12)));
+        button.setTextColor(resolveThemeColor(R.attr.colorPrimaryBrand));
+        button.setBackground(createRoundedButtonBg(resolveThemeColor(R.attr.btnSecondaryBg), dpToPx(12)));
         button.setPadding(0, 0, 0, 0);
         button.setStateListAnimator(null);
     }
@@ -1610,8 +1616,8 @@ public class ShortcutEditActivity extends AppCompatActivity {
     private GradientDrawable createInputBackground() {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setShape(GradientDrawable.RECTANGLE);
-        drawable.setColor(0xFFFFFFFF);
-        drawable.setStroke(dpToPx(1), 0xFFD0D0D0);
+        drawable.setColor(resolveThemeColor(R.attr.inputBg));
+        drawable.setStroke(dpToPx(1), resolveThemeColor(R.attr.inputStroke));
         drawable.setCornerRadius(dpToPx(12));
         return drawable;
     }

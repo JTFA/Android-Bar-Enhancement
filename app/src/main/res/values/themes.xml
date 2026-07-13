@@ -26,6 +26,20 @@
         <item name="android:windowBackground">#F5F5F5</item>
         <item name="android:navigationBarColor">#F5F5F5</item>
         <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
+        <!-- 自定义深色模式适配属性 -->
+        <item name="bgPage">#F5F5F5</item>
+        <item name="bgCard">#FFFFFF</item>
+        <item name="textPrimary">#1A1A1A</item>
+        <item name="textSecondary">#757575</item>
+        <item name="textHint">#9E9E9E</item>
+        <item name="dividerColor">#E0E0E0</item>
+        <item name="dividerLight">#F0F0F0</item>
+        <item name="colorPrimaryBrand">#1976D2</item>
+        <item name="btnSecondaryBg">#E3F2FD</item>
+        <item name="btnSecondaryText">#1976D2</item>
+        <item name="trackColor">#BDBDBD</item>
+        <item name="inputBg">#FFFFFF</item>
+        <item name="inputStroke">#D0D0D0</item>
     </style>
 
     <!-- Transparent proxy Activity theme: visually transparent but NOT system-translucent -->

@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="#F5F5F5"
+        android:background="?attr/bgPage"
         android:elevation="2dp">
 
         <TextView
@@ -19,7 +19,7 @@
             android:text="悬浮窗应用"
             android:textSize="28sp"
             android:textStyle="bold"
-            android:textColor="#1A1A1A"
+            android:textColor="?attr/textPrimary"
             android:paddingHorizontal="16dp"
             android:paddingTop="46dp"
             android:paddingBottom="12dp" />
@@ -27,7 +27,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="#E0E0E0" />
+            android:background="?attr/dividerColor" />
 
     </LinearLayout>
 
@@ -47,7 +47,7 @@
             android:layout_height="wrap_content"
             android:text="请先授予悬浮窗权限，然后启动服务"
             android:textSize="14sp"
-            android:textColor="#757575"
+            android:textColor="?attr/textSecondary"
             android:layout_marginBottom="24dp" />
 
         <!-- 权限与服务卡片 -->
@@ -65,7 +65,7 @@
                 android:text="权限与服务"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="16dp" />
 
             <Button
@@ -75,7 +75,7 @@
                 android:text="检查权限"
                 android:textSize="15sp"
                 android:textColor="#FFFFFF"
-                android:backgroundTint="#1976D2"
+                android:backgroundTint="?attr/colorPrimaryBrand"
                 android:stateListAnimator="@null"
                 android:layout_marginBottom="16dp" />
 
@@ -105,7 +105,7 @@
                         android:layout_height="wrap_content"
                         android:text="开启后悬浮窗将在后台运行"
                         android:textSize="12sp"
-                        android:textColor="#9E9E9E"
+                        android:textColor="?attr/textHint"
                         android:layout_marginTop="2dp" />
 
                 </LinearLayout>
@@ -114,15 +114,15 @@
                     android:id="@+id/switch_service"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:thumbTint="#1976D2"
-                    android:trackTint="#BDBDBD" />
+                    android:thumbTint="?attr/colorPrimaryBrand"
+                    android:trackTint="?attr/trackColor" />
 
             </LinearLayout>
 
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#F0F0F0" />
+                android:background="?attr/dividerLight" />
 
             <!-- 开机自启 -->
             <LinearLayout
@@ -150,7 +150,7 @@
                         android:layout_height="wrap_content"
                         android:text="设备启动时自动运行悬浮窗"
                         android:textSize="12sp"
-                        android:textColor="#9E9E9E"
+                        android:textColor="?attr/textHint"
                         android:layout_marginTop="2dp" />
 
                 </LinearLayout>
@@ -159,15 +159,15 @@
                     android:id="@+id/switch_boot_start"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:thumbTint="#1976D2"
-                    android:trackTint="#BDBDBD" />
+                    android:thumbTint="?attr/colorPrimaryBrand"
+                    android:trackTint="?attr/trackColor" />
 
             </LinearLayout>
 
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="#F0F0F0" />
+                android:background="?attr/dividerLight" />
 
             <!-- 在最近任务中隐藏 -->
             <LinearLayout
@@ -195,7 +195,7 @@
                         android:layout_height="wrap_content"
                         android:text="不在最近任务列表中显示"
                         android:textSize="12sp"
-                        android:textColor="#9E9E9E"
+                        android:textColor="?attr/textHint"
                         android:layout_marginTop="2dp" />
 
                 </LinearLayout>
@@ -204,8 +204,8 @@
                     android:id="@+id/switch_exclude_recents"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:thumbTint="#1976D2"
-                    android:trackTint="#BDBDBD" />
+                    android:thumbTint="?attr/colorPrimaryBrand"
+                    android:trackTint="?attr/trackColor" />
 
             </LinearLayout>
 
@@ -226,7 +226,7 @@
                 android:text="功能设置"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="16dp" />
 
             <Button
@@ -235,8 +235,8 @@
                 android:layout_height="52dp"
                 android:text="打开样式设置"
                 android:textSize="15sp"
-                android:textColor="#1976D2"
-                android:backgroundTint="#E3F2FD"
+                android:textColor="?attr/colorPrimaryBrand"
+                android:backgroundTint="?attr/btnSecondaryBg"
                 android:stateListAnimator="@null"
                 android:layout_marginBottom="12dp" />
 
@@ -247,7 +247,7 @@
                 android:text="测试：显示红色条（简化版）"
                 android:textSize="15sp"
                 android:textColor="#D32F2F"
-                android:backgroundTint="#FFEBEE"
+                android:backgroundTint="?attr/btnSecondaryBg"
                 android:stateListAnimator="@null" />
 
         </LinearLayout>
@@ -258,7 +258,7 @@
             android:layout_height="wrap_content"
             android:text="提示：启动服务后，Activity将关闭，悬浮窗将在后台运行"
             android:textSize="12sp"
-            android:textColor="#9E9E9E"
+            android:textColor="?attr/textHint"
             android:gravity="center"
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="8dp" />

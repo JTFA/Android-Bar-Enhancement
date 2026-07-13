@@ -105,9 +105,9 @@ public class PermissionCheckActivity extends AppCompatActivity {
         // 卡片容器
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackgroundColor(Color.WHITE);
+        card.setBackgroundColor(resolveThemeColor(R.attr.bgCard));
         GradientDrawable cardBg = new GradientDrawable();
-        cardBg.setColor(Color.WHITE);
+        cardBg.setColor(resolveThemeColor(R.attr.bgCard));
         cardBg.setCornerRadius(dp2px(10));
         card.setBackground(cardBg);
         int padH = dp2px(16), padV = dp2px(14);
@@ -126,7 +126,7 @@ public class PermissionCheckActivity extends AppCompatActivity {
         TextView tvName = new TextView(this);
         tvName.setText(item.name);
         tvName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        tvName.setTextColor(Color.parseColor("#222222"));
+        tvName.setTextColor(resolveThemeColor(R.attr.textPrimary));
         LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
         row1.addView(tvName, nameLp);
 
@@ -142,7 +142,7 @@ public class PermissionCheckActivity extends AppCompatActivity {
         TextView tvDesc = new TextView(this);
         tvDesc.setText(item.desc);
         tvDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        tvDesc.setTextColor(Color.parseColor("#888888"));
+        tvDesc.setTextColor(resolveThemeColor(R.attr.textSecondary));
         LinearLayout.LayoutParams descLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         descLp.topMargin = dp2px(4);
@@ -202,6 +202,12 @@ public class PermissionCheckActivity extends AppCompatActivity {
                 Toast.makeText(this, "悬浮窗权限已授予", Toast.LENGTH_SHORT).show();
             }
         }
+    }
+
+    private int resolveThemeColor(int attrResId) {
+        android.util.TypedValue typedValue = new android.util.TypedValue();
+        getTheme().resolveAttribute(attrResId, typedValue, true);
+        return typedValue.data;
     }
 
     private int dp2px(float dp) {
