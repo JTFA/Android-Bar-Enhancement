@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#F5F5F5">
+    android:background="?attr/dividerColor">
 
     <!-- 固定标题栏 -->
     <LinearLayout
@@ -29,7 +29,7 @@
                 android:text="提示条设置"
                 android:textSize="28sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A1A" />
+                android:textColor="?attr/textPrimary" />
 
             <Button
                 android:id="@+id/btn_save_apply"
@@ -129,7 +129,7 @@
                     android:layout_weight="1"
                     android:text="@string/select_app"
                     android:textSize="15sp"
-                    android:textColor="#1A1A1A" />
+                    android:textColor="?attr/textPrimary" />
 
                 <TextView
                     android:id="@+id/text_click_selected_app"
@@ -190,7 +190,7 @@
                     android:layout_weight="1"
                     android:text="@string/select_app"
                     android:textSize="15sp"
-                    android:textColor="#1A1A1A" />
+                    android:textColor="?attr/textPrimary" />
 
                 <TextView
                     android:id="@+id/text_double_click_selected_app"
@@ -251,7 +251,7 @@
                     android:layout_weight="1"
                     android:text="@string/select_app"
                     android:textSize="15sp"
-                    android:textColor="#1A1A1A" />
+                    android:textColor="?attr/textPrimary" />
 
                 <TextView
                     android:id="@+id/text_long_press_selected_app"
@@ -299,7 +299,7 @@
                 android:layout_height="wrap_content"
                 android:text="宽度: 300dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -318,7 +318,7 @@
                 android:layout_height="wrap_content"
                 android:text="高度: 60dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -336,7 +336,7 @@
                 android:layout_height="wrap_content"
                 android:text="位置 Y: 20dp (距底部)"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -355,7 +355,7 @@
                 android:layout_height="wrap_content"
                 android:text="圆角: 30dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -373,7 +373,7 @@
                 android:layout_height="wrap_content"
                 android:text="长按触发时间: 500ms"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -426,7 +426,7 @@
                     android:layout_weight="1"
                     android:text="启用按下样式变化"
                     android:textSize="15sp"
-                    android:textColor="#1A1A1A" />
+                    android:textColor="?attr/textPrimary" />
 
                 <Switch
                     android:id="@+id/switch_pressed_bar_enabled"
@@ -444,7 +444,7 @@
                 android:layout_height="wrap_content"
                 android:text="按下时宽度: 320dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginTop="12dp"
                 android:layout_marginBottom="8dp" />
 
@@ -464,7 +464,7 @@
                 android:layout_height="wrap_content"
                 android:text="按下时高度: 65dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -482,7 +482,7 @@
                 android:layout_height="wrap_content"
                 android:text="按下时位置Y: 20dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -501,7 +501,7 @@
                 android:layout_height="wrap_content"
                 android:text="按下时圆角: 35dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -519,7 +519,7 @@
                 android:layout_height="wrap_content"
                 android:text="按下时透明度: 0.60"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -536,7 +536,7 @@
                 android:layout_height="wrap_content"
                 android:text="按下时颜色 (RGB)"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <EditText
@@ -558,7 +558,7 @@
                 android:layout_height="wrap_content"
                 android:text="边缘羽化宽度: 15dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -605,7 +605,7 @@
                 android:layout_height="wrap_content"
                 android:text="AI 窗口网页 URL"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <EditText
@@ -625,7 +625,7 @@
                 android:layout_height="wrap_content"
                 android:text="宽度 (dp)"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <EditText
@@ -645,7 +645,7 @@
                 android:layout_height="wrap_content"
                 android:text="高度 (dp)"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <EditText
@@ -666,7 +666,7 @@
                 android:layout_height="wrap_content"
                 android:text="窗口位置 Y: 0 (居中)"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -685,7 +685,7 @@
                 android:layout_height="wrap_content"
                 android:text="窗口圆角: 16dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -704,7 +704,7 @@
                 android:layout_height="wrap_content"
                 android:text="边框宽度: 2dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -721,7 +721,7 @@
                 android:layout_height="wrap_content"
                 android:text="边框颜色 (RGB)"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <EditText
@@ -743,7 +743,7 @@
                 android:layout_height="wrap_content"
                 android:text="边框透明度: 1.00"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -787,7 +787,7 @@
                     android:layout_weight="1"
                     android:text="显示关闭按钮（默认开启）"
                     android:textSize="14sp"
-                    android:textColor="#1A1A1A" />
+                    android:textColor="?attr/textPrimary" />
 
                 <Switch
                     android:id="@+id/switch_show_close_button"
@@ -812,7 +812,7 @@
                     android:layout_weight="1"
                     android:text="显示刷新按钮（默认开启）"
                     android:textSize="14sp"
-                    android:textColor="#1A1A1A" />
+                    android:textColor="?attr/textPrimary" />
 
                 <Switch
                     android:id="@+id/switch_show_refresh_button"
@@ -837,7 +837,7 @@
                     android:layout_weight="1"
                     android:text="显示后退按钮（默认开启）"
                     android:textSize="14sp"
-                    android:textColor="#1A1A1A" />
+                    android:textColor="?attr/textPrimary" />
 
                 <Switch
                     android:id="@+id/switch_show_back_button"
@@ -865,7 +865,7 @@
                 android:layout_height="wrap_content"
                 android:text="小横条透明度: 40%"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -895,7 +895,7 @@
                         android:layout_height="wrap_content"
                         android:text="点击窗口外关闭窗口"
                         android:textSize="14sp"
-                        android:textColor="#1A1A1A" />
+                        android:textColor="?attr/textPrimary" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -934,7 +934,7 @@
                         android:layout_height="wrap_content"
                         android:text="侧边返回手势"
                         android:textSize="14sp"
-                        android:textColor="#1A1A1A" />
+                        android:textColor="?attr/textPrimary" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -980,7 +980,7 @@
                 android:layout_height="wrap_content"
                 android:text="背景样式"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <Spinner
@@ -999,7 +999,7 @@
                 android:layout_height="wrap_content"
                 android:text="AI 窗口模糊半径: 25dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -1030,7 +1030,7 @@
                 android:layout_height="wrap_content"
                 android:text="网页透明度: 80%"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -1047,7 +1047,7 @@
                 android:layout_height="wrap_content"
                 android:text="自定义 CSS（注入到网页）"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <EditText
@@ -1092,7 +1092,7 @@
                 android:layout_height="wrap_content"
                 android:text="窗口上移距离: 300px"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -1111,7 +1111,7 @@
                 android:layout_height="wrap_content"
                 android:text="平移动画时长: 250ms"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -1149,7 +1149,7 @@
                 android:layout_height="wrap_content"
                 android:text="快捷窗口宽度: 350dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -1168,7 +1168,7 @@
                 android:layout_height="wrap_content"
                 android:text="快捷窗口最大高度: 350dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -1187,7 +1187,7 @@
                 android:layout_height="wrap_content"
                 android:text="快捷窗口位置 Y: 0 (居中)"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -1206,7 +1206,7 @@
                 android:layout_height="wrap_content"
                 android:text="边框宽度: 1dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -1224,7 +1224,7 @@
                 android:layout_height="wrap_content"
                 android:text="窗口圆角: 24dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -1242,7 +1242,7 @@
                 android:layout_height="wrap_content"
                 android:text="边框颜色 (RGB)"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <EditText
@@ -1264,7 +1264,7 @@
                 android:layout_height="wrap_content"
                 android:text="边框透明度: 0.10"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -1281,7 +1281,7 @@
                 android:layout_height="wrap_content"
                 android:text="背景样式"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginTop="8dp"
                 android:layout_marginBottom="8dp" />
 
@@ -1301,7 +1301,7 @@
                 android:layout_height="wrap_content"
                 android:text="模糊半径: 20dp"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp"
                 android:visibility="gone" />
 
@@ -1321,7 +1321,7 @@
                 android:layout_height="wrap_content"
                 android:text="叠加色透明度: 70%"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp"
                 android:visibility="gone" />
 
@@ -1341,7 +1341,7 @@
                 android:layout_height="wrap_content"
                 android:text="图标大小: 100%"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginTop="8dp"
                 android:layout_marginBottom="8dp" />
 
@@ -1400,7 +1400,7 @@
                 android:layout_height="wrap_content"
                 android:text="遮罩透明度: 50%"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -1417,7 +1417,7 @@
                 android:layout_height="wrap_content"
                 android:text="遮罩颜色 (RGB)"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <EditText
@@ -1439,7 +1439,7 @@
                 android:layout_height="wrap_content"
                 android:text="遮罩渐变时长: 180ms"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -1484,7 +1484,7 @@
                 android:layout_height="wrap_content"
                 android:text="动画速度: 200ms"
                 android:textSize="14sp"
-                android:textColor="#424242"
+                android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
 
             <SeekBar
@@ -1514,7 +1514,7 @@
                         android:layout_height="wrap_content"
                         android:text="悬浮窗模式"
                         android:textSize="14sp"
-                        android:textColor="#1A1A1A" />
+                        android:textColor="?attr/textPrimary" />
 
                     <TextView
                         android:layout_width="wrap_content"

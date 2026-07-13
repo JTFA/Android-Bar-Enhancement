@@ -86,7 +86,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         rootContainer.setOrientation(LinearLayout.VERTICAL);
-        rootContainer.setBackgroundColor(resolveThemeColor(R.attr.bgPage));
+        rootContainer.setBackgroundColor(resolveThemeColor(R.attr.dividerColor));
 
         // 固定标题栏
         LinearLayout titleBarContainer = new LinearLayout(this);
