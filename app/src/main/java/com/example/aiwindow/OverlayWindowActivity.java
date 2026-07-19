@@ -1588,7 +1588,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         float t = (progress - 0.6f) / 0.4f;
                         currentAlpha = (int)(255 + (expandTargetAlpha - 255) * t);
                     }
-                    if (Math.abs(currentAlpha - lastDrawableAlpha[0]) >= 5) {
+                    if (Math.abs(currentAlpha - lastDrawableAlpha[0]) >= 10) {
                         expandAcrylicBg.updateFillColorAndAlpha(currentAlpha, expandTargetAlpha);
                         lastDrawableAlpha[0] = currentAlpha;
                     }
@@ -1739,7 +1739,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     } else {
                         currentAlpha = 255; // 后70%保持完全不透明
                     }
-                    if (Math.abs(currentAlpha - lastDrawableAlpha[0]) >= 5) {
+                    if (Math.abs(currentAlpha - lastDrawableAlpha[0]) >= 10) {
                         acrylicBg.updateFillColorAndAlpha(currentAlpha, collapseTargetAlpha);
                         lastDrawableAlpha[0] = currentAlpha;
                     }
