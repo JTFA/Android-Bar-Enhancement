@@ -86,6 +86,11 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_LONG_PRESS_APP_NAME = "long_press_app_name";
     private static final String KEY_LONG_PRESS_APP_CLASS = "long_press_app_class";
     
+    // 窗口打开开关
+    private static final String KEY_CLICK_OPEN_IN_WINDOW = "click_open_in_window";
+    private static final String KEY_DOUBLE_CLICK_OPEN_IN_WINDOW = "double_click_open_in_window";
+    private static final String KEY_LONG_PRESS_OPEN_IN_WINDOW = "long_press_open_in_window";
+    
     // 行为类型常量
     private static final String ACTION_NONE = "none";
     private static final String ACTION_APP = "app";
@@ -188,6 +193,8 @@ public class SettingsActivity extends AppCompatActivity {
     private String longPressAppPackage = "";
     private String longPressAppName = "";
     private String longPressAppClass = "";
+    private LinearLayout layoutClickOpenInWindow, layoutDoubleClickOpenInWindow, layoutLongPressOpenInWindow;
+    private Switch switchClickOpenInWindow, switchDoubleClickOpenInWindow, switchLongPressOpenInWindow;
     private boolean isAppPickerSelecting = false;  // 防止重复弹出/选择的标记
     private String appPickerTarget = ""; // 当前正在选择的应用所属手势
     
@@ -336,6 +343,14 @@ public class SettingsActivity extends AppCompatActivity {
         spinnerLongPressAction = findViewById(R.id.spinner_long_press_action);
         layoutLongPressApp = findViewById(R.id.layout_long_press_app);
         textLongPressSelectedApp = findViewById(R.id.text_long_press_selected_app);
+        
+        // 窗口打开开关
+        layoutClickOpenInWindow = findViewById(R.id.layout_click_open_in_window);
+        switchClickOpenInWindow = findViewById(R.id.switch_click_open_in_window);
+        layoutDoubleClickOpenInWindow = findViewById(R.id.layout_double_click_open_in_window);
+        switchDoubleClickOpenInWindow = findViewById(R.id.switch_double_click_open_in_window);
+        layoutLongPressOpenInWindow = findViewById(R.id.layout_long_press_open_in_window);
+        switchLongPressOpenInWindow = findViewById(R.id.switch_long_press_open_in_window);
         
         // 输入法避让控件
         seekKeyboardOffset = findViewById(R.id.seek_keyboard_offset);
@@ -549,6 +564,11 @@ public class SettingsActivity extends AppCompatActivity {
         } else {
             textLongPressSelectedApp.setText(R.string.not_selected);
         }
+        
+        // 加载窗口打开开关
+        switchClickOpenInWindow.setChecked(preferences.getBoolean(KEY_CLICK_OPEN_IN_WINDOW, false));
+        switchDoubleClickOpenInWindow.setChecked(preferences.getBoolean(KEY_DOUBLE_CLICK_OPEN_IN_WINDOW, false));
+        switchLongPressOpenInWindow.setChecked(preferences.getBoolean(KEY_LONG_PRESS_OPEN_IN_WINDOW, false));
         
         updateAppSelectorVisibility();
         
@@ -783,6 +803,11 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putString(KEY_LONG_PRESS_APP_NAME, longPressAppName);
         editor.putString(KEY_LONG_PRESS_APP_CLASS, longPressAppClass);
         
+        // 保存窗口打开开关
+        editor.putBoolean(KEY_CLICK_OPEN_IN_WINDOW, switchClickOpenInWindow.isChecked());
+        editor.putBoolean(KEY_DOUBLE_CLICK_OPEN_IN_WINDOW, switchDoubleClickOpenInWindow.isChecked());
+        editor.putBoolean(KEY_LONG_PRESS_OPEN_IN_WINDOW, switchLongPressOpenInWindow.isChecked());
+        
         // 保存输入法避让设置
         editor.putInt(KEY_KEYBOARD_OFFSET, seekKeyboardOffset.getProgress());
         editor.putInt(KEY_KEYBOARD_ANIM_DURATION, seekKeyboardAnimDuration.getProgress());
@@ -933,6 +958,9 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("long_press_app_package", longPressAppPackage);
         sizeIntent.putExtra("long_press_app_name", longPressAppName);
         sizeIntent.putExtra("long_press_app_class", longPressAppClass);
+        sizeIntent.putExtra("click_open_in_window", switchClickOpenInWindow.isChecked());
+        sizeIntent.putExtra("double_click_open_in_window", switchDoubleClickOpenInWindow.isChecked());
+        sizeIntent.putExtra("long_press_open_in_window", switchLongPressOpenInWindow.isChecked());
         sizeIntent.putExtra("use_expand_directly", switchUseExpandDirectly.isChecked());
         startService(sizeIntent);
         
@@ -1649,6 +1677,9 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("long_press_app_package", longPressAppPackage);
         sizeIntent.putExtra("long_press_app_name", longPressAppName);
         sizeIntent.putExtra("long_press_app_class", longPressAppClass);
+        sizeIntent.putExtra("click_open_in_window", switchClickOpenInWindow.isChecked());
+        sizeIntent.putExtra("double_click_open_in_window", switchDoubleClickOpenInWindow.isChecked());
+        sizeIntent.putExtra("long_press_open_in_window", switchLongPressOpenInWindow.isChecked());
         sizeIntent.putExtra("use_expand_directly", switchUseExpandDirectly.isChecked());
         startService(sizeIntent);
         
@@ -2134,6 +2165,9 @@ public class SettingsActivity extends AppCompatActivity {
         intent.putExtra("long_press_app_package", longPressAppPackage);
         intent.putExtra("long_press_app_name", longPressAppName);
         intent.putExtra("long_press_app_class", longPressAppClass);
+        intent.putExtra("click_open_in_window", switchClickOpenInWindow.isChecked());
+        intent.putExtra("double_click_open_in_window", switchDoubleClickOpenInWindow.isChecked());
+        intent.putExtra("long_press_open_in_window", switchLongPressOpenInWindow.isChecked());
         startService(intent);
     }
     
@@ -2283,6 +2317,9 @@ public class SettingsActivity extends AppCompatActivity {
         layoutClickApp.setVisibility(ACTION_APP.equals(clickAction) ? View.VISIBLE : View.GONE);
         layoutDoubleClickApp.setVisibility(ACTION_APP.equals(doubleClickAction) ? View.VISIBLE : View.GONE);
         layoutLongPressApp.setVisibility(ACTION_APP.equals(longPressAction) ? View.VISIBLE : View.GONE);
+        layoutClickOpenInWindow.setVisibility(ACTION_APP.equals(clickAction) ? View.VISIBLE : View.GONE);
+        layoutDoubleClickOpenInWindow.setVisibility(ACTION_APP.equals(doubleClickAction) ? View.VISIBLE : View.GONE);
+        layoutLongPressOpenInWindow.setVisibility(ACTION_APP.equals(longPressAction) ? View.VISIBLE : View.GONE);
     }
     
     @Override

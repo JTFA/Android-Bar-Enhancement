@@ -1160,7 +1160,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 bundle.putInt("android.activity.windowingMode", 100);
                 startActivity(launchIntent, bundle);
             } else {
-                startActivity(launchIntent);
+                Bundle bundle = new Bundle();
+                bundle.putInt("android.activity.windowingMode", 5);
+                startActivity(launchIntent, bundle);
             }
             Log.d(TAG, "已打开快捷方式: " + item.getName());
         } catch (android.content.ActivityNotFoundException e) {

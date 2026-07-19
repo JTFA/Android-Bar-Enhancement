@@ -215,6 +215,11 @@ public class FloatWindowService extends Service {
     private String longPressAppName = "";
     private String longPressAppClass = "";
 
+    // 窗口打开开关（使用系统小窗打开应用）
+    private boolean clickOpenInWindow = false;
+    private boolean doubleClickOpenInWindow = false;
+    private boolean longPressOpenInWindow = false;
+
     // 点击窗口外关闭窗口设置
     private boolean closeOnOutsideClick = true; // 默认开启
 
@@ -712,6 +717,11 @@ public class FloatWindowService extends Service {
                 longPressAppName = intent.getStringExtra("long_press_app_name");
                 longPressAppClass = intent.getStringExtra("long_press_app_class");
             }
+            if (intent.hasExtra("click_open_in_window")) {
+                clickOpenInWindow = intent.getBooleanExtra("click_open_in_window", false);
+                doubleClickOpenInWindow = intent.getBooleanExtra("double_click_open_in_window", false);
+                longPressOpenInWindow = intent.getBooleanExtra("long_press_open_in_window", false);
+            }
         }
         // 处理输入法避让设置更新
         else if (intent != null && "UPDATE_KEYBOARD_SETTINGS".equals(intent.getAction())) {
@@ -806,6 +816,10 @@ public class FloatWindowService extends Service {
                 longPressAppPackage = intent.getStringExtra("long_press_app_package");
                 longPressAppName = intent.getStringExtra("long_press_app_name");
                 longPressAppClass = intent.getStringExtra("long_press_app_class");
+
+                clickOpenInWindow = intent.getBooleanExtra("click_open_in_window", clickOpenInWindow);
+                doubleClickOpenInWindow = intent.getBooleanExtra("double_click_open_in_window", doubleClickOpenInWindow);
+                longPressOpenInWindow = intent.getBooleanExtra("long_press_open_in_window", longPressOpenInWindow);
 
                 Log.d(TAG, "触发行为配置已更新: click=" + clickAction + " double=" + doubleClickAction + " long=" + longPressAction);
             }
@@ -1493,8 +1507,9 @@ public class FloatWindowService extends Service {
             return;
         } else if (ACTION_APP.equals(action)) {
             if (!TextUtils.isEmpty(pkg) && !TextUtils.isEmpty(cls)) {
-                launchApp(pkg, name, cls);
-                Log.d(TAG, gesture + " 行为：打开应用 " + name);
+                boolean openInWindow = getGestureOpenInWindow(gesture);
+                launchApp(pkg, name, cls, openInWindow);
+                Log.d(TAG, gesture + " 行为：打开应用 " + name + (openInWindow ? " (小窗)" : ""));
             } else {
                 Log.d(TAG, gesture + " 行为：未配置应用");
             }
@@ -1560,9 +1575,19 @@ public class FloatWindowService extends Service {
     }
 
     /**
+     * 获取指定手势的窗口打开设置
+     */
+    private boolean getGestureOpenInWindow(String gesture) {
+        if ("click".equals(gesture)) return clickOpenInWindow;
+        else if ("double_click".equals(gesture)) return doubleClickOpenInWindow;
+        else if ("long_press".equals(gesture)) return longPressOpenInWindow;
+        return false;
+    }
+
+    /**
      * 打开指定应用
      */
-    private void launchApp(String appPackage, String appName, String appClass) {
+    private void launchApp(String appPackage, String appName, String appClass, boolean openInWindow) {
         if (TextUtils.isEmpty(appPackage) || TextUtils.isEmpty(appClass)) {
             Log.d(TAG, "未选择要打开的应用");
             return;
@@ -1573,8 +1598,16 @@ public class FloatWindowService extends Service {
             launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
             launchIntent.setClassName(appPackage, appClass);
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-            startActivity(launchIntent);
-            Log.d(TAG, "已打开应用: " + appName);
+            if (openInWindow) {
+                Bundle bundle = new Bundle();
+                bundle.putInt("android.activity.windowingMode", 100);
+                startActivity(launchIntent, bundle);
+            } else {
+                Bundle bundle = new Bundle();
+                bundle.putInt("android.activity.windowingMode", 5);
+                startActivity(launchIntent, bundle);
+            }
+            Log.d(TAG, "已打开应用: " + appName + (openInWindow ? " (小窗)" : ""));
         } catch (Exception e) {
             Log.e(TAG, "打开应用失败: " + appName, e);
         }
@@ -1584,7 +1617,7 @@ public class FloatWindowService extends Service {
      * 单击提示条：打开已选择的第三方应用（兼容旧版，保留引用）
      */
     private void launchClickApp() {
-        launchApp(clickAppPackage, clickAppName, clickAppClass);
+        launchApp(clickAppPackage, clickAppName, clickAppClass, clickOpenInWindow);
     }
 
     /**
@@ -4869,7 +4902,9 @@ public class FloatWindowService extends Service {
                 bundle.putInt("android.activity.windowingMode", 100);
                 startActivity(launchIntent, bundle);
             } else {
-                startActivity(launchIntent);
+                Bundle bundle = new Bundle();
+                bundle.putInt("android.activity.windowingMode", 5);
+                startActivity(launchIntent, bundle);
             }
             Log.d(TAG, "已打开快捷方式: " + item.getName());
 
@@ -6848,6 +6883,11 @@ public class FloatWindowService extends Service {
             longPressAppPackage = prefs.getString("long_press_app_package", "");
             longPressAppName = prefs.getString("long_press_app_name", "");
             longPressAppClass = prefs.getString("long_press_app_class", "");
+
+            // 加载窗口打开开关
+            clickOpenInWindow = prefs.getBoolean("click_open_in_window", false);
+            doubleClickOpenInWindow = prefs.getBoolean("double_click_open_in_window", false);
+            longPressOpenInWindow = prefs.getBoolean("long_press_open_in_window", false);
 
             // 加载动画速度
             animationDuration = prefs.getInt("anim_duration", animationDuration);

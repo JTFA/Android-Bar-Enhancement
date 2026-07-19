@@ -142,6 +142,33 @@
 
             </LinearLayout>
 
+            <!-- 单击窗口打开开关 -->
+            <LinearLayout
+                android:id="@+id/layout_click_open_in_window"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="8dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="窗口打开"
+                    android:textSize="14sp"
+                    android:textColor="?attr/textPrimary" />
+
+                <Switch
+                    android:id="@+id/switch_click_open_in_window"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="?attr/colorPrimaryBrand"
+                    android:trackTint="#BDBDBD" />
+
+            </LinearLayout>
+
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
@@ -203,6 +230,33 @@
 
             </LinearLayout>
 
+            <!-- 双击窗口打开开关 -->
+            <LinearLayout
+                android:id="@+id/layout_double_click_open_in_window"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="8dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="窗口打开"
+                    android:textSize="14sp"
+                    android:textColor="?attr/textPrimary" />
+
+                <Switch
+                    android:id="@+id/switch_double_click_open_in_window"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="?attr/colorPrimaryBrand"
+                    android:trackTint="#BDBDBD" />
+
+            </LinearLayout>
+
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
@@ -261,6 +315,33 @@
                     android:textSize="14sp"
                     android:textColor="?attr/textSecondary"
                     android:gravity="end" />
+
+            </LinearLayout>
+
+            <!-- 长按窗口打开开关 -->
+            <LinearLayout
+                android:id="@+id/layout_long_press_open_in_window"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="8dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="窗口打开"
+                    android:textSize="14sp"
+                    android:textColor="?attr/textPrimary" />
+
+                <Switch
+                    android:id="@+id/switch_long_press_open_in_window"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="?attr/colorPrimaryBrand"
+                    android:trackTint="#BDBDBD" />
 
             </LinearLayout>
 
