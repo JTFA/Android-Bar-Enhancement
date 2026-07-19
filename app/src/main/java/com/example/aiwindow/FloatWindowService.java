@@ -18,6 +18,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
@@ -4860,7 +4861,16 @@ public class FloatWindowService extends Service {
 
         try {
             Intent launchIntent = createShortcutLaunchIntent(item);
-            startActivity(launchIntent);
+            // 检查是否使用系统小窗打开
+            android.content.SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
+            ShortcutLaunchConfig config = ShortcutLaunchConfig.load(prefs, item.getId());
+            if (config.openInWindow) {
+                Bundle bundle = new Bundle();
+                bundle.putInt("android.activity.windowingMode", 100);
+                startActivity(launchIntent, bundle);
+            } else {
+                startActivity(launchIntent);
+            }
             Log.d(TAG, "已打开快捷方式: " + item.getName());
 
             // 打开应用后收起快捷方式窗口

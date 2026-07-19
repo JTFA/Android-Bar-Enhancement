@@ -672,6 +672,37 @@ public class ShortcutEditActivity extends AppCompatActivity {
         configTitle.setPadding(0, dpToPx(16), 0, dpToPx(12));
         formLayout.addView(configTitle);
 
+        // 窗口打开开关
+        LinearLayout windowRow = new LinearLayout(this);
+        windowRow.setOrientation(LinearLayout.HORIZONTAL);
+        windowRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        windowRow.setPadding(0, 0, 0, dpToPx(12));
+
+        TextView windowLabel = new TextView(this);
+        windowLabel.setText("窗口打开");
+        windowLabel.setTextSize(14);
+        windowLabel.setTextColor(resolveThemeColor(R.attr.textPrimary));
+        LinearLayout.LayoutParams windowLabelLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        windowLabel.setLayoutParams(windowLabelLp);
+        windowRow.addView(windowLabel);
+
+        final Switch windowSwitch = new Switch(this);
+        windowSwitch.setChecked(launchConfig.openInWindow);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            windowSwitch.setThumbTintList(android.content.res.ColorStateList.valueOf(resolveThemeColor(R.attr.colorPrimaryBrand)));
+            windowSwitch.setTrackTintList(android.content.res.ColorStateList.valueOf(resolveThemeColor(R.attr.trackColor)));
+        }
+        windowRow.addView(windowSwitch);
+        formLayout.addView(windowRow);
+
+        TextView windowHint = new TextView(this);
+        windowHint.setText("开启后使用系统小窗（自由窗口）打开应用");
+        windowHint.setTextSize(12);
+        windowHint.setTextColor(resolveThemeColor(R.attr.textHint));
+        windowHint.setPadding(0, 0, 0, dpToPx(12));
+        formLayout.addView(windowHint);
+
         // 启动模式选择
         final String[] modes = {ShortcutLaunchConfig.MODE_URL, ShortcutLaunchConfig.MODE_INTENT, ShortcutLaunchConfig.MODE_EXPLICIT};
         final String[] modeLabels = {ShortcutLaunchConfig.getModeDisplayName(ShortcutLaunchConfig.MODE_URL),
@@ -1063,6 +1094,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 }
             }
 
+            launchConfig.openInWindow = windowSwitch.isChecked();
             ShortcutLaunchConfig.save(getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit(), shortcutId, launchConfig).apply();
 
             refreshList();

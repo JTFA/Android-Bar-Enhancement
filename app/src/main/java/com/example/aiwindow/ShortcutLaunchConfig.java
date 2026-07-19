@@ -20,6 +20,7 @@ public class ShortcutLaunchConfig {
     public String uri = "";
     public String targetPackage = "";
     public String targetClass = "";
+    public boolean openInWindow = false; // 是否使用系统小窗打开
     
     // 支持多个 Extra
     public java.util.List<ExtraItem> extras = new java.util.ArrayList<>();
@@ -100,6 +101,7 @@ public class ShortcutLaunchConfig {
         c.uri = json.optString("uri", "");
         c.targetPackage = json.optString("targetPackage", "");
         c.targetClass = json.optString("targetClass", "");
+        c.openInWindow = json.optBoolean("openInWindow", false);
         
         // 尝试读取 extras 列表
         if (json.has("extras")) {
@@ -141,6 +143,7 @@ public class ShortcutLaunchConfig {
             json.put("uri", uri);
             json.put("targetPackage", targetPackage);
             json.put("targetClass", targetClass);
+            json.put("openInWindow", openInWindow);
             
             // 保存 extras 列表
             org.json.JSONArray extrasArray = new org.json.JSONArray();

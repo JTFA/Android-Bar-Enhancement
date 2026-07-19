@@ -1152,7 +1152,16 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
         try {
             Intent launchIntent = createShortcutLaunchIntent(item);
-            startActivity(launchIntent);
+            // 检查是否使用系统小窗打开
+            SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
+            ShortcutLaunchConfig config = ShortcutLaunchConfig.load(prefs, item.getId());
+            if (config.openInWindow) {
+                Bundle bundle = new Bundle();
+                bundle.putInt("android.activity.windowingMode", 100);
+                startActivity(launchIntent, bundle);
+            } else {
+                startActivity(launchIntent);
+            }
             Log.d(TAG, "已打开快捷方式: " + item.getName());
         } catch (android.content.ActivityNotFoundException e) {
             Log.w(TAG, "URL Scheme 打开失败，尝试打开应用主界面: " + item.getName(), e);
