@@ -866,8 +866,10 @@ public class FloatWindowService extends Service {
         barLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+//                | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                 | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS; // 允许布局超出屏幕范围
+
+
         barLayoutParams.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
         // 容器尺寸取提示条和覆盖层中较大的，确保覆盖层不会被 Surface 裁切
         if (currentWidth != ViewGroup.LayoutParams.MATCH_PARENT) {
@@ -926,6 +928,8 @@ public class FloatWindowService extends Service {
         );
         bar.setBackground(background);
 
+        // 新增：开启硬件图层缓存，减少 GPU 合成开销
+        bar.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         // 设置内边距
         int padding = dpToPx(16);
         bar.setPadding(padding, 0, padding, 0);
@@ -5006,7 +5010,7 @@ public class FloatWindowService extends Service {
             barLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                     | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                     | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                    | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+//                    | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                     | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
             barLayoutParams.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
             if (currentWidth != ViewGroup.LayoutParams.MATCH_PARENT) {
@@ -5277,7 +5281,7 @@ public class FloatWindowService extends Service {
             barLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                     | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                     | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                    | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+//                    | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                     | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
             barLayoutParams.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
             // 容器尺寸取提示条和覆盖层中较大的，确保覆盖层不会被 Surface 裁切
