@@ -159,7 +159,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // ─── 视图 ───
     private FrameLayout rootLayout;
     private FrameLayout contentContainer;
-    private View blurBackgroundView; // 独立模糊背景层（仅显示模糊桌面，不含子内容）
+//    private View blurBackgroundView; // 独立模糊背景层（仅显示模糊桌面，不含子内容）
     private View overlayView; // 背景遮罩视图
     private WebView webView;
     private ImageView backButtonRef;
@@ -174,6 +174,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     
     // ─── WebView 状态保持 ───
     private static WebView sPersistentWebView; // 静态 WebView，跨 Activity 生命周期保持
+    private static boolean sWebViewClientInitialized = false; // ← 新增：标记 Client 是否已初始化
     
     // ─── 模糊窗口渐变标志 ───
     private boolean blurWindowFadeInSent = false; // 标记是否已发送模糊窗口渐变显示广播
@@ -729,13 +730,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private void addAiContent(FrameLayout container) {
         // 检查是否有持久化的 WebView
         if (sPersistentWebView == null) {
-            // 首次创建，新建 WebView
+            // ===== 首次创建：新建 WebView 并初始化所有设置 =====
             sPersistentWebView = new WebView(this.getApplicationContext());
             sPersistentWebView.setLayoutParams(new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
 
-            // Activity 中的 WebView 可以正常接收输入法输入，无需 IME 代理
             WebSettings settings = sPersistentWebView.getSettings();
             settings.setJavaScriptEnabled(true);
             settings.setDomStorageEnabled(true);
@@ -752,28 +752,17 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 settings.setAllowUniversalAccessFromFileURLs(true);
             }
 
-//            // 深色模式
-//            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-//                if (isDarkMode()) {
-//                    settings.setForceDark(FORCE_DARK_ON);
-//                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-//                        settings.setAlgorithmicDarkeningAllowed(true);
-//                    }
-//                }
-//            }
-            // 深色模式完全由 CSS filter 处理，禁用 Android 内置暗化
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 settings.setForceDark(FORCE_DARK_OFF);
             }
 
-            // WebChromeClient（权限 + 文件选择）
+            // ===== 设置 WebChromeClient（权限 + 文件选择） =====
             sPersistentWebView.setWebChromeClient(new WebChromeClient() {
                 @Override
                 public void onPermissionRequest(PermissionRequest request) {
                     try { request.grant(request.getResources()); } catch (Exception ignored) {}
                 }
 
-                // Android 5.0+ 文件选择
                 @Override
                 public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
                                                  FileChooserParams fileChooserParams) {
@@ -782,55 +771,18 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 }
             });
 
-            // WebViewClient
+            // ===== 设置 WebViewClient =====
             sPersistentWebView.setWebViewClient(new WebViewClient() {
                 @Override
                 public void onPageStarted(WebView view, String url, Bitmap favicon) {
                     super.onPageStarted(view, url, favicon);
-//                    view.getSettings().setForceDark(isDarkMode() ? FORCE_DARK_ON : FORCE_DARK_OFF);
-
                 }
 
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     super.onPageFinished(view, url);
                     updateBackButtonState();
-                    // 页面加载完成后按顺序注入所有 CSS（确保 DOM 已准备好）
-
-                    // 1. 根据"网页背景透明"设置决定是否注入透明背景 CSS
-                    if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
-                        injectTransparentBackground(view);
-                    }else{
-                        removeTransparentBackground(view);
-                    }
-                    // 3. 最后注入深色模式 CSS（文字反色，图片不反色）- 必须最后注入确保不被覆盖
-                    injectDarkModeCSS(view);
-                    // 2. 再注入自定义 CSS
-                    if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
-                        injectCustomCss(view);
-                    }
-
-
-                    // 注入 JavaScript 检测输入框聚焦
-                    injectInputFocusScript(view);
-
-                    // 等待 CSS 生效后设置 WebView 背景
-                    // 如果开启了"网页背景透明"，WebView 保持透明
-                    // 否则根据 aiOverlayAlpha 决定透明度
-                    if (webpageBgTransparent) {
-                        view.setBackgroundColor(Color.TRANSPARENT);
-                        Log.d(TAG, "页面加载完成，网页背景透明已启用，WebView 背景设为透明");
-                    } else {
-                        // 未开启网页背景透明，WebView 背景跟随 aiOverlayAlpha
-                        if (aiStyle != 0 && aiOverlayAlpha < 255) {
-                            int alpha = (int)(aiOverlayAlpha / 255.0f * 255);
-                            view.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
-                            Log.d(TAG, "页面加载完成，网页背景透明未启用，WebView 背景透明度=" + alpha);
-                        } else {
-                            view.setBackgroundColor(Color.TRANSPARENT);
-                            Log.d(TAG, "页面加载完成，WebView 背景设为透明（不透明样式）");
-                        }
-                    }
+                    applyCssAndBackground(view);  // 统一调用
                 }
 
                 @Override
@@ -840,137 +792,36 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 }
             });
 
-            // Activity 的 WebView 可以使用原生 ActionMode，无需 JS 选中
+            // 其它 WebView 基础设置
             sPersistentWebView.setFocusable(true);
             sPersistentWebView.setFocusableInTouchMode(true);
-
-            // 添加 JavaScript 桥接接口
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
-                sPersistentWebView.addJavascriptInterface(new Object() {
-                    @android.webkit.JavascriptInterface
-                    public void downloadFile(String base64Data, String mimetype) {
-                        runOnUiThread(() -> saveBlobFile(base64Data, mimetype));
-                    }
-
-                    @android.webkit.JavascriptInterface
-                    public void onInputFocus() {
-                        // 空实现——OverlayWindowActivity 无需 IME 代理
-                    }
-
-                    @android.webkit.JavascriptInterface
-                    public void onInputBlur() {
-                        // 空实现——OverlayWindowActivity 无需 IME 代理
-                    }
-                }, "AndroidBridge");
-            }
-
-            // WebView 保持透明背景
             sPersistentWebView.setBackgroundColor(Color.TRANSPARENT);
             sPersistentWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
-            // 添加触摸监听器检测输入框聚焦
-            setupWebViewInputDetection(sPersistentWebView);
+            // 标记 Client 已初始化
+            sWebViewClientInitialized = true;
 
             // 首次加载 URL
             Log.d(TAG, "首次创建 WebView，加载 URL: " + aiUrl);
             sPersistentWebView.loadUrl(aiUrl);
+
         } else {
-            // 复用已有 WebView
-            Log.d(TAG, "复用已有 WebView，当前 URL: " + sPersistentWebView.getUrl());
-            // 从父容器中移除（如果还在其他容器中）
+            // ===== 复用已有 WebView（跳过 Client 设置） =====
+            Log.d(TAG, "复用已有 WebView，URL: " + sPersistentWebView.getUrl());
             android.view.ViewParent parent = sPersistentWebView.getParent();
-
-
             if (parent instanceof ViewGroup) {
                 ((ViewGroup) parent).removeView(sPersistentWebView);
             }
-            // 如果是亚克力/液态玻璃模式且开启了网页背景透明，立即注入透明背景 CSS
-            if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
-                injectTransparentBackground(sPersistentWebView);
-            }else{
-                removeTransparentBackground(sPersistentWebView);
-            }
-            // 最后注入深色模式 CSS（确保不被覆盖）
-            injectDarkModeCSS(sPersistentWebView);
-            // 注入自定义 CSS
-            if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
-                injectCustomCss(sPersistentWebView);
-            }
 
-            // —— 新增：重新设置 WebChromeClient，确保文件上传回调使用当前 Activity 实例 ——
-            sPersistentWebView.setWebChromeClient(new WebChromeClient() {
-                @Override
-                public void onPermissionRequest(PermissionRequest request) {
-                    try { request.grant(request.getResources()); } catch (Exception ignored) {}
-                }
-
-                // Android 5.0+ 文件选择
-                @Override
-                public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
-                                                 FileChooserParams fileChooserParams) {
-                    openFileChooser(filePathCallback, fileChooserParams);
-                    return true;
-                }
-            });
-
-            // —— 重新设置 WebViewClient，确保回调使用当前 Activity 实例 ——
-            sPersistentWebView.setWebViewClient(new WebViewClient() {
-                @Override
-                public void onPageStarted(WebView view, String url, Bitmap favicon) {
-                    super.onPageStarted(view, url, favicon);
-                }
-
-                @Override
-                public void onPageFinished(WebView view, String url) {
-                    super.onPageFinished(view, url);
-                    updateBackButtonState();
-                    // 页面加载完成后按顺序注入所有 CSS（确保 DOM 已准备好）
-
-                    // 1. 根据"网页背景透明"设置决定是否注入透明背景 CSS
-                    if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && webpageBgTransparent) {
-                        injectTransparentBackground(view);
-                    }else{
-                        removeTransparentBackground(view);
-                    }
-                    // 3. 最后注入深色模式 CSS（文字反色，图片不反色）- 必须最后注入确保不被覆盖
-                    injectDarkModeCSS(view);
-                    // 2. 再注入自定义 CSS
-                    if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
-                        injectCustomCss(view);
-                    }
-
-                    // 注入 JavaScript 检测输入框聚焦
-                    injectInputFocusScript(view);
-
-                    // 等待 CSS 生效后设置 WebView 背景
-                    if (webpageBgTransparent) {
-                        view.setBackgroundColor(Color.TRANSPARENT);
-                        Log.d(TAG, "页面加载完成，网页背景透明已启用，WebView 背景设为透明");
-                    } else {
-                        if (aiStyle != 0 && aiOverlayAlpha < 255) {
-                            int alpha = (int)(aiOverlayAlpha / 255.0f * 255);
-                            view.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
-                            Log.d(TAG, "页面加载完成，网页背景透明未启用，WebView 背景透明度=" + alpha);
-                        } else {
-                            view.setBackgroundColor(Color.TRANSPARENT);
-                            Log.d(TAG, "页面加载完成，WebView 背景设为透明（不透明样式）");
-                        }
-                    }
-                }
-
-                @Override
-                public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
-                    super.doUpdateVisitedHistory(view, url, isReload);
-                    updateBackButtonState();
-                }
-            });
-
+            // 不需要重新设置 WebChromeClient / WebViewClient，因为已经在首次创建时设置好了
+            // 只需更新 CSS/背景（因为页面可能已经变化，或者需要应用当前的透明/暗色设置）
+            applyCssAndBackground(sPersistentWebView);
         }
 
-
+        // 将 webView 引用指向静态实例
         webView = sPersistentWebView;
 
-        // 设置圆角裁剪（连续曲率 Path）
+        // 设置圆角裁剪（每次复用都需要重新应用，因为尺寸可能变化）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             final int crPx = dpToPx(cornerRadius);
             webView.post(() -> {
@@ -989,33 +840,48 @@ public class OverlayWindowActivity extends AppCompatActivity {
             });
         }
 
-//        // AI 窗口：应用网页透明度设置
-//        // 当开启"网页背景透明"时，aiOverlayAlpha 仅控制 contentContainer 背景透明度
-//        // 当关闭"网页背景透明"时，aiOverlayAlpha 同时控制 contentContainer 和 WebView 透明度
-//        if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
-//            if (webpageBgTransparent) {
-//                Log.d(TAG, "启用亚克力/液态玻璃模式 + 网页背景透明，aiOverlayAlpha 仅控制窗口背景透明度");
-//            } else {
-//                Log.d(TAG, "启用亚克力/液态玻璃模式，aiOverlayAlpha 同时控制窗口背景和 WebView 透明度");
-//            }
-//        }
-
-        // WebView 背景透明度处理
-        // 如果开启了"网页背景透明"，WebView 始终保持透明（网页背景通过CSS透明化）
-        // 否则 WebView 透明度跟随 aiOverlayAlpha
-        if (webpageBgTransparent) {
-            webView.setBackgroundColor(Color.TRANSPARENT);
-        } else if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
-            int alpha = (int)(aiOverlayAlpha / 255.0f * 255);
-            webView.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
-        } else {
-            webView.setBackgroundColor(Color.TRANSPARENT);
-        }
-
-        // 设置下载监听器
+        // 设置下载监听器（复用已有 WebView 时也需要重新设置，因为 DownloadListener 会持有 Activity 引用）
         setupDownloadListener();
 
+        // 将 WebView 添加到容器
         container.addView(webView);
+    }
+
+    /**
+     * 对 WebView 应用当前的 CSS 和背景设置（透明模式、深色模式、自定义 CSS）
+     * 在页面加载完成或复用 WebView 时调用
+     */
+    private void applyCssAndBackground(WebView view) {
+        if (view == null) return;
+
+        // 1. 透明背景 CSS（仅 AI 窗口且亚克力/液态玻璃模式）
+        if (windowType == WINDOW_TYPE_AI && aiStyle != 0) {
+            if (webpageBgTransparent) {
+                injectTransparentBackground(view);
+            } else {
+                removeTransparentBackground(view);
+            }
+        }
+
+        // 2. 深色模式 CSS（文字反色）
+        injectDarkModeCSS(view);
+
+        // 3. 自定义 CSS
+        if (windowType == WINDOW_TYPE_AI && !TextUtils.isEmpty(customCss)) {
+            injectCustomCss(view);
+        }
+
+        // 4. 设置 WebView 背景透明度
+        if (webpageBgTransparent) {
+            view.setBackgroundColor(Color.TRANSPARENT);
+            Log.d(TAG, "网页背景透明已启用，WebView 背景透明");
+        } else if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
+            int alpha = (int)(aiOverlayAlpha / 255.0f * 255);
+            view.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
+            Log.d(TAG, "WebView 背景透明度=" + alpha);
+        } else {
+            view.setBackgroundColor(Color.TRANSPARENT);
+        }
     }
 
     // ─── 快捷方式内容 ───
@@ -1622,6 +1488,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // ═══════════════════════════════════════════════════════════
 
     private void performExpandAnimation() {
+
         // 计算初始变换
         initScaleX = (float) startWidth / targetWidth;
 //        initScaleY = (float) startHeight / targetHeight;
@@ -1645,15 +1512,16 @@ public class OverlayWindowActivity extends AppCompatActivity {
         contentContainer.setTranslationX(initTranslationX);
         contentContainer.setTranslationY(initTranslationY);
 
+        contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         // blurBackgroundView 同步初始状态
-        if (blurBackgroundView != null) {
-            blurBackgroundView.setPivotX(targetWidth / 2f);
-            blurBackgroundView.setPivotY(targetHeight / 2f);
-            blurBackgroundView.setScaleX(initScaleX);
-            blurBackgroundView.setScaleY(initScaleY);
-            blurBackgroundView.setTranslationX(initTranslationX);
-            blurBackgroundView.setTranslationY(initTranslationY);
-        }
+//        if (blurBackgroundView != null) {
+//            blurBackgroundView.setPivotX(targetWidth / 2f);
+//            blurBackgroundView.setPivotY(targetHeight / 2f);
+//            blurBackgroundView.setScaleX(initScaleX);
+//            blurBackgroundView.setScaleY(initScaleY);
+//            blurBackgroundView.setTranslationX(initTranslationX);
+//            blurBackgroundView.setTranslationY(initTranslationY);
+//        }
 
         if (webView != null) {
             webView.setAlpha(0f);
@@ -1667,6 +1535,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
         final int expandTargetAlpha = (windowType == WINDOW_TYPE_AI) ? aiOverlayAlpha : shortcutOverlayAlpha;
 
         final long startNanos = System.nanoTime();
+
+        // 在 doFrame 回调外部（但仍在方法内）声明局部数组：
+        final float[] lastDrawableAlpha = { -1f };
+        final float[] lastOverlayAlpha = { -1f };
+        final float[] lastWebAlpha = { -1f };
 
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             @Override
@@ -1690,18 +1563,21 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
                 // 背景遮罩同步渐入（与窗口动画同时）
                 if (overlayView != null) {
-                    float targetAlpha = overlayAlpha / 100.0f;
-                    overlayView.setAlpha(targetAlpha * eased);
+                    float targetAlpha = overlayAlpha / 100.0f * eased;
+                    if (Math.abs(targetAlpha - lastOverlayAlpha[0]) > 0.01f) {
+                        overlayView.setAlpha(targetAlpha);
+                        lastOverlayAlpha[0] = targetAlpha;
+                    }
                 }
 
                 // blurBackgroundView 同步动画
-                if (blurBackgroundView != null) {
-                    blurBackgroundView.setAlpha(1f);
-                    blurBackgroundView.setScaleX(curScaleX);
-                    blurBackgroundView.setScaleY(curScaleY);
-                    blurBackgroundView.setTranslationX(curTransX);
-                    blurBackgroundView.setTranslationY(curTransY);
-                }
+//                if (blurBackgroundView != null) {
+//                    blurBackgroundView.setAlpha(1f);
+//                    blurBackgroundView.setScaleX(curScaleX);
+//                    blurBackgroundView.setScaleY(curScaleY);
+//                    blurBackgroundView.setTranslationX(curTransX);
+//                    blurBackgroundView.setTranslationY(curTransY);
+//                }
 
                 // 计算当前背景透明度
                 if (expandAcrylicBg != null) {
@@ -1712,25 +1588,30 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         float t = (progress - 0.6f) / 0.4f;
                         currentAlpha = (int)(255 + (expandTargetAlpha - 255) * t);
                     }
-                    expandAcrylicBg.updateFillColorAndAlpha(currentAlpha, expandTargetAlpha);
+                    if (Math.abs(currentAlpha - lastDrawableAlpha[0]) >= 5) {
+                        expandAcrylicBg.updateFillColorAndAlpha(currentAlpha, expandTargetAlpha);
+                        lastDrawableAlpha[0] = currentAlpha;
+                    }
                 }
 
                 // WebView 后 50% 渐入
                 if (webView != null) {
+                    float targetWebAlpha;
                     if (progress < 0.5f) {
-                        webView.setAlpha(0f);
+                        targetWebAlpha = 0f;
                     } else {
-                        float alphaProgress = (progress - 0.5f) * 2f;
-                        // AI 窗口：最终透明度根据"网页背景透明"设置决定
-                        float targetAlpha = 1.0f;
-                        if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255) {
-                            // 如果开启了"网页背景透明"，WebView 始终保持100%不透明（网页内容通过CSS透明化）
-                            // 否则 WebView 透明度跟随 aiOverlayAlpha
-                            if (!webpageBgTransparent) {
-                                targetAlpha = aiOverlayAlpha / 255.0f;
-                            }
+                        float p = (progress - 0.5f) * 2f;
+                        // 保留原有的透明度计算逻辑
+                        float base = easeOutCubic(p);
+                        if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255 && !webpageBgTransparent) {
+                            targetWebAlpha = (aiOverlayAlpha / 255.0f) * base;
+                        } else {
+                            targetWebAlpha = base;
                         }
-                        webView.setAlpha(targetAlpha * easeOutCubic(alphaProgress));
+                    }
+                    if (Math.abs(targetWebAlpha - lastWebAlpha[0]) > 0.01f) {
+                        webView.setAlpha(targetWebAlpha);
+                        lastWebAlpha[0] = targetWebAlpha;
                     }
                 }
 
@@ -1749,12 +1630,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     contentContainer.setScaleY(1f);
                     contentContainer.setTranslationX(0f);
                     contentContainer.setTranslationY(0f);
-                    if (blurBackgroundView != null) {
-                        blurBackgroundView.setScaleX(1f);
-                        blurBackgroundView.setScaleY(1f);
-                        blurBackgroundView.setTranslationX(0f);
-                        blurBackgroundView.setTranslationY(0f);
-                    }
+
+                    contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
+//                    if (blurBackgroundView != null) {
+//                        blurBackgroundView.setScaleX(1f);
+//                        blurBackgroundView.setScaleY(1f);
+//                        blurBackgroundView.setTranslationX(0f);
+//                        blurBackgroundView.setTranslationY(0f);
+//                    }
                     if (webView != null) {
                         // AI 窗口：应用网页透明度设置
                         // 如果开启了"网页背景透明"，WebView 保持100%不透明
@@ -1786,7 +1669,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         if (!isExpanded || isCollapsing) return;
         isCollapsing = true;
         isExpanded = false;
-        
+
         final float endScaleX = initScaleX;
         final float endScaleY = initScaleY;
         final float endTransX = initTranslationX;
@@ -1801,15 +1684,20 @@ public class OverlayWindowActivity extends AppCompatActivity {
         contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         blurFadeOutStarted = false;
 
+        // ===== 优化：添加阈值跟踪，减少不必要的属性更新 =====
+        final float[] lastDrawableAlpha = { -1f };
+        final float[] lastOverlayAlpha = { -1f };
+        final float[] lastWebAlpha = { -1f };
+
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             @Override
             public void doFrame(long frameTimeNanos) {
-                // 只触发一次模糊淡出，避免每帧重复创建 Handler 动画
+                // 只触发一次模糊淡出，避免重复
                 if (!blurFadeOutStarted) {
                     blurFadeOutStarted = true;
                     BlurWindowActivity.fadeOutIfAlive();
                 }
-                
+
                 float progress = (float) (frameTimeNanos - startNanos) / 1_000_000f / animDuration;
                 progress = Math.max(0f, Math.min(progress, 1.0f));
                 float eased = animInterpolator.getInterpolation(progress);
@@ -1826,11 +1714,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     containerAlpha = 1.0f - easeOutCubic(fadeProgress);
                 }
                 contentContainer.setAlpha(containerAlpha);
-                
-                // 背景遮罩同步渐出（与窗口动画同时）
+
+                // ===== 优化：背景遮罩阈值更新 =====
                 if (overlayView != null) {
                     float overlayTargetAlpha = overlayAlpha / 100.0f;
-                    overlayView.setAlpha(overlayTargetAlpha * (1.0f - eased));
+                    float currentOverlayAlpha = overlayTargetAlpha * (1.0f - eased);
+                    if (Math.abs(currentOverlayAlpha - lastOverlayAlpha[0]) > 0.01f) {
+                        overlayView.setAlpha(currentOverlayAlpha);
+                        lastOverlayAlpha[0] = currentOverlayAlpha;
+                    }
                 }
 
                 contentContainer.setScaleX(curScaleX);
@@ -1838,15 +1730,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 contentContainer.setTranslationX(curTransX);
                 contentContainer.setTranslationY(curTransY);
 
-                // blurBackgroundView 同步收起动画
-                if (blurBackgroundView != null) {
-                    blurBackgroundView.setAlpha(containerAlpha);
-                    blurBackgroundView.setScaleX(curScaleX);
-                    blurBackgroundView.setScaleY(curScaleY);
-                    blurBackgroundView.setTranslationX(curTransX);
-                    blurBackgroundView.setTranslationY(curTransY);
-                }
-
+                // ===== 优化：Drawable 透明度阈值更新 =====
                 if (acrylicBg != null) {
                     int currentAlpha;
                     if (progress <= 0.3f) {
@@ -1855,46 +1739,47 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     } else {
                         currentAlpha = 255; // 后70%保持完全不透明
                     }
-                    acrylicBg.updateFillColorAndAlpha(currentAlpha, collapseTargetAlpha);
+                    if (Math.abs(currentAlpha - lastDrawableAlpha[0]) >= 5) {
+                        acrylicBg.updateFillColorAndAlpha(currentAlpha, collapseTargetAlpha);
+                        lastDrawableAlpha[0] = currentAlpha;
+                    }
                 }
 
-                // WebView 前 50% 渐出
+                // ===== 优化：WebView 透明度阈值更新 =====
                 if (webView != null) {
+                    float targetWebAlpha;
                     if (progress < 0.5f) {
                         float alphaProgress = progress * 2f;
-                        webView.setAlpha(1f - easeOutCubic(alphaProgress));
+                        targetWebAlpha = 1f - easeOutCubic(alphaProgress);
                     } else {
-                        webView.setAlpha(0f);
+                        targetWebAlpha = 0f;
+                    }
+                    // 钳位到合法范围
+                    targetWebAlpha = Math.max(0f, Math.min(1f, targetWebAlpha));
+                    if (Math.abs(targetWebAlpha - lastWebAlpha[0]) > 0.01f) {
+                        webView.setAlpha(targetWebAlpha);
+                        lastWebAlpha[0] = targetWebAlpha;
                     }
                 }
 
                 if (progress < 1.0f) {
                     Choreographer.getInstance().postFrameCallback(this);
                 } else {
-                    // 动画完成，先隐藏内容防止闪烁
+                    // 动画完成，隐藏内容防止闪烁
                     contentContainer.setVisibility(View.INVISIBLE);
-                    if (blurBackgroundView != null) {
-                        blurBackgroundView.setVisibility(View.INVISIBLE);
-                    }
-                    
                     contentContainer.setScaleX(1f);
                     contentContainer.setScaleY(1f);
                     contentContainer.setTranslationX(0f);
                     contentContainer.setTranslationY(0f);
                     contentContainer.setAlpha(1f);
+
+                    // ===== 优化：恢复硬件层 =====
                     contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
-                    if (blurBackgroundView != null) {
-                        blurBackgroundView.setScaleX(1f);
-                        blurBackgroundView.setScaleY(1f);
-                        blurBackgroundView.setTranslationX(0f);
-                        blurBackgroundView.setTranslationY(0f);
-                        blurBackgroundView.setAlpha(1f);
-                    }
+
                     if (webView != null) {
                         webView.setAlpha(0f);
                     }
-                    // 收起动画完成后，如果有待启动的快捷方式，在此启动
-                    // 延迟到动画完成之后再 startActivity，避免立即触发 onUserLeaveHint 中断动画
+                    // 如果有待启动的快捷方式，在此启动
                     if (pendingShortcutItem != null) {
                         launchShortcutApp(pendingShortcutItem);
                         pendingShortcutItem = null;
@@ -2137,7 +2022,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             // 设置填充底色透明度
             fillPaint.setAlpha(alpha);
             // 计算黑色遮罩透明度：alpha=255 时遮罩最浓，alpha=targetAlpha 时遮罩消失
-            int darkAlpha;
+            int darkAlpha = mMaxOverlayAlpha;
             if (targetAlpha >= 255 || alpha <= targetAlpha) {
                 darkAlpha = 0;
             } else if (alpha >= 255) {
