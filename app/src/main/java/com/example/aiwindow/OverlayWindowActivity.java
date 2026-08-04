@@ -174,6 +174,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     
     // ─── WebView 状态保持 ───
     private static WebView sPersistentWebView; // 静态 WebView，跨 Activity 生命周期保持
+    private static String sLoadedAiUrl = null; // 记录 WebView 实际加载的初始 AI URL（用于判断设置中的 URL 是否被用户修改，不受页面内部导航影响）
     private static boolean sWebViewClientInitialized = false; // ← 新增：标记 Client 是否已初始化
     
     // ─── 模糊窗口渐变标志 ───
@@ -804,6 +805,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             // 首次加载 URL
             Log.d(TAG, "首次创建 WebView，加载 URL: " + aiUrl);
             sPersistentWebView.loadUrl(aiUrl);
+            sLoadedAiUrl = aiUrl;
 
         } else {
             // ===== 复用已有 WebView（跳过 Client 设置） =====
@@ -811,6 +813,16 @@ public class OverlayWindowActivity extends AppCompatActivity {
             android.view.ViewParent parent = sPersistentWebView.getParent();
             if (parent instanceof ViewGroup) {
                 ((ViewGroup) parent).removeView(sPersistentWebView);
+            }
+
+            // 关键修复：比较设置中的 AI URL 与上次实际加载的初始 URL
+            // - 用户修改了 URL → 重新加载新 URL（sLoadedAiUrl 记录初始 URL，不受页面内部导航/重定向影响，避免误刷新）
+            // - 未修改 URL（即使点击了保存）→ 保留上次退出时的页面状态，不清除缓存
+            if (aiUrl != null && !aiUrl.isEmpty()
+                    && (sLoadedAiUrl == null || !sLoadedAiUrl.equals(aiUrl))) {
+                Log.d(TAG, "AI URL 已修改，从 " + sLoadedAiUrl + " 重新加载到 " + aiUrl);
+                sPersistentWebView.loadUrl(aiUrl);
+                sLoadedAiUrl = aiUrl;
             }
 
             // 不需要重新设置 WebChromeClient / WebViewClient，因为已经在首次创建时设置好了
