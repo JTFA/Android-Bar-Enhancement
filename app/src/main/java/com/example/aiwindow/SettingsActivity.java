@@ -156,7 +156,8 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView textLongPressDuration;
     
     // AI 窗口大小控件
-    private EditText editWindowWidth, editWindowHeight;
+    private SeekBar seekWindowWidth, seekWindowHeight;
+    private TextView textWindowWidth, textWindowHeight;
     private SeekBar seekWindowPositionY;
     private TextView textWindowPositionY;
     
@@ -298,8 +299,10 @@ public class SettingsActivity extends AppCompatActivity {
         textLongPressDuration = findViewById(R.id.text_long_press_duration);
         
         // AI 窗口大小控件
-        editWindowWidth = findViewById(R.id.edit_window_width);
-        editWindowHeight = findViewById(R.id.edit_window_height);
+        seekWindowWidth = findViewById(R.id.seek_window_width);
+        seekWindowHeight = findViewById(R.id.seek_window_height);
+        textWindowWidth = findViewById(R.id.text_window_width);
+        textWindowHeight = findViewById(R.id.text_window_height);
         seekWindowPositionY = findViewById(R.id.seek_window_position_y);
         textWindowPositionY = findViewById(R.id.text_window_position_y);
         
@@ -459,11 +462,15 @@ public class SettingsActivity extends AppCompatActivity {
         
         // 加载 AI 窗口宽度
         int windowWidth = preferences.getInt(KEY_WINDOW_WIDTH, 340);
-        editWindowWidth.setText(String.valueOf(windowWidth));
+        windowWidth = Math.max(200, Math.min(600, windowWidth));
+        seekWindowWidth.setProgress(windowWidth);
+        textWindowWidth.setText("宽度: " + windowWidth + "dp");
         
         // 加载 AI 窗口高度
         int windowHeight = preferences.getInt(KEY_WINDOW_HEIGHT, 450);
-        editWindowHeight.setText(String.valueOf(windowHeight));
+        windowHeight = Math.max(300, Math.min(900, windowHeight));
+        seekWindowHeight.setProgress(windowHeight);
+        textWindowHeight.setText("高度: " + windowHeight + "dp");
         
         int barPosY = preferences.getInt(KEY_BAR_POSITION_Y, 391);
         seekBarPositionY.setProgress(barPosY);
@@ -732,28 +739,8 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putInt(KEY_LONG_PRESS_DURATION, seekLongPressDuration.getProgress());
         
         // 保存 AI 窗口大小
-        String windowWidthStr = editWindowWidth.getText().toString().trim();
-        String windowHeightStr = editWindowHeight.getText().toString().trim();
-        
-        int windowWidth = 350; // 默认值
-        int windowHeight = 600; // 默认值
-        
-        try {
-            if (!TextUtils.isEmpty(windowWidthStr)) {
-                windowWidth = Integer.parseInt(windowWidthStr);
-                // 限制范围
-                windowWidth = Math.max(200, Math.min(600, windowWidth));
-            }
-            if (!TextUtils.isEmpty(windowHeightStr)) {
-                windowHeight = Integer.parseInt(windowHeightStr);
-                // 限制范围
-                windowHeight = Math.max(300, Math.min(900, windowHeight));
-            }
-        } catch (NumberFormatException e) {
-            Toast.makeText(this, "请输入有效的数字", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        
+        int windowWidth = seekWindowWidth.getProgress();
+        int windowHeight = seekWindowHeight.getProgress();
         editor.putInt(KEY_WINDOW_WIDTH, windowWidth);
         editor.putInt(KEY_WINDOW_HEIGHT, windowHeight);
         editor.putInt(KEY_WINDOW_POSITION_Y, seekWindowPositionY.getProgress());
@@ -1120,6 +1107,28 @@ public class SettingsActivity extends AppCompatActivity {
             public void onStopTrackingTouch(SeekBar seekBar) {}
         });
         
+
+        // AI 窗口宽度 - 实时更新
+        seekWindowWidth.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textWindowWidth.setText("宽度: " + progress + "dp");
+                applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
+        // AI 窗口高度 - 实时更新
+        seekWindowHeight.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textWindowHeight.setText("高度: " + progress + "dp");
+                applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
 
         // AI 窗口位置 Y - 实时更新
         seekWindowPositionY.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -1616,24 +1625,8 @@ public class SettingsActivity extends AppCompatActivity {
         startService(styleIntent);
         
         // 更新窗口位置和大小
-        String windowWidthStr = editWindowWidth.getText().toString().trim();
-        String windowHeightStr = editWindowHeight.getText().toString().trim();
-        
-        int windowWidth = 350;
-        int windowHeight = 600;
-        
-        try {
-            if (!TextUtils.isEmpty(windowWidthStr)) {
-                windowWidth = Integer.parseInt(windowWidthStr);
-                windowWidth = Math.max(200, Math.min(600, windowWidth));
-            }
-            if (!TextUtils.isEmpty(windowHeightStr)) {
-                windowHeight = Integer.parseInt(windowHeightStr);
-                windowHeight = Math.max(300, Math.min(900, windowHeight));
-            }
-        } catch (NumberFormatException e) {
-            // 忽略无效输入
-        }
+        int windowWidth = seekWindowWidth.getProgress();
+        int windowHeight = seekWindowHeight.getProgress();
         
         // 获取边框和阴影设置
         String borderColor = editBorderColor.getText().toString().trim();
