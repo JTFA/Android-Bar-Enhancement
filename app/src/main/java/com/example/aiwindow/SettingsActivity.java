@@ -196,6 +196,9 @@ public class SettingsActivity extends AppCompatActivity {
     private String longPressAppClass = "";
     private LinearLayout layoutClickOpenInWindow, layoutDoubleClickOpenInWindow, layoutLongPressOpenInWindow;
     private Switch switchClickOpenInWindow, switchDoubleClickOpenInWindow, switchLongPressOpenInWindow;
+    // 启动配置行（URL Scheme / Intent Extra / 显式组件）
+    private LinearLayout layoutClickLaunch, layoutDoubleClickLaunch, layoutLongPressLaunch;
+    private TextView textClickLaunchSummary, textDoubleClickLaunchSummary, textLongPressLaunchSummary;
     private boolean isAppPickerSelecting = false;  // 防止重复弹出/选择的标记
     private String appPickerTarget = ""; // 当前正在选择的应用所属手势
     
@@ -354,6 +357,14 @@ public class SettingsActivity extends AppCompatActivity {
         switchDoubleClickOpenInWindow = findViewById(R.id.switch_double_click_open_in_window);
         layoutLongPressOpenInWindow = findViewById(R.id.layout_long_press_open_in_window);
         switchLongPressOpenInWindow = findViewById(R.id.switch_long_press_open_in_window);
+        
+        // 启动配置行
+        layoutClickLaunch = findViewById(R.id.layout_click_launch);
+        textClickLaunchSummary = findViewById(R.id.text_click_launch_summary);
+        layoutDoubleClickLaunch = findViewById(R.id.layout_double_click_launch);
+        textDoubleClickLaunchSummary = findViewById(R.id.text_double_click_launch_summary);
+        layoutLongPressLaunch = findViewById(R.id.layout_long_press_launch);
+        textLongPressLaunchSummary = findViewById(R.id.text_long_press_launch_summary);
         
         // 输入法避让控件
         seekKeyboardOffset = findViewById(R.id.seek_keyboard_offset);
@@ -576,6 +587,9 @@ public class SettingsActivity extends AppCompatActivity {
         switchClickOpenInWindow.setChecked(preferences.getBoolean(KEY_CLICK_OPEN_IN_WINDOW, false));
         switchDoubleClickOpenInWindow.setChecked(preferences.getBoolean(KEY_DOUBLE_CLICK_OPEN_IN_WINDOW, false));
         switchLongPressOpenInWindow.setChecked(preferences.getBoolean(KEY_LONG_PRESS_OPEN_IN_WINDOW, false));
+        
+        // 加载启动配置摘要
+        updateLaunchConfigSummaries();
         
         updateAppSelectorVisibility();
         
@@ -1505,6 +1519,17 @@ public class SettingsActivity extends AppCompatActivity {
             }
         });
 
+        // 启动配置（URL Scheme / Intent Extra / 显式组件）
+        layoutClickLaunch.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { openLaunchConfig("click"); }
+        });
+        layoutDoubleClickLaunch.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { openLaunchConfig("double_click"); }
+        });
+        layoutLongPressLaunch.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { openLaunchConfig("long_press"); }
+        });
+
         spinnerShortcutStyle.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
@@ -2282,8 +2307,12 @@ public class SettingsActivity extends AppCompatActivity {
     
     /**
      * 设置指定手势的应用信息并更新UI
+     * 更换应用时重置该手势的启动配置（避免残留旧应用的 URL/Extra）
      */
     private void setGestureApp(String gesture, String pkg, String name, String cls) {
+        String oldPkg = getGestureAppPackage(gesture);
+        String oldCls = getGestureAppClass(gesture);
+
         if ("click".equals(gesture)) {
             clickAppPackage = pkg;
             clickAppName = name;
@@ -2300,6 +2329,11 @@ public class SettingsActivity extends AppCompatActivity {
             longPressAppClass = cls;
             textLongPressSelectedApp.setText(name);
         }
+
+        if (!TextUtils.equals(oldPkg, pkg) || !TextUtils.equals(oldCls, cls)) {
+            ShortcutLaunchConfig.resetGesture(preferences.edit(), gesture).apply();
+        }
+        updateLaunchConfigSummary(gesture);
     }
     
     /**
@@ -2310,9 +2344,69 @@ public class SettingsActivity extends AppCompatActivity {
         layoutClickApp.setVisibility(ACTION_APP.equals(clickAction) ? View.VISIBLE : View.GONE);
         layoutDoubleClickApp.setVisibility(ACTION_APP.equals(doubleClickAction) ? View.VISIBLE : View.GONE);
         layoutLongPressApp.setVisibility(ACTION_APP.equals(longPressAction) ? View.VISIBLE : View.GONE);
+        layoutClickLaunch.setVisibility(ACTION_APP.equals(clickAction) ? View.VISIBLE : View.GONE);
+        layoutDoubleClickLaunch.setVisibility(ACTION_APP.equals(doubleClickAction) ? View.VISIBLE : View.GONE);
+        layoutLongPressLaunch.setVisibility(ACTION_APP.equals(longPressAction) ? View.VISIBLE : View.GONE);
         layoutClickOpenInWindow.setVisibility(ACTION_APP.equals(clickAction) ? View.VISIBLE : View.GONE);
         layoutDoubleClickOpenInWindow.setVisibility(ACTION_APP.equals(doubleClickAction) ? View.VISIBLE : View.GONE);
         layoutLongPressOpenInWindow.setVisibility(ACTION_APP.equals(longPressAction) ? View.VISIBLE : View.GONE);
+    }
+
+    /**
+     * 打开指定手势的启动配置弹窗
+     */
+    private void openLaunchConfig(String gesture) {
+        GestureLaunchConfigDialog.show(this, gesture,
+                getGestureAppPackage(gesture),
+                getGestureAppClass(gesture),
+                getGestureAppName(gesture),
+                preferences,
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        updateLaunchConfigSummary(gesture);
+                    }
+                });
+    }
+
+    /**
+     * 刷新三个手势的启动配置摘要
+     */
+    private void updateLaunchConfigSummaries() {
+        updateLaunchConfigSummary("click");
+        updateLaunchConfigSummary("double_click");
+        updateLaunchConfigSummary("long_press");
+    }
+
+    /**
+     * 刷新指定手势的启动配置摘要（未自定义时显示「默认 · xxx」）
+     */
+    private void updateLaunchConfigSummary(String gesture) {
+        TextView target;
+        if ("click".equals(gesture)) target = textClickLaunchSummary;
+        else if ("double_click".equals(gesture)) target = textDoubleClickLaunchSummary;
+        else target = textLongPressLaunchSummary;
+        if (target == null) return;
+
+        ShortcutLaunchConfig config = ShortcutLaunchConfig.loadGesture(preferences, gesture,
+                getGestureAppPackage(gesture), getGestureAppClass(gesture),
+                getGestureOpenInWindowPref(gesture));
+
+        String summary = GestureLaunchConfigDialog.summarize(this, config);
+        if (!preferences.contains(ShortcutLaunchConfig.gestureKey(gesture))) {
+            summary = getString(R.string.launch_config_default) + " · " + summary;
+        }
+        target.setText(summary);
+    }
+
+    /**
+     * 读取指定手势的「窗口打开」开关（与 KEY_*_OPEN_IN_WINDOW 一致）
+     */
+    private boolean getGestureOpenInWindowPref(String gesture) {
+        if ("click".equals(gesture)) return preferences.getBoolean(KEY_CLICK_OPEN_IN_WINDOW, false);
+        if ("double_click".equals(gesture)) return preferences.getBoolean(KEY_DOUBLE_CLICK_OPEN_IN_WINDOW, false);
+        if ("long_press".equals(gesture)) return preferences.getBoolean(KEY_LONG_PRESS_OPEN_IN_WINDOW, false);
+        return false;
     }
     
     @Override

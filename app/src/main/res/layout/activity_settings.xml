@@ -142,6 +142,41 @@
 
             </LinearLayout>
 
+            <!-- 启动配置（仅当单击行为为"打开指定应用"时可见） -->
+            <LinearLayout
+                android:id="@+id/layout_click_launch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="14dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/launch_config"
+                    android:textSize="15sp"
+                    android:textColor="?attr/textPrimary" />
+
+                <TextView
+                    android:id="@+id/text_click_launch_summary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxWidth="190dp"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:text="@string/launch_config_default"
+                    android:textSize="14sp"
+                    android:textColor="?attr/textSecondary"
+                    android:gravity="end" />
+
+            </LinearLayout>
+
             <!-- 单击窗口打开开关 -->
             <LinearLayout
                 android:id="@+id/layout_click_open_in_window"
@@ -230,6 +265,41 @@
 
             </LinearLayout>
 
+            <!-- 启动配置（仅当双击行为为"打开指定应用"时可见） -->
+            <LinearLayout
+                android:id="@+id/layout_double_click_launch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="14dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/launch_config"
+                    android:textSize="15sp"
+                    android:textColor="?attr/textPrimary" />
+
+                <TextView
+                    android:id="@+id/text_double_click_launch_summary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxWidth="190dp"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:text="@string/launch_config_default"
+                    android:textSize="14sp"
+                    android:textColor="?attr/textSecondary"
+                    android:gravity="end" />
+
+            </LinearLayout>
+
             <!-- 双击窗口打开开关 -->
             <LinearLayout
                 android:id="@+id/layout_double_click_open_in_window"
@@ -312,6 +382,41 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/not_selected"
+                    android:textSize="14sp"
+                    android:textColor="?attr/textSecondary"
+                    android:gravity="end" />
+
+            </LinearLayout>
+
+            <!-- 启动配置（仅当长按行为为"打开指定应用"时可见） -->
+            <LinearLayout
+                android:id="@+id/layout_long_press_launch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="14dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/launch_config"
+                    android:textSize="15sp"
+                    android:textColor="?attr/textPrimary" />
+
+                <TextView
+                    android:id="@+id/text_long_press_launch_summary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxWidth="190dp"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:text="@string/launch_config_default"
                     android:textSize="14sp"
                     android:textColor="?attr/textSecondary"
                     android:gravity="end" />

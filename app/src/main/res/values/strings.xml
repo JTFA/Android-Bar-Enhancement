@@ -63,6 +63,10 @@
     <string name="select_action">选择行为</string>
     <string name="select_app_for">选择要打开的应用</string>
 
+    <!-- 打开指定应用的启动配置（URL Scheme / Intent Extra / 显式组件） -->
+    <string name="launch_config">启动配置</string>
+    <string name="launch_config_default">默认</string>
+
 
     <!-- 其他字符串定义... -->
     <string-array name="shortcut_style_entries">

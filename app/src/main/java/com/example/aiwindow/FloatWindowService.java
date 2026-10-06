@@ -1508,7 +1508,7 @@ public class FloatWindowService extends Service {
         } else if (ACTION_APP.equals(action)) {
             if (!TextUtils.isEmpty(pkg) && !TextUtils.isEmpty(cls)) {
                 boolean openInWindow = getGestureOpenInWindow(gesture);
-                launchApp(pkg, name, cls, openInWindow);
+                launchGestureApp(gesture, pkg, name, cls, openInWindow);
                 Log.d(TAG, gesture + " 行为：打开应用 " + name + (openInWindow ? " (小窗)" : ""));
             } else {
                 Log.d(TAG, gesture + " 行为：未配置应用");
@@ -1585,6 +1585,50 @@ public class FloatWindowService extends Service {
     }
 
     /**
+     * 按手势的启动配置打开应用
+     * 支持 URL Scheme / Intent Extra / 显式组件（可指定 Activity），失败时回退到应用启动页
+     */
+    private void launchGestureApp(String gesture, String appPackage, String appName, String appClass, boolean openInWindow) {
+        android.content.SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
+        ShortcutLaunchConfig config = ShortcutLaunchConfig.loadGesture(prefs, gesture, appPackage, appClass, openInWindow);
+        Intent configIntent = config.buildLaunchIntent();
+
+        if (configIntent != null) {
+            try {
+                startActivity(configIntent, windowingBundle(openInWindow));
+                Log.d(TAG, "已按启动配置打开 " + appName + " [" + ShortcutLaunchConfig.getModeDisplayName(config.launchMode) + "]");
+                return;
+            } catch (Exception e) {
+                // 目标 Activity 未导出 / URI 无处理应用等情况
+                Log.w(TAG, "启动配置打开失败，回退到应用启动页: " + appName, e);
+            }
+        }
+
+        // 回退链：应用启动页
+        try {
+            Intent fallback = getPackageManager().getLaunchIntentForPackage(appPackage);
+            if (fallback == null) {
+                fallback = new Intent(Intent.ACTION_MAIN);
+                fallback.addCategory(Intent.CATEGORY_LAUNCHER);
+                fallback.setPackage(appPackage);
+            }
+            fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(fallback, windowingBundle(openInWindow));
+            Log.d(TAG, "已回退打开应用启动页: " + appName);
+        } catch (Exception e) {
+            Log.e(TAG, "打开应用失败: " + appName, e);
+            Toast.makeText(this, "打开 " + appName + " 失败", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** 构建窗口模式 Bundle（100=系统小窗，5=全屏） */
+    private Bundle windowingBundle(boolean openInWindow) {
+        Bundle bundle = new Bundle();
+        bundle.putInt("android.activity.windowingMode", openInWindow ? 100 : 5);
+        return bundle;
+    }
+
+    /**
      * 打开指定应用
      */
     private void launchApp(String appPackage, String appName, String appClass, boolean openInWindow) {
@@ -1604,7 +1648,7 @@ public class FloatWindowService extends Service {
                 startActivity(launchIntent, bundle);
             } else {
                 Bundle bundle = new Bundle();
-                bundle.putInt("android.activity.windowingMode", 5);
+                bundle.putInt("android.activity.windowingMode", 1);
                 startActivity(launchIntent, bundle);
             }
             Log.d(TAG, "已打开应用: " + appName + (openInWindow ? " (小窗)" : ""));
@@ -4903,7 +4947,7 @@ public class FloatWindowService extends Service {
                 startActivity(launchIntent, bundle);
             } else {
                 Bundle bundle = new Bundle();
-                bundle.putInt("android.activity.windowingMode", 5);
+                bundle.putInt("android.activity.windowingMode", 1);
                 startActivity(launchIntent, bundle);
             }
             Log.d(TAG, "已打开快捷方式: " + item.getName());

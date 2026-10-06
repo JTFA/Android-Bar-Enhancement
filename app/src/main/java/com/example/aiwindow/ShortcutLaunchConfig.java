@@ -181,6 +181,59 @@ public class ShortcutLaunchConfig {
         return editor;
     }
 
+    // ==================== 提示条手势（单击/双击/长按）启动配置 ====================
+
+    private static final String GESTURE_KEY_PREFIX = "gesture_launch_";
+
+    /** 获取手势启动配置的 SharedPreferences key */
+    public static String gestureKey(String gesture) {
+        return GESTURE_KEY_PREFIX + gesture;
+    }
+
+    /** 创建手势的默认配置：显式组件 + 手势已选应用的包名/类名 */
+    public static ShortcutLaunchConfig defaultGestureConfig(String pkg, String cls, boolean openInWindow) {
+        ShortcutLaunchConfig c = new ShortcutLaunchConfig();
+        c.launchMode = MODE_EXPLICIT;
+        c.targetPackage = pkg == null ? "" : pkg;
+        c.targetClass = cls == null ? "" : cls;
+        c.openInWindow = openInWindow;
+        return c;
+    }
+
+    /**
+     * 加载手势启动配置
+     * 无历史配置时返回默认配置（显式组件），保证与旧版行为一致
+     */
+    public static ShortcutLaunchConfig loadGesture(SharedPreferences prefs, String gesture,
+                                                   String defaultPkg, String defaultCls, boolean defaultOpenInWindow) {
+        if (prefs == null || gesture == null) {
+            return defaultGestureConfig(defaultPkg, defaultCls, defaultOpenInWindow);
+        }
+        String jsonStr = prefs.getString(gestureKey(gesture), "");
+        if (TextUtils.isEmpty(jsonStr)) {
+            return defaultGestureConfig(defaultPkg, defaultCls, defaultOpenInWindow);
+        }
+        try {
+            ShortcutLaunchConfig c = fromJson(new JSONObject(jsonStr));
+            if (TextUtils.isEmpty(c.targetPackage)) c.targetPackage = defaultPkg == null ? "" : defaultPkg;
+            return c;
+        } catch (Exception e) {
+            return defaultGestureConfig(defaultPkg, defaultCls, defaultOpenInWindow);
+        }
+    }
+
+    /** 保存手势启动配置，返回 Editor 以便链式调用 */
+    public static android.content.SharedPreferences.Editor saveGesture(android.content.SharedPreferences.Editor editor, String gesture, ShortcutLaunchConfig config) {
+        editor.putString(gestureKey(gesture), config.toJson().toString());
+        return editor;
+    }
+
+    /** 清除手势启动配置（更换已选应用时重置为默认），返回 Editor 以便链式调用 */
+    public static android.content.SharedPreferences.Editor resetGesture(android.content.SharedPreferences.Editor editor, String gesture) {
+        editor.remove(gestureKey(gesture));
+        return editor;
+    }
+
     /** 获取模式的中文显示名 */
     public static String getModeDisplayName(String mode) {
         switch (mode) {
