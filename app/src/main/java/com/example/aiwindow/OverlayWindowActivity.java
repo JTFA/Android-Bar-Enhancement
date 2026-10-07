@@ -2009,8 +2009,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
         private final Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint glassPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint darkOverlayPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        // 边缘折射光：上下横边亮、左右竖边暗（竖向渐变描边）
-        private final Paint refractionBandPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        // 边缘折射光：多层描边由宽到窄、由暗到亮叠加，内侧形成渐变过渡（无明显分界）
+        private static final float[] REFRACTION_LAYER_WIDTHS_DP = {16f, 11f, 7f, 4f, 2f};
+        private static final float[] REFRACTION_LAYER_BASE_ALPHA = {26f, 46f, 77f, 120f, 179f};
+        private final Paint[] refractionLayerPaints = new Paint[REFRACTION_LAYER_WIDTHS_DP.length];
         private final Paint refractionLinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private boolean refractionEnabled = false;
         private final Path path = new Path();
@@ -2039,10 +2041,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     Color.argb(0, 255, 255, 255),
                     Shader.TileMode.CLAMP);
             glassPaint.setShader(glassGradient);
-            // 折射光描边画笔（shader 在 onBoundsChange 中按实际高度重建）
-            refractionBandPaint.setStyle(Paint.Style.STROKE);
-            refractionBandPaint.setStrokeWidth(6f * density);
-            refractionBandPaint.setAlpha(140);
+            // 折射光多层描边画笔（shader 在 onBoundsChange 中按实际高度重建）
+            for (int i = 0; i < refractionLayerPaints.length; i++) {
+                Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(REFRACTION_LAYER_WIDTHS_DP[i] * density);
+                p.setAlpha(Math.round(REFRACTION_LAYER_BASE_ALPHA[i]));
+                refractionLayerPaints[i] = p;
+            }
             refractionLinePaint.setStyle(Paint.Style.STROKE);
             refractionLinePaint.setStrokeWidth(1.5f * density);
         }
@@ -2058,13 +2064,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
             LinearGradient refraction = new LinearGradient(0, 0, 0, height,
                     new int[]{
                             Color.argb(110, 255, 255, 255),
-                            Color.argb(25, 255, 255, 255),
+                            Color.argb(35, 255, 255, 255),
                             Color.argb(10, 255, 255, 255),
-                            Color.argb(25, 255, 255, 255),
+                            Color.argb(35, 255, 255, 255),
                             Color.argb(110, 255, 255, 255)},
-                    new float[]{0f, 0.06f, 0.5f, 0.94f, 1f},
+                    new float[]{0f, 0.10f, 0.5f, 0.90f, 1f},
                     Shader.TileMode.CLAMP);
-            refractionBandPaint.setShader(refraction);
+            for (Paint p : refractionLayerPaints) {
+                if (p != null) p.setShader(refraction);
+            }
             refractionLinePaint.setShader(refraction);
         }
 
@@ -2121,10 +2129,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
             canvas.drawRect(0, 0, width, Math.min(height, Math.round(80 * density)), glassPaint);
             canvas.restore();
             // 4. 边缘折射光（玻璃片边缘：上下横边亮、左右竖边几乎不可见）
+            // 多层描边由宽到窄、由暗到亮叠加 → 内侧 16dp 渐变过渡，与中间无明显分界
             if (refractionEnabled) {
                 canvas.save();
                 canvas.clipPath(path);
-                canvas.drawPath(path, refractionBandPaint);
+                for (Paint p : refractionLayerPaints) {
+                    if (p != null && p.getShader() != null) {
+                        canvas.drawPath(path, p);
+                    }
+                }
                 canvas.drawPath(path, refractionLinePaint);
                 canvas.restore();
             }
@@ -2171,7 +2184,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
             fillPaint.setAlpha(alpha);
             strokePaint.setAlpha(alpha);    // strokePaint 的透明度保持 setStroke 时设置的值，不在此修改
             glassPaint.setAlpha(alpha);
-            refractionBandPaint.setAlpha(Math.round(alpha * 140f / 255f));
+            for (int i = 0; i < refractionLayerPaints.length; i++) {
+                refractionLayerPaints[i].setAlpha(
+                        Math.round(alpha * REFRACTION_LAYER_BASE_ALPHA[i] / 255f));
+            }
             refractionLinePaint.setAlpha(alpha);
         }
 
@@ -2180,7 +2196,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             fillPaint.setColorFilter(colorFilter);
             strokePaint.setColorFilter(colorFilter);
             glassPaint.setColorFilter(colorFilter);
-            refractionBandPaint.setColorFilter(colorFilter);
+            for (Paint p : refractionLayerPaints) {
+                p.setColorFilter(colorFilter);
+            }
             refractionLinePaint.setColorFilter(colorFilter);
         }
 
@@ -2222,14 +2240,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
      * 4. 手指光晕跟随（点击/按住/移动）。
      */
     private class WindowGestureController {
-        // 弹簧参数：ζ=0.35（约 2 次可见超调）、ω=26rad/s（周期约 0.26s，0.8s 内收敛）
+        // 弹簧参数：ζ=0.35（约 2 次可见超调）、ω=15rad/s（周期约 0.42s，约 1s 收敛）
         private static final float SPRING_ZETA = 0.35f;
-        private static final float SPRING_OMEGA = 26f;
-        private static final float SPRING_DURATION_MS = 800f;
-        private static final float DRAG_DAMPING = 0.35f;        // 位移跟手系数
-        private static final float MAX_DRAG_DP = 40f;           // 最大位移
+        private static final float SPRING_OMEGA = 15f;
+        private static final float SPRING_DURATION_MS = 2000f;
+        private static final float DRAG_DAMPING = 0.05f;        // 位移跟手系数（轻微跟随）
+        private static final float MAX_DRAG_DP = 10f;           // 最大位移
         private static final float STRETCH_DISTANCE_DP = 160f;  // 拉满所需拖动距离
-        private static final float MAX_STRETCH = 0.06f;         // 最大拉伸 6%
+        private static final float MAX_STRETCH = 0.01f;         // 最大拉伸 6%
         private static final float MAX_SPRING_VEL = 1000f;      // 松手速度钳位 (px/s)
 
         volatile boolean dragMoved; // 已发生拖动（抑制 cell 点击）
@@ -2370,7 +2388,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             lastRawY = ev.getRawY();
             lastMoveNanos = now;
 
-            // 位移：轻微跟手，tanh 软钳位到 ≤40dp
+            // 位移：轻微跟手，tanh 软钳位到 ≤16dp
             float maxPx = dpToPxF(MAX_DRAG_DP);
             offsetX = (float) (maxPx * Math.tanh(dx * DRAG_DAMPING / maxPx));
             offsetY = (float) (maxPx * Math.tanh(dy * DRAG_DAMPING / maxPx));
@@ -2382,6 +2400,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             float uy = len > 0.001f ? Math.abs(dy) / len : 0f;
             sx = 1f + s * (ux - 0.4f * uy);
             sy = 1f + s * (uy - 0.4f * ux);
+
+            // 限制窗口不超出屏幕（越界会让 WMS 钳住模糊窗口，表现为模糊层反向移动）
+            clampOffsets();
 
             applyTransformAndSyncBlur();
         }
@@ -2454,6 +2475,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 sx = 1f + springValue(springQDevX, 0f, t);
                 sy = 1f + springValue(springQDevY, 0f, t);
 
+                // 回弹超调同样不能越出屏幕
+                clampOffsets();
+
                 // 收敛判定
                 if (Math.abs(offsetX) < 0.3f && Math.abs(offsetY) < 0.3f
                         && Math.abs(sx - 1f) < 0.0008f && Math.abs(sy - 1f) < 0.0008f) {
@@ -2489,6 +2513,23 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
 
         /**
+         * 限制窗口基准矩形始终在屏幕内。
+         * 越界时模糊窗口的 params.x/y 会被 WMS 钳到屏幕边缘，
+         * 内容层继续移动而模糊层不动，表现为"模糊层反向移动"。
+         */
+        private void clampOffsets() {
+            float w = contentContainer.getWidth();
+            float h = contentContainer.getHeight();
+            if (w <= 0 || h <= 0) return;
+            float minOffX = -baseLeft;
+            float maxOffX = screenWidth - baseLeft - w;
+            float minOffY = -baseTop;
+            float maxOffY = screenHeight - baseTop - h;
+            offsetX = Math.max(minOffX, Math.min(maxOffX, offsetX));
+            offsetY = Math.max(minOffY, Math.min(maxOffY, offsetY));
+        }
+
+        /**
          * 方案 A：逐帧同步模糊窗口完整 x/y/w/h。
          * 复用现有 UPDATE_BLUR_WINDOW_SIZE 协议（接收端已支持）。
          * 若真机实测掉帧，降级顺序：尺寸量化到 2px → 隔帧发送 → 退回包络方案。
@@ -2505,6 +2546,19 @@ public class OverlayWindowActivity extends AppCompatActivity {
             int by = Math.round(centerY - h * sy / 2f);
             int bw = Math.round(w * sx);
             int bh = Math.round(h * sy);
+
+            // 与屏幕求交集：请求框越界同样会触发 WMS 钳制（拉伸瞬间可能略微越界），
+            // 钳到屏幕边界后与被屏幕裁切的内容严格对齐
+            int sx0 = Math.max(0, bx);
+            int sy0 = Math.max(0, by);
+            int sx1 = Math.min(screenWidth, bx + bw);
+            int sy1 = Math.min(screenHeight, by + bh);
+            if (sx1 - sx0 <= 0 || sy1 - sy0 <= 0) return;
+            bx = sx0;
+            by = sy0;
+            bw = sx1 - sx0;
+            bh = sy1 - sy0;
+
             if (!force && blurFrameSent
                     && bx == lastBlurX && by == lastBlurY && bw == lastBlurW && bh == lastBlurH) {
                 return;
