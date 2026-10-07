@@ -666,7 +666,7 @@
                 android:id="@+id/text_pressed_bar_position_y"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="按下时位置Y: 20dp"
+                android:text="按下时位置Y: 0dp"
                 android:textSize="14sp"
                 android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
@@ -675,9 +675,9 @@
                 android:id="@+id/seek_pressed_bar_position_y"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:min="-500"
-                android:max="500"
-                android:progress="20"
+                android:min="-10"
+                android:max="10"
+                android:progress="0"
                 android:layout_marginBottom="16dp" />
 
             <!-- 按下时圆角 -->

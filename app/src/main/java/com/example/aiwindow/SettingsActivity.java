@@ -697,7 +697,7 @@ public class SettingsActivity extends AppCompatActivity {
         textPressedBarFeather.setText("边缘羽化宽度: " + pressedFeather + "dp");
         
         // 加载按下时位置Y
-        int pressedPosY = preferences.getInt(KEY_PRESSED_BAR_POSITION_Y, 17);
+        int pressedPosY = preferences.getInt(KEY_PRESSED_BAR_POSITION_Y, 0);
         seekPressedBarPositionY.setProgress(pressedPosY);
         String pressedPosYText = pressedPosY >= 0 ? "按下时位置Y: " + pressedPosY + "dp (向上)" : "按下时位置Y: " + pressedPosY + "dp (向下)";
         textPressedBarPositionY.setText(pressedPosYText);

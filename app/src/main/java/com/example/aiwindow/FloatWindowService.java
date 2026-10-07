@@ -123,7 +123,7 @@ public class FloatWindowService extends Service {
     private int pressedBarHeight = 16; // 按下时高度 (dp)
     private int pressedBarCorner = 30; // 按下时圆角 (dp)
     private int pressedBarFeatherWidth = 10; // 按下时边缘羽化宽度 (dp)
-    private int pressedBarPositionY = 16; // 按下时位置Y (dp，正值向上)
+    private int pressedBarPositionY = 0; //按下时位置Y (dp，正值向上)
     private View pressedOverlay; // 按下状态覆盖层（透明度渐变显示按下样式）
 
     // AI 对话窗口相关
@@ -904,7 +904,7 @@ public class FloatWindowService extends Service {
             barLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
         }
         // 高度考虑覆盖层偏移（pressedBarPositionY 正值向上，容器需加高以容纳偏移后的覆盖层底部）
-        barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + Math.abs(dpToPx(pressedBarPositionY)));
+        barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)));
 
         // CENTER_VERTICAL|CENTER_HORIZONTAL 下：x=barPositionX(居中偏移), y=dpToPx(barPositionY)(居中偏移)
         barLayoutParams.x = barPositionX;
@@ -1146,7 +1146,7 @@ public class FloatWindowService extends Service {
                     barLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
                 }
                 // 高度考虑覆盖层偏移（pressedBarPositionY 正值向上，容器需加高以容纳偏移后的覆盖层底部）
-                barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + Math.abs(dpToPx(pressedBarPositionY)));
+                barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)));
                 barLayoutParams.x = barPositionX;
                 barLayoutParams.y = dpToPx(barPositionY); // 正值越大提示条越靠上
 
@@ -1247,7 +1247,10 @@ public class FloatWindowService extends Service {
 //                // 向下偏移：从顶部定位，用 translationY 向下推
 //                params.gravity = Gravity.CENTER_HORIZONTAL; // 默认 TOP | CENTER_HORIZONTAL
 //            }
-            params.bottomMargin = -getNavigationBarHeight();
+            // 移除 bottomMargin = -getNavigationBarHeight()：该绝对定位补偿加在同容器同重力的
+            // 相对布局中只会使覆盖层中心下移导航栏/2（历史上默认值17即为 nav/2 的手工补偿，
+            // 换导航栏高度不同的设备会产生偏差）。移除后覆盖层与提示条天然重合，0=重合点与设备无关
+            params.bottomMargin = 0;
             pressedOverlay.setLayoutParams(params);
             // pressedBarPositionY：正值向上偏移覆盖层（正值越大覆盖层越靠上）
             pressedOverlay.setTranslationY(-dpToPx(pressedBarPositionY));
@@ -5166,7 +5169,7 @@ public class FloatWindowService extends Service {
             } else {
                 barLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
             }
-            barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + Math.abs(dpToPx(pressedBarPositionY)));
+            barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)));
             barLayoutParams.x = barPositionX;
             barLayoutParams.y = dpToPx(barPositionY);
             windowManager.updateViewLayout(barContainer, barLayoutParams);
@@ -5439,7 +5442,7 @@ public class FloatWindowService extends Service {
                 barLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
             }
             // 高度考虑覆盖层偏移（pressedBarPositionY 正值向上，容器需加高以容纳偏移后的覆盖层底部）
-            barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + Math.abs(dpToPx(pressedBarPositionY)));
+            barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)));
             // CENTER_VERTICAL|CENTER_HORIZONTAL 下：直接使用 barPositionX/Y
             barLayoutParams.x = targetBtmX;
             barLayoutParams.y = targetBtmY;
