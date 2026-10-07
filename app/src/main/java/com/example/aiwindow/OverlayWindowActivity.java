@@ -2010,10 +2010,13 @@ public class OverlayWindowActivity extends AppCompatActivity {
         private final Paint glassPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint darkOverlayPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         // 边缘折射光：多层描边由宽到窄、由暗到亮叠加，内侧形成渐变过渡（无明显分界）
-        private static final float[] REFRACTION_LAYER_WIDTHS_DP = {16f, 11f, 7f, 4f, 2f};
-        private static final float[] REFRACTION_LAYER_BASE_ALPHA = {26f, 46f, 77f, 120f, 179f};
-        private final Paint[] refractionLayerPaints = new Paint[REFRACTION_LAYER_WIDTHS_DP.length];
-        private final Paint refractionLinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        // 边缘折射光：20 层平滑衰减描边（替代旧 5 层固定描边，消除肉眼可见的同心台阶）
+        private static final int REFRACTION_LAYERS = 20;
+        private static final float REFRACTION_BAND_DP = 8f;      // 边缘光可见带宽
+        private static final float REFRACTION_PEAK = 0.42f;      // 顶部边缘目标复合不透明度（透出底层颜色）
+        private static final float REFRACTION_FALLOFF = 1.8f;    // 衰减曲线指数
+        private final Paint[] refractionLayerPaints = new Paint[REFRACTION_LAYERS];
+        private final float[] refractionBaseAlpha = new float[REFRACTION_LAYERS];
         private boolean refractionEnabled = false;
         private final Path path = new Path();
         private float cornerRadius;
@@ -2041,16 +2044,25 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     Color.argb(0, 255, 255, 255),
                     Shader.TileMode.CLAMP);
             glassPaint.setShader(glassGradient);
-            // 折射光多层描边画笔（shader 在 onBoundsChange 中按实际高度重建）
-            for (int i = 0; i < refractionLayerPaints.length; i++) {
-                Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            // 折射光平滑衰减描边：20 层由宽到窄叠加，每层 alpha 按目标曲线反解，
+            // 使复合结果逼近 PEAK·(1-d/B)^FALLOFF；开 dither 消除竖向渐变的量化色带
+            // sTop：折射渐变顶部（最亮处）的 shader 不透明度系数，反解时折算进去
+            float sTop = 110f / 255f;
+            float prefix = 1f; // Π(1 - a·sTop) 前缀积
+            for (int i = 0; i < REFRACTION_LAYERS; i++) {
+                float target = REFRACTION_PEAK
+                        * (float) Math.pow((i + 1f) / REFRACTION_LAYERS, REFRACTION_FALLOFF);
+                float layerEff = 1f - (1f - target) / prefix;
+                prefix = 1f - target;
+                float baseAlpha = layerEff / sTop * 255f;
+                refractionBaseAlpha[i] = baseAlpha;
+                Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG);
                 p.setStyle(Paint.Style.STROKE);
-                p.setStrokeWidth(REFRACTION_LAYER_WIDTHS_DP[i] * density);
-                p.setAlpha(Math.round(REFRACTION_LAYER_BASE_ALPHA[i]));
+                p.setStrokeWidth(2f * REFRACTION_BAND_DP * density
+                        * (REFRACTION_LAYERS - i) / REFRACTION_LAYERS);
+                p.setAlpha(Math.round(baseAlpha));
                 refractionLayerPaints[i] = p;
             }
-            refractionLinePaint.setStyle(Paint.Style.STROKE);
-            refractionLinePaint.setStrokeWidth(1.5f * density);
         }
 
         void setRefractionEnabled(boolean enabled) {
@@ -2068,12 +2080,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
                             Color.argb(10, 255, 255, 255),
                             Color.argb(35, 255, 255, 255),
                             Color.argb(110, 255, 255, 255)},
-                    new float[]{0f, 0.10f, 0.5f, 0.90f, 1f},
+                    new float[]{0f, 0.14f, 0.5f, 0.86f, 1f},
                     Shader.TileMode.CLAMP);
             for (Paint p : refractionLayerPaints) {
                 if (p != null) p.setShader(refraction);
             }
-            refractionLinePaint.setShader(refraction);
         }
 
         void setStroke(int widthPx, int color) {
@@ -2129,7 +2140,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             canvas.drawRect(0, 0, width, Math.min(height, Math.round(80 * density)), glassPaint);
             canvas.restore();
             // 4. 边缘折射光（玻璃片边缘：上下横边亮、左右竖边几乎不可见）
-            // 多层描边由宽到窄、由暗到亮叠加 → 内侧 16dp 渐变过渡，与中间无明显分界
+            // 20 层平滑衰减描边由宽到窄叠加，最外圈峰值 42%、过渡连续无台阶
             if (refractionEnabled) {
                 canvas.save();
                 canvas.clipPath(path);
@@ -2138,7 +2149,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         canvas.drawPath(path, p);
                     }
                 }
-                canvas.drawPath(path, refractionLinePaint);
                 canvas.restore();
             }
             // 5. 绘制边框
@@ -2186,9 +2196,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
             glassPaint.setAlpha(alpha);
             for (int i = 0; i < refractionLayerPaints.length; i++) {
                 refractionLayerPaints[i].setAlpha(
-                        Math.round(alpha * REFRACTION_LAYER_BASE_ALPHA[i] / 255f));
+                        Math.round(alpha * refractionBaseAlpha[i] / 255f));
             }
-            refractionLinePaint.setAlpha(alpha);
         }
 
         @Override
@@ -2199,7 +2208,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
             for (Paint p : refractionLayerPaints) {
                 p.setColorFilter(colorFilter);
             }
-            refractionLinePaint.setColorFilter(colorFilter);
         }
 
         @Override
