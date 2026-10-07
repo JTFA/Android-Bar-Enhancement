@@ -2012,8 +2012,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 边缘折射光：多层描边由宽到窄、由暗到亮叠加，内侧形成渐变过渡（无明显分界）
         // 边缘折射光：20 层平滑衰减描边（替代旧 5 层固定描边，消除肉眼可见的同心台阶）
         private static final int REFRACTION_LAYERS = 20;
-        private static final float REFRACTION_BAND_DP = 8f;      // 边缘光可见带宽
-        private static final float REFRACTION_PEAK = 0.42f;      // 顶部边缘目标复合不透明度（透出底层颜色）
+        private static final float REFRACTION_BAND_DP = 5f;      // 边缘光可见带宽
+        private static final float REFRACTION_PEAK = 0.48f;      // 顶部边缘目标复合不透明度（透出底层颜色）
         private static final float REFRACTION_FALLOFF = 1.8f;    // 衰减曲线指数
         private final Paint[] refractionLayerPaints = new Paint[REFRACTION_LAYERS];
         private final float[] refractionBaseAlpha = new float[REFRACTION_LAYERS];
