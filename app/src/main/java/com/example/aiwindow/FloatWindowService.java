@@ -306,6 +306,17 @@ public class FloatWindowService extends Service {
 //    private final PathInterpolator expandInterpolator = new PathInterpolator(0.4f, 0.2f, 0.2f, 1.0f);
     private final OvershootInterpolator expandInterpolator = new OvershootInterpolator(0.5f);
 
+    // 展开动画末段放缓：[0, TA] 沿用 expandInterpolator（前期速度与原实现逐帧一致），
+    // TA 之后由欠阻尼弹簧在位置/速度连续(C1)条件下接管，超调一次后落点取
+    // "回到目标值的第二次过零"（e=0、残余速度极小，无需 snap）。
+    // 总时长 = animationDuration × expandSpringTotal；调节动画速度设置时整个时间轴
+    // （含弹簧段）按 animationDuration 等比缩放，即为纯速度缩放。
+    private static final float EXPAND_SPRING_TA = 0.54f;     // 弹簧接管点（原曲线时间轴）
+    private static final float EXPAND_SPRING_ZETA = 0.52f;   // 阻尼比
+    private static final float EXPAND_SPRING_OMEGA = 5.2f;   // 归一化角频率（单位 = 1/animationDuration）
+    private boolean expandSpringReady = false;
+    private float expandSpringA, expandSpringB, expandSpringWd, expandSpringTotal;
+
     /**
      * 检测系统是否处于深色模式
      */
@@ -3937,8 +3948,45 @@ public class FloatWindowService extends Service {
      */
     private long animationSetTime = 0; // 记录 scale/translation 设置的时间点，用于日志
 
+    /** 计算弹簧接管状态：与 expandInterpolator 在 TA 处位置/速度连续，并解析出第二次过零落点。 */
+    private void initExpandSpring() {
+        if (expandSpringReady) return;
+        final float eps = 0.001f;
+        float fta = expandInterpolator.getInterpolation(EXPAND_SPRING_TA);
+        float ea = 1f - fta;                                              // 接管点误差
+        float fPrime = (expandInterpolator.getInterpolation(EXPAND_SPRING_TA + eps)
+                - expandInterpolator.getInterpolation(EXPAND_SPRING_TA - eps)) / (2f * eps);
+        float va = -fPrime;                                                // 误差变化率 = -f'(TA)
+        float wd = EXPAND_SPRING_OMEGA * (float) Math.sqrt(1f - EXPAND_SPRING_ZETA * EXPAND_SPRING_ZETA);
+        expandSpringA = ea;
+        expandSpringB = (va + EXPAND_SPRING_ZETA * EXPAND_SPRING_OMEGA * ea) / wd;
+        expandSpringWd = wd;
+        // A·cosθ+B·sinθ = R·cos(θ-ψ)，ψ=atan2(B,A)：首个递减零点 = ψ+π/2（过零），
+        // 再经半个周期回零 = ψ+3π/2，即动画落点（值精确为 1、速度极小）
+        float psi = (float) Math.atan2(expandSpringB, expandSpringA);
+        expandSpringTotal = EXPAND_SPRING_TA + (psi + 1.5f * (float) Math.PI) / wd;
+        expandSpringReady = true;
+    }
+
+    /** 分段展开缓动：[0,TA] 原超调曲线（前期不变）；(TA, total) 弹簧回落；≥total 精确 1。 */
+    private float expandEase(float progress) {
+        initExpandSpring();
+        if (progress <= EXPAND_SPRING_TA) {
+            return expandInterpolator.getInterpolation(progress);
+        }
+        if (progress >= expandSpringTotal) {
+            return 1f;
+        }
+        float u = progress - EXPAND_SPRING_TA;
+        float env = (float) Math.exp(-EXPAND_SPRING_ZETA * EXPAND_SPRING_OMEGA * u);
+        float e = env * (expandSpringA * (float) Math.cos(expandSpringWd * u)
+                + expandSpringB * (float) Math.sin(expandSpringWd * u));
+        return 1f - e;
+    }
+
     private void performSmoothExpandAnimation(
             final View contentContainer) {
+        initExpandSpring();
         if (barContainer == null || barLayoutParams == null) {
             return;
         }
@@ -3969,9 +4017,9 @@ public class FloatWindowService extends Service {
 
                 // 纯时间进度
                 float timeProgress = (float) (frameTimeNanos - adjustedStartTime) / 1000000f / animationDuration;
-                float progress = Math.min(timeProgress, 1.0f);
-                // 统一连贯的贝塞尔曲线缓动，末尾自然带微小超调
-                float easedProgress = expandInterpolator.getInterpolation(progress);
+                float progress = Math.min(timeProgress, expandSpringTotal);
+                // 前段沿用原超调曲线，末段弹簧回落放缓（见 initExpandSpring/expandEase）
+                float easedProgress = expandEase(progress);
 
                 // 插值 scaleX/scaleY/translationX/translationY
                 float curScaleX = startScaleX + (1f - startScaleX) * easedProgress;
@@ -3999,6 +4047,7 @@ public class FloatWindowService extends Service {
                         aiWebView.setAlpha(0f);
                     } else {
                         float alphaProgress = (progress - 0.5f) * 2f;
+                        if (alphaProgress > 1f) alphaProgress = 1f;   // 弹簧末段 progress>1，防止算出 >1 的 alpha
                         aiWebView.setAlpha(easeOutCubic(alphaProgress));
                     }
                 }
@@ -4023,7 +4072,7 @@ public class FloatWindowService extends Service {
 //                    Log.d(TAG, "AI窗口展开动画进度达到60%，已发送模糊窗口渐变显示广播");
 //                }
 
-                if (progress < 1.0f) {
+                if (progress < expandSpringTotal) {
                     Choreographer.getInstance().postFrameCallback(this);
                 } else {
                     // 动画完成，确保最终值精确、恢复普通图层
@@ -4350,6 +4399,7 @@ public class FloatWindowService extends Service {
      * 快捷方式窗口展开动画
      */
     private void performShortcutExpandAnimation(final View contentContainer) {
+        initExpandSpring();
         final float startScaleX = contentContainer.getScaleX();
         final float startScaleY = contentContainer.getScaleY();
         final float startTranslationX = contentContainer.getTranslationX();
@@ -4373,9 +4423,9 @@ public class FloatWindowService extends Service {
                 frameCount++;
                 // 纯时间进度
                 float timeProgress = (float) (frameTimeNanos - adjustedStartTime) / 1000000f / animationDuration;
-                float progress = Math.min(timeProgress, 1.0f);
-                // 统一连贯的贝塞尔曲线缓动，末尾自然带微小超调
-                float easedProgress = expandInterpolator.getInterpolation(progress);
+                float progress = Math.min(timeProgress, expandSpringTotal);
+                // 前段沿用原超调曲线，末段弹簧回落放缓（见 initExpandSpring/expandEase）
+                float easedProgress = expandEase(progress);
 
                 float curScaleX = startScaleX + (1f - startScaleX) * easedProgress;
                 float curScaleY = startScaleY + (1f - startScaleY) * easedProgress;
@@ -4414,7 +4464,7 @@ public class FloatWindowService extends Service {
 //                    Log.d(TAG, "快捷窗口展开动画进度达到60%，已发送模糊窗口渐变显示广播");
 //                }
 
-                if (progress < 1.0f) {
+                if (progress < expandSpringTotal) {
                     Choreographer.getInstance().postFrameCallback(this);
                 } else {
                     contentContainer.setScaleX(1f);

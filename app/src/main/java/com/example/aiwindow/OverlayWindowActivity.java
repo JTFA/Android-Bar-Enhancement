@@ -132,6 +132,17 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private final PathInterpolator animInterpolator = new PathInterpolator(0.4f, 0.0f, 0.2f, 1.0f);
     private final OvershootInterpolator expandInterpolator = new OvershootInterpolator(0.8f);
 
+    // 展开动画末段放缓：[0, TA] 沿用 expandInterpolator（前期速度与原实现逐帧一致），
+    // TA 之后由欠阻尼弹簧在位置/速度连续(C1)条件下接管，超调一次后落点取
+    // "回到目标值的第二次过零"（e=0、残余速度极小，无需 snap）。
+    // 总时长 = animDuration × expandSpringTotal；调节动画速度设置时整个时间轴
+    // （含弹簧段）按 animDuration 等比缩放，即为纯速度缩放。
+    private static final float EXPAND_SPRING_TA = 0.54f;     // 弹簧接管点（原曲线时间轴）
+    private static final float EXPAND_SPRING_ZETA = 0.52f;   // 阻尼比
+    private static final float EXPAND_SPRING_OMEGA = 5.2f;   // 归一化角频率（单位 = 1/animDuration）
+    private boolean expandSpringReady = false;
+    private float expandSpringA, expandSpringB, expandSpringWd, expandSpringTotal;
+
     // ─── Intent 参数 ───
     private int windowType;
     private int startX, startY, startWidth, startHeight;
@@ -1557,7 +1568,44 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // 展开动画（Choreographer 驱动）
     // ═══════════════════════════════════════════════════════════
 
+    /** 计算弹簧接管状态：与 expandInterpolator 在 TA 处位置/速度连续，并解析出第二次过零落点。 */
+    private void initExpandSpring() {
+        if (expandSpringReady) return;
+        final float eps = 0.001f;
+        float fta = expandInterpolator.getInterpolation(EXPAND_SPRING_TA);
+        float ea = 1f - fta;                                              // 接管点误差
+        float fPrime = (expandInterpolator.getInterpolation(EXPAND_SPRING_TA + eps)
+                - expandInterpolator.getInterpolation(EXPAND_SPRING_TA - eps)) / (2f * eps);
+        float va = -fPrime;                                                // 误差变化率 = -f'(TA)
+        float wd = EXPAND_SPRING_OMEGA * (float) Math.sqrt(1f - EXPAND_SPRING_ZETA * EXPAND_SPRING_ZETA);
+        expandSpringA = ea;
+        expandSpringB = (va + EXPAND_SPRING_ZETA * EXPAND_SPRING_OMEGA * ea) / wd;
+        expandSpringWd = wd;
+        // A·cosθ+B·sinθ = R·cos(θ-ψ)，ψ=atan2(B,A)：首个递减零点 = ψ+π/2（过零），
+        // 再经半个周期回零 = ψ+3π/2，即动画落点（值精确为 1、速度极小）
+        float psi = (float) Math.atan2(expandSpringB, expandSpringA);
+        expandSpringTotal = EXPAND_SPRING_TA + (psi + 1.5f * (float) Math.PI) / wd;
+        expandSpringReady = true;
+    }
+
+    /** 分段展开缓动：[0,TA] 原超调曲线（前期不变）；(TA, total) 弹簧回落；≥total 精确 1。 */
+    private float expandEase(float progress) {
+        initExpandSpring();
+        if (progress <= EXPAND_SPRING_TA) {
+            return expandInterpolator.getInterpolation(progress);
+        }
+        if (progress >= expandSpringTotal) {
+            return 1f;
+        }
+        float u = progress - EXPAND_SPRING_TA;
+        float env = (float) Math.exp(-EXPAND_SPRING_ZETA * EXPAND_SPRING_OMEGA * u);
+        float e = env * (expandSpringA * (float) Math.cos(expandSpringWd * u)
+                + expandSpringB * (float) Math.sin(expandSpringWd * u));
+        return 1f - e;
+    }
+
     private void performExpandAnimation() {
+        initExpandSpring();
 
         // 计算初始变换
         initScaleX = (float) startWidth / targetWidth;
@@ -1641,8 +1689,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 if (isCollapsing || isFinishing()) return;
 
                 float progress = (float) (frameTimeNanos - startNanos) / 1_000_000f / animDuration;
-                progress = Math.max(0f, Math.min(progress, 1.0f));
-                float eased = expandInterpolator.getInterpolation(progress);
+                progress = Math.max(0f, Math.min(progress, expandSpringTotal));
+                float eased = expandEase(progress);
 
                 float curScaleX = initScaleX + (1f - initScaleX) * eased;
                 float curScaleY = initScaleY + (1f - initScaleY) * eased;
@@ -1704,6 +1752,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         targetWebAlpha = 0f;
                     } else {
                         float p = (progress - 0.5f) * 2f;
+                        if (p > 1f) p = 1f;   // 弹簧末段 progress>1，防止 easeOutCubic 算出 >1 的 alpha
                         // 保留原有的透明度计算逻辑
                         float base = easeOutCubic(p);
                         if (windowType == WINDOW_TYPE_AI && aiStyle != 0 && aiOverlayAlpha < 255 && !webpageBgTransparent) {
@@ -1718,7 +1767,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     }
                 }
 
-                if (progress < 1.0f) {
+                if (progress < expandSpringTotal) {
                     Choreographer.getInstance().postFrameCallback(this);
                 } else {
                     // 完成
