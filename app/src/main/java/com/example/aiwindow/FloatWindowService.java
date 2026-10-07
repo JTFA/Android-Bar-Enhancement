@@ -139,6 +139,12 @@ public class FloatWindowService extends Service {
     private WebView aiWebView;
     private WindowManager.LayoutParams aiWindowParams;
     private boolean isAiWindowExpanded = false;
+    // OverlayWindowActivity 前台可见标记（同进程静态直连，由 Activity onStart/onStop 维护）
+    private static volatile boolean sOverlayWindowOpen = false;
+
+    public static void setOverlayWindowOpen(boolean open) {
+        sOverlayWindowOpen = open;
+    }
     private String currentAiUrl = "https://www.doubao.com"; // 默认 URL，可通过设置修改
     private String loadedAiUrl = null; // 实际已加载的 URL（用于判断是否需要重新加载）
 
@@ -988,6 +994,10 @@ public class FloatWindowService extends Service {
         final Runnable longPressRunnable = new Runnable() {
             @Override
             public void run() {
+                // 防御：窗口打开期间不触发长按流程（含提示条淡出与展开）
+                if (isAnyWindowOpen()) {
+                    return;
+                }
                 // 标记长按已触发，用于 ACTION_UP 中阻止点击事件
                 longPressTriggered[0] = true;
 
@@ -1032,6 +1042,11 @@ public class FloatWindowService extends Service {
         bar.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
+                // 窗口已打开（前台可见）：完全屏蔽提示条的单击/双击/长按
+                //（无按下样式、无长按计时、无单双击判定，事件静默吞掉）
+                if (isAnyWindowOpen()) {
+                    return true;
+                }
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
                         // 重置长按标记
@@ -1738,9 +1753,21 @@ public class FloatWindowService extends Service {
     }
 
     /**
+     * 是否有本应用窗口已打开（OverlayWindowActivity 前台可见 或 直接展开模式）
+     */
+    private boolean isAnyWindowOpen() {
+        return sOverlayWindowOpen || isAiWindowExpanded || isShortcutWindowExpanded;
+    }
+
+    /**
      * 根据手势类型执行配置的行为
      */
     private void performGestureAction(String gesture) {
+        // 防御：窗口打开期间不执行任何手势行为（正常路径已在触摸入口静默拦截）
+        if (isAnyWindowOpen()) {
+            Log.d(TAG, gesture + " 行为：窗口已打开，已屏蔽");
+            return;
+        }
         String action = getGestureAction(gesture);
         String pkg = getGestureAppPackage(gesture);
         String cls = getGestureAppClass(gesture);

@@ -340,6 +340,13 @@ public class OverlayWindowActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        // 窗口变为可见 → 屏蔽提示条手势（同进程静态直连）
+        FloatWindowService.setOverlayWindowOpen(true);
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
         Log.d(TAG, "onResume: sPendingUploadCallback=" + (sPendingUploadCallback != null ? "SET" : "null")
@@ -398,6 +405,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
+        // 窗口不再可见 → 恢复提示条手势
+        FloatWindowService.setOverlayWindowOpen(false);
         Log.d(TAG, "onStop: mIsStartingFileChooser=" + mIsStartingFileChooser
                 + ", isFinishing=" + isFinishing()
                 + ", sPendingUploadCallback=" + (sPendingUploadCallback != null ? "SET" : "null"));
@@ -2135,7 +2144,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 边缘折射光：多层描边由宽到窄、由暗到亮叠加，内侧形成渐变过渡（无明显分界）
         // 边缘折射光：20 层平滑衰减描边（替代旧 5 层固定描边，消除肉眼可见的同心台阶）
         private static final int REFRACTION_LAYERS = 20;
-        private static final float REFRACTION_BAND_DP = 5f;      // 边缘光可见带宽
+        private static final float REFRACTION_BAND_DP = 4f;      // 边缘光可见带宽
         private static final float REFRACTION_PEAK = 0.48f;      // 顶部边缘目标复合不透明度（透出底层颜色）
         private static final float REFRACTION_FALLOFF = 1.8f;    // 衰减曲线指数
         private final Paint[] refractionLayerPaints = new Paint[REFRACTION_LAYERS];
