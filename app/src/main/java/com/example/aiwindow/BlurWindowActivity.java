@@ -73,6 +73,57 @@ public class BlurWindowActivity extends Activity {
     }
 
     /**
+     * 逐帧直连更新模糊窗口矩形（同进程同主线程静态调用，替代每帧 UPDATE 广播：
+     * 消除 Intent 分配 / AMS 广播往返 / 接收调度延迟，setAttributes 与内容变换同帧生效）。
+     * 调用方已完成屏幕钳制、去重与量化。alpha &lt; 0 表示保持透明度现值。
+     */
+    public static void applyRect(int x, int y, int w, int h, int cornerRadius, float alpha) {
+        BlurWindowActivity act = sInstance != null ? sInstance.get() : null;
+        if (act != null && !act.isFinishing()) {
+            act.applyWindowRect(x, y, w, h, cornerRadius, alpha);
+        }
+    }
+
+    /**
+     * 直连同步模糊窗口平移（键盘避让动画逐帧调用，替代 BLUR_WINDOW_TRANSLATE 广播）
+     * @param translationY 内容窗口的 Y 方向平移量
+     */
+    public static void applyTranslate(float translationY) {
+        BlurWindowActivity act = sInstance != null ? sInstance.get() : null;
+        if (act != null && !act.isFinishing()) {
+            act.applyWindowTranslate(translationY);
+        }
+    }
+
+    /**
+     * 应用窗口矩形/透明度（广播接收与直连静态调用共用的实现）。
+     * @param alpha 透明度；&lt; 0 表示保持现值
+     */
+    private void applyWindowRect(int x, int y, int w, int h, int cornerRadius, float alpha) {
+        WindowManager.LayoutParams params = getWindow().getAttributes();
+        params.x = x;
+        params.y = y;
+        params.width = w;
+        params.height = h;
+        if (alpha >= 0f) {
+            params.alpha = alpha;
+        }
+        getWindow().setAttributes(params);
+        // 更新窗口圆角背景（复用 Drawable，半径未变时早退，避免每帧失效重绘）
+        applyWindowCornerRadius(cornerRadius);
+    }
+
+    /**
+     * 平移模糊窗口：translationY 是 contentContainer 相对于原始位置的偏移量，
+     * 新的 y = originalY + translationY（广播接收与直连调用共用）
+     */
+    private void applyWindowTranslate(float translationY) {
+        WindowManager.LayoutParams params = getWindow().getAttributes();
+        params.y = originalY + (int) translationY;
+        getWindow().setAttributes(params);
+    }
+
+    /**
      * 设置/更新窗口圆角背景。背景为完全透明的圆角矩形，
      * 让窗口级模糊（setBackgroundBlurRadius）穿透显示；复用同一 Drawable 实例。
      * 半径未变化时直接返回，避免逐帧 setCornerRadius 导致 drawable 失效重绘。
@@ -163,31 +214,17 @@ public class BlurWindowActivity extends Activity {
                     int newBlurWidth = intent.getIntExtra("blur_width", 200);
                     int newBlurHeight = intent.getIntExtra("blur_height", 400);
                     int newCornerRadius = intent.getIntExtra("blur_corner_radius", 0);
-                    
-                    WindowManager.LayoutParams params = getWindow().getAttributes();
-                    params.x = newBlurX;
-                    params.y = newBlurY;
-                    params.width = newBlurWidth;
-                    params.height = newBlurHeight;
-                    // 同步透明度（展开恒 1 / 收起跟随内容淡出曲线）；
-                    // 不带该 extra 的旧广播（配置变更同步）保持现值
-                    params.alpha = intent.getFloatExtra("blur_alpha", params.alpha);
-                    getWindow().setAttributes(params);
-                    
-                    // 更新窗口圆角背景（复用 Drawable，半径未变时早退，避免每帧失效重绘）
-                    applyWindowCornerRadius(newCornerRadius);
+                    // 同步透明度；不带该 extra 的广播（配置变更同步）保持现值
+                    float newAlpha = intent.getFloatExtra("blur_alpha", Float.NaN);
+                    applyWindowRect(newBlurX, newBlurY, newBlurWidth, newBlurHeight,
+                            newCornerRadius, newAlpha);
                 } else if ("BLUR_WINDOW_FADE_OUT".equals(intent.getAction())) {
                     // 收到渐变消失通知，执行透明度动画
                     Log.d(TAG, "收到 BLUR_WINDOW_FADE_OUT 广播，开始渐变消失");
                     fadeOutAndFinish();
                 } else if ("BLUR_WINDOW_TRANSLATE".equals(intent.getAction())) {
                     // 收到平移通知，同步移动窗口位置
-                    float translationY = intent.getFloatExtra("translation_y", 0f);
-                    WindowManager.LayoutParams params = getWindow().getAttributes();
-                    // translationY 是 contentContainer 相对于原始位置的偏移量
-                    // 所以新的 y = originalY + translationY
-                    params.y = originalY + (int)translationY;
-                    getWindow().setAttributes(params);
+                    applyWindowTranslate(intent.getFloatExtra("translation_y", 0f));
                 } else if ("BLUR_WINDOW_FADE_IN".equals(intent.getAction())) {
                     // 收到渐变显示通知，执行透明度动画（从70%进度开始）
                     float progress = intent.getFloatExtra("progress", 0.7f);

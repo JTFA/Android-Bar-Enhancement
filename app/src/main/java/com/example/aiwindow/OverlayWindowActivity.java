@@ -193,8 +193,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private boolean blurFrameSent;
     private int lastBlurX, lastBlurY, lastBlurW, lastBlurH;
     private float lastBlurAlpha = -1f;
-    private long lastBlurSendNanos;            // 上次发送时刻（性能档限频用）
-    private Intent blurUpdateIntent;           // 复用广播 Intent，避免每帧 new 分配
+    private long lastBlurSendNanos;            // 上次下发时刻（性能档限频用）
     // 模糊层同步模式：0 精确同步（默认） / 1 均衡（2px 量化） / 2 性能优先（量化 + 约30fps 限频）
     private int blurSyncMode;
     // 内容窗口布局基准屏幕坐标（纯布局位置；展开动画应用 transform 前捕获，收起动画复用）
@@ -998,18 +997,13 @@ public class OverlayWindowActivity extends AppCompatActivity {
             int blurWidth = container.getWidth();
             int blurHeight = container.getHeight();
             try {
-                Intent updateIntent = new Intent("UPDATE_BLUR_WINDOW_SIZE");
-                updateIntent.setPackage(getPackageName());
-                updateIntent.putExtra("blur_x", blurX);
-                updateIntent.putExtra("blur_y", blurY);
-                updateIntent.putExtra("blur_width", blurWidth);
-                updateIntent.putExtra("blur_height", blurHeight);
-                updateIntent.putExtra("blur_corner_radius", dpToPx(cornerRadius));
-                sendBroadcast(updateIntent);
-                Log.d(TAG, "已发送快捷窗口模糊更新: x=" + blurX + " y=" + blurY
+                // 直连同步（alpha=-1 保持透明度现值），配置变更后校准模糊层到实际窗口矩形
+                BlurWindowActivity.applyRect(blurX, blurY, blurWidth, blurHeight,
+                        dpToPx(cornerRadius), -1f);
+                Log.d(TAG, "已直连更新模糊窗口: x=" + blurX + " y=" + blurY
                         + " w=" + blurWidth + " h=" + blurHeight + " 圆角=" + cornerRadius + "dp");
             } catch (Exception e) {
-                Log.e(TAG, "发送模糊窗口更新失败", e);
+                Log.e(TAG, "直连更新模糊窗口失败", e);
             }
         });
 
@@ -1867,37 +1861,23 @@ public class OverlayWindowActivity extends AppCompatActivity {
         } catch (Exception ignored) {}
     }
     
-    private void sendBlurWindowFadeOutBroadcast() {
-        try {
-            Intent intent = new Intent("BLUR_WINDOW_FADE_OUT");
-            intent.setPackage(getPackageName());
-            sendBroadcast(intent);
-            Log.d(TAG, "已发送模糊窗口渐变消失广播");
-        } catch (Exception e) {
-            Log.e(TAG, "发送模糊窗口渐变消失广播失败", e);
-        }
-    }
-    
     /**
-     * 发送模糊层平移广播（让 BlurWindowActivity 同步移动）
+     * 发送模糊层平移（键盘避让动画逐帧调用，同进程静态直连替代广播）
      * @param translationY 内容窗口的 Y 方向平移量
      */
-    private void sendBlurWindowTranslateBroadcast(float translationY) {
+    private void syncBlurTranslate(float translationY) {
         try {
-            Intent intent = new Intent("BLUR_WINDOW_TRANSLATE");
-            intent.setPackage(getPackageName());
-            intent.putExtra("translation_y", translationY);
-            sendBroadcast(intent);
+            BlurWindowActivity.applyTranslate(translationY);
         } catch (Exception e) {
-            Log.e(TAG, "发送模糊窗口平移广播失败", e);
+            Log.e(TAG, "直连平移模糊窗口失败", e);
         }
     }
 
     /**
-     * 将模糊窗口同步到指定屏幕矩形（逐帧，复用 UPDATE_BLUR_WINDOW_SIZE 协议，接收端已支持）。
+     * 将模糊窗口同步到指定屏幕矩形（展开/收起/拖动/回弹共用的逐帧路径）。
      * 与屏幕求交集：请求框越界会触发 WMS 钳制，钳到屏幕边界后与被屏幕裁切的内容严格对齐。
-     * 去重含 alpha：rect 或 alpha 任一变化才发送。
-     * 若真机实测掉帧，降级顺序：尺寸量化到 2px → 隔帧发送。
+     * 去重含 alpha：rect 或 alpha 任一变化才下发；下发方式为同进程静态直连（无广播）。
+     * 若真机实测掉帧，降级顺序：尺寸量化到 2px → 隔帧发送（blur_sync_mode 设置项）。
      */
     private void sendBlurRect(int bx, int by, int bw, int bh, float blurAlpha, boolean force) {
         // 性能档（mode 2）：限频发送（alpha 变化帧与 force 终帧不跳过）
@@ -1938,20 +1918,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
         lastBlurAlpha = blurAlpha;
         blurFrameSent = true;
         lastBlurSendNanos = now;
+        // 直连静态调用（同进程同主线程）：消除每帧 Intent 分配/AMS 广播往返/接收调度延迟，
+        // setAttributes 与本次 doFrame 同帧生效（旧广播路径要到下一帧才应用，模糊层滞后 1 帧）
         try {
-            if (blurUpdateIntent == null) {
-                blurUpdateIntent = new Intent("UPDATE_BLUR_WINDOW_SIZE");
-                blurUpdateIntent.setPackage(getPackageName());
-            }
-            blurUpdateIntent.putExtra("blur_x", bx);
-            blurUpdateIntent.putExtra("blur_y", by);
-            blurUpdateIntent.putExtra("blur_width", bw);
-            blurUpdateIntent.putExtra("blur_height", bh);
-            blurUpdateIntent.putExtra("blur_corner_radius", dpToPx(cornerRadius));
-            blurUpdateIntent.putExtra("blur_alpha", blurAlpha);
-            sendBroadcast(blurUpdateIntent);
+            BlurWindowActivity.applyRect(bx, by, bw, bh, dpToPx(cornerRadius), blurAlpha);
         } catch (Exception e) {
-            Log.e(TAG, "发送模糊窗口逐帧同步失败", e);
+            Log.e(TAG, "直连更新模糊窗口失败", e);
         }
     }
 
@@ -2294,7 +2266,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
          *    位移为纯位置公式（只取决于手指位置，与移速无关，快慢移速位移一致）；
          * 2. 松手 → 阻尼弹簧回弹（约 2 次超调震荡）到原始位置与正常比例，
          *    不注入松手速度（v0=0），避免快速移速导致松手瞬间窜动；
-         * 3. 拖动/回弹期间逐帧用 UPDATE_BLUR_WINDOW_SIZE 同步模糊窗口的 x/y/w/h（方案 A：完全同步）；
+         * 3. 拖动/回弹期间逐帧通过同进程静态调用（applyRect）同步模糊窗口的 x/y/w/h（完全同步）；
          * 4. 手指光晕跟随（点击/按住/移动）。
          */
         private class WindowGestureController {
@@ -2721,7 +2693,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     contentContainer.setTranslationY(currentTranslationY);
                     
                     // 同步通知模糊层平移
-                    sendBlurWindowTranslateBroadcast(currentTranslationY);
+                    syncBlurTranslate(currentTranslationY);
 
                     if (progress < 1.0f) {
                         Choreographer.getInstance().postFrameCallback(this);
