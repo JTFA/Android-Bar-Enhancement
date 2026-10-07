@@ -1624,7 +1624,7 @@ public class FloatWindowService extends Service {
     /** 构建窗口模式 Bundle（100=系统小窗，5=全屏） */
     private Bundle windowingBundle(boolean openInWindow) {
         Bundle bundle = new Bundle();
-        bundle.putInt("android.activity.windowingMode", openInWindow ? 100 : 5);
+        bundle.putInt("android.activity.windowingMode", openInWindow ? 100 : 1);
         return bundle;
     }
 
