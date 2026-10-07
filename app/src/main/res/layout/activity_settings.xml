@@ -1847,7 +1847,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="掉帧时切换：均衡档只在动画中段显示模糊层（展开淡入、收起淡出），性能优先档只在尾段显示，大幅减少模糊渲染开销"
+                android:text="掉帧时切换：均衡档只在动画中段渲染模糊层（展开/收起 40%-60% 淡入淡出），性能优先档渲染时间最短（展开 70%-90%、收起 10%-30%），带外完全不渲染"
                 android:textSize="12sp"
                 android:textColor="?attr/textHint"
                 android:layout_marginBottom="8dp" />
