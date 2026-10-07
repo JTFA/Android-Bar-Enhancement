@@ -573,17 +573,20 @@ public class GestureLaunchConfigDialog {
             }
         });
 
+        final AlertDialog listDialog = new AlertDialog.Builder(activity)
+                .setTitle("选择 Activity · " + pkg)
+                .setView(layout)
+                .setNegativeButton("取消", null)
+                .create();
+
         listView.setOnItemClickListener((parent, view, position, id) -> {
             String clsName = classNames.get(position);
             classInput.setText(clsName);
             classInput.setSelection(classInput.getText().length());
+            listDialog.dismiss();
         });
 
-        new AlertDialog.Builder(activity)
-                .setTitle("选择 Activity · " + pkg)
-                .setView(layout)
-                .setNegativeButton("取消", null)
-                .show();
+        listDialog.show();
     }
 
     /**
