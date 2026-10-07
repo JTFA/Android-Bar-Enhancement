@@ -193,8 +193,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private boolean blurFrameSent;
     private int lastBlurX, lastBlurY, lastBlurW, lastBlurH;
     private float lastBlurAlpha = -1f;
-    private long lastBlurSendNanos;            // 上次下发时刻（性能档限频用）
-    // 模糊层同步模式：0 精确同步（默认） / 1 均衡（2px 量化） / 2 性能优先（量化 + 约30fps 限频）
+    // 模糊层同步模式：
+    //   0 精确同步（默认）——模糊层逐帧全程跟随窗口动画
+    //   1 均衡——动画中段才显示：展开过半后线性渐入、收起过半后隐藏；其余相位冻结矩形且半径置 0
+    //   2 性能优先——仅尾段显示：展开 90% 后出现（硬切）、收起 10% 后隐藏
     private int blurSyncMode;
     // 内容窗口布局基准屏幕坐标（纯布局位置；展开动画应用 transform 前捕获，收起动画复用）
     private int layoutBaseLeft, layoutBaseTop;
@@ -1615,15 +1617,23 @@ public class OverlayWindowActivity extends AppCompatActivity {
             expandAcrylicBg.updateFillColorAndAlpha(expandTargetAlpha, expandTargetAlpha);
         }
 
+        // 相位模式（均衡/性能优先）：动画入口即进入不可见相位，模糊半径先置 0——
+        // 保证 SurfaceFlinger 跳过模糊计算；可见相位的校准帧会恢复原始半径
+        if (blurSyncMode != 0) {
+            BlurWindowActivity.applyRadius(0);
+        }
+
         final long startNanos = System.nanoTime();
 
         // 在 doFrame 回调外部（但仍在方法内）声明局部数组：
         final float[] lastOverlayAlpha = { -1f };
         final float[] lastWebAlpha = { -1f };
-        // 首帧仅同步尺寸（alpha 保持 0），次帧才开 alpha：
-        // 避免首次 relayout 中 alpha 0→1 与"全尺寸→细条"同帧生效——
-        // WMS 先应用 alpha、后应用 frame 时会闪现 1 帧全尺寸模糊
+        // 模糊层相位状态：
+        // mode 0 firstBlurFrame——首帧仅同步尺寸（alpha 保持 0），次帧才开 alpha，
+        //   避免"全尺寸→细条"与 alpha 0→1 同帧时闪现 1 帧全尺寸模糊；
+        // mode 1/2 blurCalibrated——不可见相位冻结矩形，首个可见帧仅做校准（alpha 仍为 0）
         final boolean[] firstBlurFrame = { true };
+        final boolean[] blurCalibrated = { false };
 
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             @Override
@@ -1645,11 +1655,30 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 contentContainer.setTranslationX(curTransX);
                 contentContainer.setTranslationY(curTransY);
 
-                // 逐帧同步模糊层：首帧仅落尺寸（alpha 仍 0，不可见），
-                // 第 2 帧起 alpha=1（此时尺寸已是细条，消除全尺寸闪烁窗口期）
-                syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY,
-                        firstBlurFrame[0] ? 0f : 1f, false);
-                firstBlurFrame[0] = false;
+                // 逐帧同步模糊层（按 blur_syncMode 分档）：
+                float showThreshold = (blurSyncMode == 1) ? 0.25f : 0.75f;
+                if (blurSyncMode == 0) {
+                    // 精确同步：首帧仅落尺寸（alpha 仍 0），第 2 帧起 alpha=1，
+                    // 消除"全尺寸→细条"与 alpha 同帧的 1 帧闪烁
+                    syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY,
+                            firstBlurFrame[0] ? 0f : 1f, false);
+                    firstBlurFrame[0] = false;
+                } else if (progress < showThreshold) {
+                    // 不可见相位：冻结矩形（不下发任何同步），alpha=0、半径=0 已在动画入口置好
+                } else if (!blurCalibrated[0]) {
+                    // 校准帧：矩形一次性跳到当前视觉位置（alpha 仍为 0，尺寸跳变不可见），
+                    // 同时恢复原始模糊半径，随后进入渐入/出现
+                    syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, 0f, false);
+                    BlurWindowActivity.restoreRadiusIfAlive();
+                    blurCalibrated[0] = true;
+                } else if (blurSyncMode == 1) {
+                    // 均衡：可见相位内线性渐入（0.5 → 1.0 映射到 alpha 0 → 1）
+                    float a = (progress - showThreshold) / (1f - showThreshold);
+                    syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, a, false);
+                } else {
+                    // 性能优先：校准帧后硬切出现
+                    syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, 1f, false);
+                }
 
                 // 背景遮罩同步渐入（与窗口动画同时；超调段 eased>1，钳位防止 alpha 超 1）
                 if (overlayView != null) {
@@ -1700,7 +1729,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     contentContainer.setTranslationX(0f);
                     contentContainer.setTranslationY(0f);
 
-                    // 终帧强制同步（性能档限频不跳过），保证展开结束后模糊层与窗口精确一致
+                    // 终帧强制同步（去重不跳过），保证展开结束后模糊层与窗口精确一致
+                    // （相位模式下此时必然已完成校准，半径已恢复、alpha 收敛于 1）
                     syncBlurToTransform(0f, 0f, 1f, 1f, 1f, true);
 
                     contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
@@ -1766,6 +1796,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // ===== 优化：添加阈值跟踪，减少不必要的属性更新 =====
         final float[] lastOverlayAlpha = { -1f };
         final float[] lastWebAlpha = { -1f };
+        // 收起开始时模糊层的可见 alpha（相位模式用）：
+        // 从未出现过（相位未到即收起）时为 0 → 全程冻结不动；正常展开完成后为 1
+        final float collapseStartBlurAlpha = Math.max(0f, lastBlurAlpha);
+        final boolean[] blurZeroed = { false };
 
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             @Override
@@ -1802,8 +1836,32 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 contentContainer.setTranslationX(curTransX);
                 contentContainer.setTranslationY(curTransY);
 
-                // 逐帧同步模糊层：尺寸跟随窗口收缩，透明度与内容同曲线（最后 30%）淡出
-                syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, containerAlpha, false);
+                // 逐帧同步模糊层（按 blurSyncMode 分档）：
+                if (blurSyncMode == 0) {
+                    // 精确同步：尺寸跟随窗口收缩，透明度与内容同曲线（最后 30%）淡出
+                    syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, containerAlpha, false);
+                } else {
+                    float hideThreshold = (blurSyncMode == 1) ? 0.75f : 0.25f;
+                    if (collapseStartBlurAlpha <= 0f) {
+                        // 模糊层本就不可见（展开相位未到即收起）：确保半径归零（可能刚过
+                        // 校准帧、半径已恢复但 alpha 仍为 0）并冻结矩形，不下发
+                        if (!blurZeroed[0]) {
+                            BlurWindowActivity.applyRadius(0);
+                            blurZeroed[0] = true;
+                        }
+                    } else if (progress < hideThreshold) {
+                        // 可见相位：均衡从收起开始的 alpha 线性淡出；性能优先保持全亮
+                        float a = (blurSyncMode == 1)
+                                ? collapseStartBlurAlpha * (1f - progress / hideThreshold)
+                                : collapseStartBlurAlpha;
+                        syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, a, false);
+                    } else if (!blurZeroed[0]) {
+                        // 关断帧：alpha 归零 + 半径置 0（一次性），随后冻结矩形直至动画结束
+                        syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, 0f, false);
+                        BlurWindowActivity.applyRadius(0);
+                        blurZeroed[0] = true;
+                    }
+                }
 
                 // ===== 优化：WebView 透明度阈值更新 =====
                 if (webView != null) {
@@ -1884,24 +1942,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
      * 将模糊窗口同步到指定屏幕矩形（展开/收起/拖动/回弹共用的逐帧路径）。
      * 与屏幕求交集：请求框越界会触发 WMS 钳制，钳到屏幕边界后与被屏幕裁切的内容严格对齐。
      * 去重含 alpha：rect 或 alpha 任一变化才下发；下发方式为同进程静态直连（无广播）。
-     * 若真机实测掉帧，降级顺序：尺寸量化到 2px → 隔帧发送（blur_sync_mode 设置项）。
+     * 相位控制（均衡/性能优先档的不可见相位冻结、半径置 0）由展开/收起动画分支处理，
+     * 本方法始终逐帧精确下发，不量化、不限频。
      */
     private void sendBlurRect(int bx, int by, int bw, int bh, float blurAlpha, boolean force) {
-        // 性能档（mode 2）：限频发送（alpha 变化帧与 force 终帧不跳过）
-        long now = System.nanoTime();
-        if (blurSyncMode >= 2 && !force && blurFrameSent
-                && blurAlpha == lastBlurAlpha
-                && now - lastBlurSendNanos < 32_000_000L) {
-            return;
-        }
-        // 均衡/性能档（mode ≥ 1）：量化到 2px，减少 WMS relayout/缓冲区重分配次数（偏差 ≤1px）
-        if (blurSyncMode >= 1) {
-            bx = bx & ~1;
-            by = by & ~1;
-            bw = (bw + 1) & ~1;
-            bh = (bh + 1) & ~1;
-        }
-
         int sx0 = Math.max(0, bx);
         int sy0 = Math.max(0, by);
         int sx1 = Math.min(screenWidth, bx + bw);
@@ -1924,7 +1968,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
         lastBlurH = bh;
         lastBlurAlpha = blurAlpha;
         blurFrameSent = true;
-        lastBlurSendNanos = now;
         // 直连静态调用（同进程同主线程）：消除每帧 Intent 分配/AMS 广播往返/接收调度延迟，
         // setAttributes 与本次 doFrame 同帧生效（旧广播路径要到下一帧才应用，模糊层滞后 1 帧）
         try {

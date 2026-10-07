@@ -82,11 +82,11 @@
         <item>打开AI窗口</item>
     </string-array>
 
-    <!-- 模糊层同步模式（按手机性能在同步精度与掉帧之间取舍） -->
+    <!-- 模糊层同步模式（按手机性能选择模糊层参与动画的方式） -->
     <string-array name="blur_sync_entries">
-        <item>精确同步（逐帧逐像素，默认）</item>
-        <item>均衡（尺寸 2px 量化，减少掉帧）</item>
-        <item>性能优先（2px 量化 + 降频发送，最大程度减少掉帧）</item>
+        <item>精确同步（模糊层全程逐帧跟随，默认）</item>
+        <item>均衡（动画中段显示：展开淡入 / 收起淡出，其余相位不渲染）</item>
+        <item>性能优先（仅尾段显示：展开 90% 后出现、收起 10% 后消失）</item>
     </string-array>
 
 </resources>

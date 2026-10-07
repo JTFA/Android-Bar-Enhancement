@@ -42,6 +42,7 @@ public class BlurWindowActivity extends Activity {
     // 窗口圆角背景复用（拖动期间会被逐帧 UPDATE_BLUR_WINDOW_SIZE 调用，避免每帧 new 对象）
     private android.graphics.drawable.GradientDrawable windowBackgroundDrawable;
     private int appliedCornerRadius = -1; // 当前已应用的圆角，未变化时跳过更新
+    private int appliedBlurRadius;        // 当前已应用的模糊半径（相位控制 / 收尾动画起始值）
 
     public static final String EXTRA_BLUR_X = "blur_x";
     public static final String EXTRA_BLUR_Y = "blur_y";
@@ -93,6 +94,34 @@ public class BlurWindowActivity extends Activity {
         if (act != null && !act.isFinishing()) {
             act.applyWindowTranslate(translationY);
         }
+    }
+
+    /**
+     * 直连设置当前生效的背景模糊半径。
+     * 相位控制用：不可见相位置 0，保证 SurfaceFlinger 跳过该窗口的模糊计算。
+     */
+    public static void applyRadius(int radius) {
+        BlurWindowActivity act = sInstance != null ? sInstance.get() : null;
+        if (act != null && !act.isFinishing()) {
+            act.applyWindowRadius(radius);
+        }
+    }
+
+    /**
+     * 恢复为创建时的原始模糊半径（展开动画进入可见相位时调用）。
+     */
+    public static void restoreRadiusIfAlive() {
+        BlurWindowActivity act = sInstance != null ? sInstance.get() : null;
+        if (act != null && !act.isFinishing()) {
+            act.applyWindowRadius(act.originalBlurRadius);
+        }
+    }
+
+    private void applyWindowRadius(int radius) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            getWindow().setBackgroundBlurRadius(radius);
+        }
+        appliedBlurRadius = radius;
     }
 
     /**
@@ -165,6 +194,7 @@ public class BlurWindowActivity extends Activity {
         int blurWidth = getIntent().getIntExtra(EXTRA_BLUR_WIDTH, 200);
         int blurHeight = getIntent().getIntExtra(EXTRA_BLUR_HEIGHT, 200);
         originalBlurRadius = getIntent().getIntExtra(EXTRA_BLUR_RADIUS, 50);
+        appliedBlurRadius = originalBlurRadius;
         int cornerRadius = getIntent().getIntExtra(EXTRA_BLUR_CORNER_RADIUS, 0);
 
         // 配置窗口:全透明、不聚焦、不触摸(让上层 OverlayWindowActivity 接收触摸)
@@ -380,7 +410,8 @@ public class BlurWindowActivity extends Activity {
         // 即使进程冻结了，已减小的半径不反弹。
         final WindowManager.LayoutParams wmParams = (WindowManager.LayoutParams) getWindow().getAttributes();
         final float startWindowAlpha = wmParams.alpha;
-        final int startBlurRadius = originalBlurRadius;
+        // 从"实际已应用"的半径起算：相位模式下可能已置 0，避免 0→原始→0 的无效反弹
+        final int startBlurRadius = appliedBlurRadius;
         final long startTime = System.currentTimeMillis();
         final int duration = 100;
         
