@@ -737,6 +737,39 @@
                 android:text="#333333"
                 android:layout_marginBottom="16dp" />
 
+            <!-- 按下时颜色模式 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="按下时颜色模式"
+                android:textSize="14sp"
+                android:textColor="?attr/textPrimary"
+                android:layout_marginBottom="8dp" />
+
+            <RadioGroup
+                android:id="@+id/radio_pressed_color_mode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="16dp">
+
+                <RadioButton
+                    android:id="@+id/radio_pressed_color_custom"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="自定义颜色"
+                    android:checked="false" />
+
+                <RadioButton
+                    android:id="@+id/radio_pressed_color_rainbow"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="彩虹流光"
+                    android:checked="true" />
+            </RadioGroup>
+
             <!-- 边缘羽化宽度 -->
             <TextView
                 android:id="@+id/text_pressed_bar_feather"
@@ -754,6 +787,25 @@
                 android:min="0"
                 android:max="50"
                 android:progress="15" />
+
+            <!-- 光晕半径 -->
+            <TextView
+                android:id="@+id/text_pressed_bar_glow_radius"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="光晕半径: 25dp"
+                android:textSize="14sp"
+                android:textColor="?attr/textPrimary"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_pressed_bar_glow_radius"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="0"
+                android:max="60"
+                android:progress="25" />
 
         </LinearLayout>
 

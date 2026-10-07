@@ -67,6 +67,7 @@ import android.animation.ValueAnimator;
 
 import android.view.animation.OvershootInterpolator;
 import android.view.animation.DecelerateInterpolator;
+import android.view.animation.LinearInterpolator;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -125,6 +126,13 @@ public class FloatWindowService extends Service {
     private int pressedBarFeatherWidth = 10; // 按下时边缘羽化宽度 (dp)
     private int pressedBarPositionY = 0; //按下时位置Y (dp，正值向上)
     private View pressedOverlay; // 按下状态覆盖层（透明度渐变显示按下样式）
+    private View glowOverlay; // 光晕层（小横条作为光源向四周散射光）
+    private GlowView glowOuter; // 外层光晕：大范围柔和远光
+    private GlowView glowInner; // 内层光晕：贴着横条的亮芯
+    private int pressedBarGlowRadius = 25; // 光晕半径 (dp，0=关闭光晕)
+    private String pressedBarColorMode = "rainbow"; // 颜色模式: rainbow=彩虹流光, color=自定义颜色
+    private ValueAnimator rainbowAnimator; // 彩虹流光动画（按住期间循环）
+    private float rainbowFlow = 0f; // 流光相位（核心层与光晕层共享，保证同步）
 
     // AI 对话窗口相关
     private FrameLayout aiWindowContainer;
@@ -617,6 +625,15 @@ public class FloatWindowService extends Service {
             if (intent.hasExtra("pressed_bar_position_y")) {
                 pressedBarPositionY = intent.getIntExtra("pressed_bar_position_y", pressedBarPositionY);
             }
+            if (intent.hasExtra("pressed_bar_glow_radius")) {
+                pressedBarGlowRadius = intent.getIntExtra("pressed_bar_glow_radius", pressedBarGlowRadius);
+            }
+            if (intent.hasExtra("pressed_bar_color_mode")) {
+                String colorMode = intent.getStringExtra("pressed_bar_color_mode");
+                if (colorMode != null && !colorMode.isEmpty()) {
+                    pressedBarColorMode = colorMode;
+                }
+            }
 
             updateBarStyles(width, height, corner, alpha);
             updateBarPosition(posX, posY);
@@ -899,12 +916,12 @@ public class FloatWindowService extends Service {
         barLayoutParams.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
         // 容器尺寸取提示条和覆盖层中较大的，确保覆盖层不会被 Surface 裁切
         if (currentWidth != ViewGroup.LayoutParams.MATCH_PARENT) {
-            barLayoutParams.width = Math.max(currentWidth, pressedBarWidth);
+            barLayoutParams.width = Math.max(currentWidth, pressedBarWidth + 2 * dpToPx(pressedBarGlowRadius));
         } else {
             barLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
         }
         // 高度考虑覆盖层偏移（pressedBarPositionY 正值向上，容器需加高以容纳偏移后的覆盖层底部）
-        barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)));
+        barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)) + 2 * dpToPx(pressedBarGlowRadius));
 
         // CENTER_VERTICAL|CENTER_HORIZONTAL 下：x=barPositionX(居中偏移), y=dpToPx(barPositionY)(居中偏移)
         barLayoutParams.x = barPositionX;
@@ -919,6 +936,8 @@ public class FloatWindowService extends Service {
         barContainer.addView(bottomBar);
 
         // 创建按下状态覆盖层（置于 bottomBar 之上，初始透明）
+        glowOverlay = createGlowOverlay();
+        barContainer.addView(glowOverlay);
         pressedOverlay = createPressedOverlay();
         barContainer.addView(pressedOverlay);
 
@@ -1141,12 +1160,12 @@ public class FloatWindowService extends Service {
             try {
                 // 容器尺寸始终取提示条和覆盖层中较大的，确保覆盖层不会被 Surface 裁切
                 if (currentWidth != ViewGroup.LayoutParams.MATCH_PARENT) {
-                    barLayoutParams.width = Math.max(currentWidth, pressedBarWidth);
+                    barLayoutParams.width = Math.max(currentWidth, pressedBarWidth + 2 * dpToPx(pressedBarGlowRadius));
                 } else {
                     barLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
                 }
                 // 高度考虑覆盖层偏移（pressedBarPositionY 正值向上，容器需加高以容纳偏移后的覆盖层底部）
-                barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)));
+                barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)) + 2 * dpToPx(pressedBarGlowRadius));
                 barLayoutParams.x = barPositionX;
                 barLayoutParams.y = dpToPx(barPositionY); // 正值越大提示条越靠上
 
@@ -1199,6 +1218,187 @@ public class FloatWindowService extends Service {
 
         overlay.setAlpha(0f);
         return overlay;
+    }
+
+    /**
+     * 创建光晕层（小横条作为光源，光经高斯模糊后向四周散射）
+     * 尺寸 = 按下样式尺寸 + 2×光晕半径（窗口尺寸公式同步扩边，保证不被 Surface 裁切）
+     */
+    private View createGlowOverlay() {
+        FrameLayout container = new FrameLayout(this);
+        int glowPx = dpToPx(pressedBarGlowRadius);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                pressedBarWidth + glowPx * 2,
+                dpToPx(pressedBarHeight) + glowPx * 2);
+        params.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
+        container.setLayoutParams(params);
+
+        // 双层光晕：外层柔和远光 + 内层亮芯（RenderEffect 单视图只能一个，故分两层实现层次感）
+        glowOuter = new GlowView(this);
+        container.addView(glowOuter, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        glowInner = new GlowView(this);
+        glowInner.setAlpha(0.55f);
+        container.addView(glowInner, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        updateGlowBackground(container);
+        applyGlowEffect(container);
+        container.setAlpha(0f);
+        return container;
+    }
+
+    /**
+     * 按颜色模式更新双层光晕的内容（自定义颜色=同色圆角矩形，彩虹=流光渐变）
+     */
+    private void updateGlowBackground(View glow) {
+        updateGlowContent(glowOuter);
+        updateGlowContent(glowInner);
+    }
+
+    private void updateGlowContent(GlowView target) {
+        if (target == null) return;
+        if ("rainbow".equals(pressedBarColorMode)) {
+            target.setContent(new RainbowDrawable(dpToPx(pressedBarCorner)));
+        } else {
+            target.setContent(createRoundedBackground(pressedBarCorner, pressedBarAlpha / 100.0f, pressedBarColor));
+        }
+    }
+
+    /**
+     * 应用/更新双层光晕模糊特效（光晕半径0=关闭光晕）
+     * 内容内缩 R 绘制，四周留 R 宽透明带：
+     * 外层 sigma=R/2（尾迹在透明带内收敛到 ~2%，无硬边）；内层 sigma=R/6（亮芯）
+     */
+    private void applyGlowEffect(View glow) {
+        int glowPx = dpToPx(pressedBarGlowRadius);
+        if (glowPx <= 0) {
+            glow.setVisibility(View.INVISIBLE);
+            if (glowOuter != null) glowOuter.setRenderEffect(null);
+            if (glowInner != null) glowInner.setRenderEffect(null);
+            return;
+        }
+        glow.setVisibility(View.VISIBLE);
+        if (glowOuter != null) {
+            float sigmaOut = Math.max(glowPx / 2f, 1f);
+            glowOuter.setRenderEffect(RenderEffect.createBlurEffect(sigmaOut, sigmaOut, Shader.TileMode.CLAMP));
+        }
+        if (glowInner != null) {
+            float sigmaIn = Math.max(glowPx / 6f, 1f);
+            glowInner.setRenderEffect(RenderEffect.createBlurEffect(sigmaIn, sigmaIn, Shader.TileMode.CLAMP));
+        }
+    }
+
+    /**
+     * 光晕子视图：内容（横条形状）内缩光晕半径居中绘制，外围留透明带，
+     * 经 RenderEffect 高斯模糊后，光从横条形状向外散射（而非整块实心矩形）
+     */
+    private class GlowView extends View {
+        private Drawable content;
+
+        GlowView(Context context) {
+            super(context);
+            setWillNotDraw(false);
+        }
+
+        void setContent(Drawable drawable) {
+            this.content = drawable;
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            if (content == null) return;
+            int inset = dpToPx(pressedBarGlowRadius);
+            int w = getWidth();
+            int h = getHeight();
+            if (w <= inset * 2 || h <= inset * 2) return;
+            content.setBounds(inset, inset, w - inset, h - inset);
+            content.draw(canvas);
+        }
+    }
+
+    /**
+     * 彩虹流光模式：按住期间启动无限流光动画（松开由 restoreNormalBarStyles 取消）
+     */
+    private void startRainbowFlowIfNeeded() {
+        if (!"rainbow".equals(pressedBarColorMode)) {
+            if (rainbowAnimator != null) rainbowAnimator.cancel();
+            return;
+        }
+        if (rainbowAnimator != null && rainbowAnimator.isRunning()) return;
+        rainbowAnimator = ValueAnimator.ofFloat(0f, 1f);
+        rainbowAnimator.setDuration(2500);
+        rainbowAnimator.setRepeatCount(ValueAnimator.INFINITE);
+        rainbowAnimator.setInterpolator(new LinearInterpolator());
+        rainbowAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator animation) {
+                rainbowFlow = (float) animation.getAnimatedValue();
+                if (pressedOverlay != null) pressedOverlay.invalidate();
+                if (glowOverlay != null) glowOverlay.invalidate();
+            }
+        });
+        rainbowAnimator.start();
+    }
+
+    /**
+     * 彩虹流光圆角矩形 Drawable：沿宽度方向的彩虹渐变，
+     * 通过平移 shader 相位实现无缝循环流动（rainbowFlow 为核心层/光晕层共享字段）
+     * 透明度烘焙进绘制，与自定义颜色模式的 createRoundedBackground 语义一致
+     */
+    private class RainbowDrawable extends Drawable {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF rect = new RectF();
+        private final Matrix flowMatrix = new Matrix();
+        private LinearGradient cachedShader;
+        private float cachedWidth = -1f;
+        private float cachedHeight = -1f;
+        private float cornerPx;
+
+        RainbowDrawable(float cornerRadiusPx) {
+            this.cornerPx = cornerRadiusPx;
+        }
+
+        @Override
+        public void draw(Canvas canvas) {
+            Rect b = getBounds();
+            if (b.width() <= 0 || b.height() <= 0) return;
+            rect.set(b);
+            float r = Math.min(cornerPx, Math.min(rect.width(), rect.height()) / 2f);
+            if (cachedShader == null || cachedWidth != rect.width() || cachedHeight != rect.height()) {
+                int[] colors = {
+                        0xFFFF1B6B, 0xFFFF8A00, 0xFFFFD500, 0xFF34D399,
+                        0xFF22D3EE, 0xFF6366F1, 0xFFA855F7, 0xFFFF1B6B
+                };
+                float[] positions = {0f, 0.15f, 0.30f, 0.45f, 0.60f, 0.75f, 0.90f, 1f};
+                cachedShader = new LinearGradient(0f, 0f, Math.max(rect.width(), 1f), 0f,
+                        colors, positions, Shader.TileMode.REPEAT);
+                cachedWidth = rect.width();
+                cachedHeight = rect.height();
+            }
+            // 流光：平移一个渐变周期实现无缝循环
+            flowMatrix.setTranslate(-rainbowFlow * rect.width(), 0f);
+            cachedShader.setLocalMatrix(flowMatrix);
+            paint.setShader(cachedShader);
+            paint.setAlpha(Math.round(pressedBarAlpha / 100.0f * 255));
+            canvas.drawRoundRect(rect, r, r, paint);
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            paint.setAlpha(alpha);
+        }
+
+        @Override
+        public void setColorFilter(ColorFilter colorFilter) {
+            paint.setColorFilter(colorFilter);
+        }
+
+        @Override
+        public int getOpacity() {
+            return PixelFormat.TRANSLUCENT;
+        }
     }
 
     /**
@@ -1255,15 +1455,36 @@ public class FloatWindowService extends Service {
             // pressedBarPositionY：正值向上偏移覆盖层（正值越大覆盖层越靠上）
             pressedOverlay.setTranslationY(-dpToPx(pressedBarPositionY));
 
-            // 更新覆盖层背景为按下样式（颜色、透明度、圆角）
-            GradientDrawable bg = createRoundedBackground(pressedBarCorner, pressedBarAlpha / 100.0f, pressedBarColor);
-            pressedOverlay.setBackground(bg);
+            // 更新覆盖层背景为按下样式（颜色、透明度、圆角）；彩虹模式使用流光渐变
+            if ("rainbow".equals(pressedBarColorMode)) {
+                pressedOverlay.setBackground(new RainbowDrawable(dpToPx(pressedBarCorner)));
+            } else {
+                GradientDrawable bg = createRoundedBackground(pressedBarCorner, pressedBarAlpha / 100.0f, pressedBarColor);
+                pressedOverlay.setBackground(bg);
+            }
 
             // 启用边缘羽化
             if (pressedOverlay instanceof FeatheredFrameLayout) {
                 int pressedColor = parseColorWithAlpha(pressedBarColor, pressedBarAlpha / 100.0f);
                 ((FeatheredFrameLayout) pressedOverlay).setFeatherEnabled(true, pressedColor, pressedBarCorner, pressedBarFeatherWidth);
             }
+
+            // === 光晕层同步（光源效果：与核心层同位、同偏移、同步淡入） ===
+            if (glowOverlay != null) {
+                int glowPx = dpToPx(pressedBarGlowRadius);
+                FrameLayout.LayoutParams glowParams = (FrameLayout.LayoutParams) glowOverlay.getLayoutParams();
+                glowParams.width = pressedBarWidth + glowPx * 2;
+                glowParams.height = dpToPx(pressedBarHeight) + glowPx * 2;
+                glowParams.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
+                glowOverlay.setLayoutParams(glowParams);
+                updateGlowBackground(glowOverlay);
+                applyGlowEffect(glowOverlay);
+                glowOverlay.setTranslationY(pressedOverlay.getTranslationY());
+                glowOverlay.animate().cancel();
+                glowOverlay.setAlpha(pressedBarAlpha / 100.0f * 0.6f);
+                glowOverlay.animate().alpha(pressedBarAlpha / 100.0f).setDuration(80).start();
+            }
+            startRainbowFlowIfNeeded();
 
             // == 第二步：纯透明度动画显示覆盖层 ==
             pressedOverlay.setAlpha(pressedBarAlpha / 100.0f * 0.6f);
@@ -1286,6 +1507,15 @@ public class FloatWindowService extends Service {
 
         // 取消正在进行的动画
         pressedOverlay.animate().cancel();
+
+        // 光晕层与流光动画同步收尾（与核心层相同的淡出时长）
+        if (glowOverlay != null) {
+            glowOverlay.animate().cancel();
+            glowOverlay.animate().alpha(0f).setDuration(restoreWindow ? 150 : 100).start();
+        }
+        if (rainbowAnimator != null) {
+            rainbowAnimator.cancel();
+        }
 
         if (restoreWindow) {
             // 透明度渐出隐藏按下样式，完成后恢复正常的 bottomBar 样式
@@ -5165,11 +5395,11 @@ public class FloatWindowService extends Service {
                     | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
             barLayoutParams.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
             if (currentWidth != ViewGroup.LayoutParams.MATCH_PARENT) {
-                barLayoutParams.width = Math.max(currentWidth, pressedBarWidth);
+                barLayoutParams.width = Math.max(currentWidth, pressedBarWidth + 2 * dpToPx(pressedBarGlowRadius));
             } else {
                 barLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
             }
-            barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)));
+            barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)) + 2 * dpToPx(pressedBarGlowRadius));
             barLayoutParams.x = barPositionX;
             barLayoutParams.y = dpToPx(barPositionY);
             windowManager.updateViewLayout(barContainer, barLayoutParams);
@@ -5180,6 +5410,8 @@ public class FloatWindowService extends Service {
             // 重新创建底部提示条
             bottomBar = createBottomBarView();
             barContainer.addView(bottomBar);
+            glowOverlay = createGlowOverlay();
+            barContainer.addView(glowOverlay);
             pressedOverlay = createPressedOverlay();
             barContainer.addView(pressedOverlay);
             barContainer.setAlpha(1f);
@@ -5437,12 +5669,12 @@ public class FloatWindowService extends Service {
             barLayoutParams.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
             // 容器尺寸取提示条和覆盖层中较大的，确保覆盖层不会被 Surface 裁切
             if (currentWidth != ViewGroup.LayoutParams.MATCH_PARENT) {
-                barLayoutParams.width = Math.max(currentWidth, pressedBarWidth);
+                barLayoutParams.width = Math.max(currentWidth, pressedBarWidth + 2 * dpToPx(pressedBarGlowRadius));
             } else {
                 barLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
             }
             // 高度考虑覆盖层偏移（pressedBarPositionY 正值向上，容器需加高以容纳偏移后的覆盖层底部）
-            barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)));
+            barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)) + 2 * dpToPx(pressedBarGlowRadius));
             // CENTER_VERTICAL|CENTER_HORIZONTAL 下：直接使用 barPositionX/Y
             barLayoutParams.x = targetBtmX;
             barLayoutParams.y = targetBtmY;
@@ -5457,6 +5689,8 @@ public class FloatWindowService extends Service {
             barContainer.addView(bottomBar);
 
             // 重新创建并添加按下状态覆盖层
+            glowOverlay = createGlowOverlay();
+            barContainer.addView(glowOverlay);
             pressedOverlay = createPressedOverlay();
             barContainer.addView(pressedOverlay);
 
@@ -7016,6 +7250,8 @@ public class FloatWindowService extends Service {
             pressedBarCorner = prefs.getInt("pressed_bar_corner", pressedBarCorner);
             pressedBarFeatherWidth = prefs.getInt("pressed_bar_feather_width", pressedBarFeatherWidth);
             pressedBarPositionY = prefs.getInt("pressed_bar_position_y", pressedBarPositionY);
+            pressedBarGlowRadius = prefs.getInt("pressed_bar_glow_radius", pressedBarGlowRadius);
+            pressedBarColorMode = prefs.getString("pressed_bar_color_mode", pressedBarColorMode);
 
             // 加载背景遮罩设置
             overlayColor = prefs.getString("overlay_color", overlayColor);
@@ -7053,7 +7289,7 @@ public class FloatWindowService extends Service {
             Log.d(TAG, "设置已加载 - AI窗口: 宽=" + windowWidth + "dp, 高=" + windowHeight +
                     "dp, 位置X=" + windowPositionX + ", 位置Y=" + windowPositionY);
             Log.d(TAG, "设置已加载 - 按下样式: 颜色=" + pressedBarColor + ", 透明度=" + pressedBarAlpha +
-                    ", 宽=" + pressedBarWidth + "dp, 高=" + pressedBarHeight + "dp, 圆角=" + pressedBarCorner + "dp, 羽化宽度=" + pressedBarFeatherWidth + "dp, Y=" + pressedBarPositionY + "dp");
+                    ", 宽=" + pressedBarWidth + "dp, 高=" + pressedBarHeight + "dp, 圆角=" + pressedBarCorner + "dp, 羽化宽度=" + pressedBarFeatherWidth + "dp, Y=" + pressedBarPositionY + "dp, 光晕=" + pressedBarGlowRadius + "dp, 颜色模式=" + pressedBarColorMode);
         } catch (Exception e) {
             Log.e(TAG, "加载设置失败", e);
         }
@@ -7094,6 +7330,10 @@ public class FloatWindowService extends Service {
 
     @Override
     public void onDestroy() {
+        if (rainbowAnimator != null) {
+            rainbowAnimator.cancel();
+            rainbowAnimator = null;
+        }
         if (restoreBarReceiver != null) {
             try {
                 unregisterReceiver(restoreBarReceiver);

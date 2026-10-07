@@ -19,6 +19,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.RadioGroup;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.Switch;
@@ -115,6 +116,8 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_PRESSED_BAR_CORNER = "pressed_bar_corner";
     private static final String KEY_PRESSED_BAR_FEATHER = "pressed_bar_feather_width";
     private static final String KEY_PRESSED_BAR_POSITION_Y = "pressed_bar_position_y";
+    private static final String KEY_PRESSED_BAR_GLOW_RADIUS = "pressed_bar_glow_radius";
+    private static final String KEY_PRESSED_BAR_COLOR_MODE = "pressed_bar_color_mode";
     
     // 背景遮罩设置
     private static final String KEY_OVERLAY_COLOR = "overlay_color";
@@ -227,6 +230,11 @@ public class SettingsActivity extends AppCompatActivity {
     // 按下时位置Y控件
     private SeekBar seekPressedBarPositionY;
     private TextView textPressedBarPositionY;
+
+    // 光晕半径/颜色模式控件
+    private SeekBar seekPressedBarGlowRadius;
+    private TextView textPressedBarGlowRadius;
+    private RadioGroup radioPressedColorMode;
     
     // 按下时位置Y控件
     
@@ -446,6 +454,11 @@ public class SettingsActivity extends AppCompatActivity {
         // 按下时位置Y控件
         seekPressedBarPositionY = findViewById(R.id.seek_pressed_bar_position_y);
         textPressedBarPositionY = findViewById(R.id.text_pressed_bar_position_y);
+
+        // 光晕半径/颜色模式控件
+        seekPressedBarGlowRadius = findViewById(R.id.seek_pressed_bar_glow_radius);
+        textPressedBarGlowRadius = findViewById(R.id.text_pressed_bar_glow_radius);
+        radioPressedColorMode = findViewById(R.id.radio_pressed_color_mode);
         
         // 按下时位置Y控件
         
@@ -701,6 +714,15 @@ public class SettingsActivity extends AppCompatActivity {
         seekPressedBarPositionY.setProgress(pressedPosY);
         String pressedPosYText = pressedPosY >= 0 ? "按下时位置Y: " + pressedPosY + "dp (向上)" : "按下时位置Y: " + pressedPosY + "dp (向下)";
         textPressedBarPositionY.setText(pressedPosYText);
+
+        // 加载光晕半径
+        int pressedGlow = preferences.getInt(KEY_PRESSED_BAR_GLOW_RADIUS, 25);
+        seekPressedBarGlowRadius.setProgress(pressedGlow);
+        textPressedBarGlowRadius.setText(pressedGlow == 0 ? "光晕半径: 关闭" : "光晕半径: " + pressedGlow + "dp");
+
+        // 加载颜色模式
+        String colorMode = preferences.getString(KEY_PRESSED_BAR_COLOR_MODE, "rainbow");
+        radioPressedColorMode.check("color".equals(colorMode) ? R.id.radio_pressed_color_custom : R.id.radio_pressed_color_rainbow);
         
         // 加载按下时位置Y
         // 加载背景遮罩设置
@@ -900,6 +922,10 @@ public class SettingsActivity extends AppCompatActivity {
         
         // 保存按下时位置Y
         editor.putInt(KEY_PRESSED_BAR_POSITION_Y, seekPressedBarPositionY.getProgress());
+
+        // 保存光晕半径与颜色模式
+        editor.putInt(KEY_PRESSED_BAR_GLOW_RADIUS, seekPressedBarGlowRadius.getProgress());
+        editor.putString(KEY_PRESSED_BAR_COLOR_MODE, getPressedColorMode());
         
         // 保存按下时位置Y
         // 保存背景遮罩设置
@@ -987,6 +1013,8 @@ public class SettingsActivity extends AppCompatActivity {
         styleIntent.putExtra("pressed_bar_corner", seekPressedBarCorner.getProgress());
         styleIntent.putExtra("pressed_bar_feather_width", seekPressedBarFeather.getProgress());
         styleIntent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
+        styleIntent.putExtra("pressed_bar_glow_radius", seekPressedBarGlowRadius.getProgress());
+        styleIntent.putExtra("pressed_bar_color_mode", getPressedColorMode());
         startService(styleIntent);
         
         // 关键修复：获取边框和阴影设置
@@ -1065,6 +1093,8 @@ public class SettingsActivity extends AppCompatActivity {
         animIntent.putExtra("pressed_bar_corner", seekPressedBarCorner.getProgress());
         animIntent.putExtra("pressed_bar_feather_width", seekPressedBarFeather.getProgress());
         animIntent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
+        animIntent.putExtra("pressed_bar_glow_radius", seekPressedBarGlowRadius.getProgress());
+        animIntent.putExtra("pressed_bar_color_mode", getPressedColorMode());
         startService(animIntent);
         
         // 更新 AI URL（如果服务正在运行且窗口已展开）
@@ -1384,6 +1414,27 @@ public class SettingsActivity extends AppCompatActivity {
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
         
+        // 光晕半径 - 实时更新
+        seekPressedBarGlowRadius.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textPressedBarGlowRadius.setText(progress == 0 ? "光晕半径: 关闭" : "光晕半径: " + progress + "dp");
+                applyCurrentSettings();
+                triggerPressedPreview();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
+        // 颜色模式 - 切换即时预览
+        radioPressedColorMode.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(RadioGroup group, int checkedId) {
+                applyCurrentSettings();
+                triggerPressedPreview();
+            }
+        });
+
         // 按下时颜色编辑框 TextWatcher（实时预览）
         editPressedBarColor.addTextChangedListener(new android.text.TextWatcher() {
             private Handler textHandler = new Handler(Looper.getMainLooper());
@@ -1720,6 +1771,8 @@ public class SettingsActivity extends AppCompatActivity {
         styleIntent.putExtra("pressed_bar_corner", seekPressedBarCorner.getProgress());
         styleIntent.putExtra("pressed_bar_feather_width", seekPressedBarFeather.getProgress());
         styleIntent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
+        styleIntent.putExtra("pressed_bar_glow_radius", seekPressedBarGlowRadius.getProgress());
+        styleIntent.putExtra("pressed_bar_color_mode", getPressedColorMode());
         startService(styleIntent);
         
         // 更新窗口位置和大小
@@ -1800,6 +1853,8 @@ public class SettingsActivity extends AppCompatActivity {
         animIntent.putExtra("pressed_bar_corner", seekPressedBarCorner.getProgress());
         animIntent.putExtra("pressed_bar_feather_width", seekPressedBarFeather.getProgress());
         animIntent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
+        animIntent.putExtra("pressed_bar_glow_radius", seekPressedBarGlowRadius.getProgress());
+        animIntent.putExtra("pressed_bar_color_mode", getPressedColorMode());
         startService(animIntent);
         
         // 更新快捷方式窗口设置
@@ -1832,6 +1887,11 @@ public class SettingsActivity extends AppCompatActivity {
     /**
      * 安全获取按下状态颜色值
      */
+    private String getPressedColorMode() {
+        return radioPressedColorMode.getCheckedRadioButtonId() == R.id.radio_pressed_color_custom
+                ? "color" : "rainbow";
+    }
+
     private String getPressedBarColorSafe() {
         String color = editPressedBarColor.getText().toString().trim();
         if (TextUtils.isEmpty(color) || !color.startsWith("#")) {
@@ -2511,6 +2571,8 @@ public class SettingsActivity extends AppCompatActivity {
         intent.putExtra("pressed_bar_corner", seekPressedBarCorner.getProgress());
         intent.putExtra("pressed_bar_feather_width", seekPressedBarFeather.getProgress());
         intent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
+        intent.putExtra("pressed_bar_glow_radius", seekPressedBarGlowRadius.getProgress());
+        intent.putExtra("pressed_bar_color_mode", getPressedColorMode());
         startService(intent);
     }
     
@@ -2534,6 +2596,8 @@ public class SettingsActivity extends AppCompatActivity {
         intent.putExtra("pressed_bar_corner", seekPressedBarCorner.getProgress());
         intent.putExtra("pressed_bar_feather_width", seekPressedBarFeather.getProgress());
         intent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
+        intent.putExtra("pressed_bar_glow_radius", seekPressedBarGlowRadius.getProgress());
+        intent.putExtra("pressed_bar_color_mode", getPressedColorMode());
         startService(intent);
     }
 
