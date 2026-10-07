@@ -106,6 +106,9 @@ public class FloatWindowService extends Service {
     private FrameLayout barContainer;
     private View bottomBar;
     private WindowManager.LayoutParams barLayoutParams;
+    // 独立光晕窗口：承载按下覆盖层与光晕层（FLAG_NOT_TOUCHABLE、恒定尺寸、永不缩放）
+    private FrameLayout glowContainer;
+    private WindowManager.LayoutParams glowLayoutParams;
 
     // 默认样式参数
     private int currentWidth = 375;
@@ -920,14 +923,9 @@ public class FloatWindowService extends Service {
 
 
         barLayoutParams.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
-        // 容器尺寸取提示条和覆盖层中较大的，确保覆盖层不会被 Surface 裁切
-        if (currentWidth != ViewGroup.LayoutParams.MATCH_PARENT) {
-            barLayoutParams.width = Math.max(currentWidth, pressedBarWidth + 2 * dpToPx(pressedBarGlowRadius));
-        } else {
-            barLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
-        }
-        // 高度考虑覆盖层偏移（pressedBarPositionY 正值向上，容器需加高以容纳偏移后的覆盖层底部）
-        barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)) + 2 * dpToPx(pressedBarGlowRadius));
+        // 横条窗口尺寸恒等于设置的触发区（手势期间绝不缩放）；按压视觉由独立光晕窗口承载
+        barLayoutParams.width = computeBarWindowWidth();
+        barLayoutParams.height = computeBarWindowHeight();
 
         // CENTER_VERTICAL|CENTER_HORIZONTAL 下：x=barPositionX(居中偏移), y=dpToPx(barPositionY)(居中偏移)
         barLayoutParams.x = barPositionX;
@@ -937,15 +935,16 @@ public class FloatWindowService extends Service {
         Log.d(TAG, "提示条参数 - 圆角: " + currentCornerRadius + "dp, 透明度: " + currentAlpha);
         Log.d(TAG, "提示条位置 - X: " + barPositionX + ", Y: " + barPositionY + "dp (正值向上)");
 
-        // 创建提示条视图
+        // 创建提示条视图（仅横条在横条窗口内）
         bottomBar = createBottomBarView();
         barContainer.addView(bottomBar);
 
-        // 创建按下状态覆盖层（置于 bottomBar 之上，初始透明）
+        // 按下覆盖层与光晕放入独立光晕窗口（不可触摸、恒定尺寸）
+        createGlowWindow();
         glowOverlay = createGlowOverlay();
-        barContainer.addView(glowOverlay);
+        glowContainer.addView(glowOverlay);
         pressedOverlay = createPressedOverlay();
-        barContainer.addView(pressedOverlay);
+        glowContainer.addView(pressedOverlay);
 
 
         // 添加到底部窗口（在遮罩之上）
@@ -956,6 +955,42 @@ public class FloatWindowService extends Service {
             Log.e(TAG, "添加底部提示条失败", e);
             e.printStackTrace();
         }
+
+        // 光晕窗口后添加 → Z 序高于横条，按压视觉覆盖横条；FLAG_NOT_TOUCHABLE 触摸穿透
+        try {
+            windowManager.addView(glowContainer, glowLayoutParams);
+            Log.d(TAG, "光晕窗口已成功添加到窗口");
+        } catch (Exception e) {
+            Log.e(TAG, "添加光晕窗口失败", e);
+        }
+    }
+
+    /**
+     * 创建独立光晕窗口的容器与参数（initBottomBar 中在横条窗口之后 addView，保证 Z 序更高）。
+     * FLAG_NOT_TOUCHABLE：触摸完全穿透 →即使窗口大于横条也不产生死区；
+     * 尺寸恒定：按压/松手只做 alpha 动画，手势期间绝不 resize
+     * （动态缩窗会在手势中触发系统取消事件与 surface 过渡错位）
+     */
+    private void createGlowWindow() {
+        glowContainer = new FrameLayout(this);
+        glowContainer.setClipChildren(false);
+
+        glowLayoutParams = new WindowManager.LayoutParams();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            glowLayoutParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+        } else {
+            glowLayoutParams.type = WindowManager.LayoutParams.TYPE_PHONE;
+        }
+        glowLayoutParams.format = PixelFormat.RGBA_8888;
+        glowLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+        glowLayoutParams.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
+        glowLayoutParams.width = computeGlowWindowWidth();
+        glowLayoutParams.height = computeGlowWindowHeight();
+        glowLayoutParams.x = barLayoutParams.x;
+        glowLayoutParams.y = barLayoutParams.y;
     }
 
     /**
@@ -1167,20 +1202,55 @@ public class FloatWindowService extends Service {
         }
     }
 
+    /** 横条窗口尺寸恒等于设置的触发区（手势期间绝不缩放，避免输入取消与画面过渡问题） */
+    private int computeBarWindowWidth() {
+        if (currentWidth == ViewGroup.LayoutParams.MATCH_PARENT) {
+            return ViewGroup.LayoutParams.MATCH_PARENT;
+        }
+        return currentWidth;
+    }
+
+    private int computeBarWindowHeight() {
+        return dpToPx(currentHeight);
+    }
+
+    /** 光晕窗口尺寸恒定：容纳核心层+位置偏移+光晕，不可触摸故不产生死区 */
+    private int computeGlowWindowWidth() {
+        if (currentWidth == ViewGroup.LayoutParams.MATCH_PARENT) {
+            return ViewGroup.LayoutParams.MATCH_PARENT;
+        }
+        return Math.max(currentWidth, pressedBarWidth + 2 * dpToPx(pressedBarGlowRadius));
+    }
+
+    private int computeGlowWindowHeight() {
+        return Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight)
+                + 2 * Math.abs(dpToPx(pressedBarPositionY))
+                + 2 * dpToPx(pressedBarGlowRadius));
+    }
+
+    /** 光晕窗口与横条窗口对齐（同 gravity/x/y），尺寸按当前设置重算 */
+    private void syncGlowWindow() {
+        if (glowContainer == null || glowLayoutParams == null || windowManager == null || barLayoutParams == null) return;
+        glowLayoutParams.width = computeGlowWindowWidth();
+        glowLayoutParams.height = computeGlowWindowHeight();
+        glowLayoutParams.x = barLayoutParams.x;
+        glowLayoutParams.y = barLayoutParams.y;
+        try {
+            windowManager.updateViewLayout(glowContainer, glowLayoutParams);
+        } catch (Exception e) {
+            Log.e(TAG, "同步光晕窗口失败", e);
+        }
+    }
+
     /**
      * 应用样式更改到视图
      */
     private void applyStyleChanges() {
         if (bottomBar != null && barLayoutParams != null && windowManager != null) {
             try {
-                // 容器尺寸始终取提示条和覆盖层中较大的，确保覆盖层不会被 Surface 裁切
-                if (currentWidth != ViewGroup.LayoutParams.MATCH_PARENT) {
-                    barLayoutParams.width = Math.max(currentWidth, pressedBarWidth + 2 * dpToPx(pressedBarGlowRadius));
-                } else {
-                    barLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
-                }
-                // 高度考虑覆盖层偏移（pressedBarPositionY 正值向上，容器需加高以容纳偏移后的覆盖层底部）
-                barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)) + 2 * dpToPx(pressedBarGlowRadius));
+                // 横条窗口尺寸恒等于设置的触发区（手势期间绝不缩放）；按压视觉由独立光晕窗口承载
+                barLayoutParams.width = computeBarWindowWidth();
+                barLayoutParams.height = computeBarWindowHeight();
                 barLayoutParams.x = barPositionX;
                 barLayoutParams.y = dpToPx(barPositionY); // 正值越大提示条越靠上
 
@@ -1201,6 +1271,7 @@ public class FloatWindowService extends Service {
 
                 // 应用更新
                 windowManager.updateViewLayout(barContainer, barLayoutParams);
+                syncGlowWindow();
                 Log.d(TAG, "样式已实时更新");
             } catch (Exception e) {
                 Log.e(TAG, "更新样式失败", e);
@@ -1435,18 +1506,18 @@ public class FloatWindowService extends Service {
             // 容器已有 setClipChildren(false)，覆盖层可超出容器布局边界渲染
 
             // == 第一步：更新覆盖层样式 ==
-            // 容器已预设足够尺寸容纳覆盖层（初始化时取提示条/覆盖层中较大者），
-            // 此处仅更新覆盖层自身的样式和位置，不改变窗口大小
+            // 覆盖层/光晕位于独立光晕窗口（恒定尺寸），按下只做透明度动画，不触碰任何窗口尺寸
 
-            // 日志：打印当前容器和覆盖层尺寸用于调试裁剪问题
-            Log.d(TAG, "[PRESSED_DEBUG] 容器尺寸: w=" + barLayoutParams.width + " h=" + barLayoutParams.height
+            // 日志：打印光晕窗口与覆盖层尺寸用于调试裁剪问题
+            int containerW = (glowLayoutParams != null) ? glowLayoutParams.width : computeGlowWindowWidth();
+            int containerH = (glowLayoutParams != null) ? glowLayoutParams.height : computeGlowWindowHeight();
+            Log.d(TAG, "[PRESSED_DEBUG] 光晕窗口尺寸: w=" + containerW + " h=" + containerH
                     + " pressedOverlay尺寸: w=" + pressedBarWidth + " h=" + dpToPx(pressedBarHeight));
-            int containerW = barLayoutParams.width;
             if (containerW != ViewGroup.LayoutParams.MATCH_PARENT && pressedBarWidth > containerW) {
                 Log.w(TAG, "[PRESSED_DEBUG] 覆盖层宽度(" + pressedBarWidth + ") > 容器宽度(" + containerW + ")，可能被裁剪！");
             }
-            if (dpToPx(pressedBarHeight) > barLayoutParams.height) {
-                Log.w(TAG, "[PRESSED_DEBUG] 覆盖层高度(" + dpToPx(pressedBarHeight) + ") > 容器高度(" + barLayoutParams.height + ")，可能被裁剪！");
+            if (dpToPx(pressedBarHeight) > containerH) {
+                Log.w(TAG, "[PRESSED_DEBUG] 覆盖层高度(" + dpToPx(pressedBarHeight) + ") > 容器高度(" + containerH + ")，可能被裁剪！");
             }
 
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) pressedOverlay.getLayoutParams();
@@ -1595,6 +1666,7 @@ public class FloatWindowService extends Service {
                 barLayoutParams.y = dpToPx(barPositionY); // 正值越大提示条越靠上
 
                 windowManager.updateViewLayout(barContainer, barLayoutParams);
+                syncGlowWindow();
                 Log.d(TAG, "位置已实时更新 - X: " + barPositionX + ", Y: " + barPositionY + "dp");
             } catch (Exception e) {
                 Log.e(TAG, "更新位置失败", e);
@@ -2016,6 +2088,10 @@ public class FloatWindowService extends Service {
         // 确保 overlayView 在 barContainer 下方
         if (overlayView != null && barContainer != null) {
             try {
+                // 光晕窗口与 barContainer 一并换序（重加时恢复 Z 序：横条在下、光晕在上）
+                if (glowContainer != null && glowContainer.getWindowToken() != null) {
+                    windowManager.removeView(glowContainer);
+                }
                 // 如果 barContainer 当前在窗口中，先移除
                 if (barContainer.getWindowToken() != null) {
                     windowManager.removeView(barContainer);
@@ -2026,6 +2102,10 @@ public class FloatWindowService extends Service {
                 }
                 // 重新添加 barContainer（使用当前的 barLayoutParams）
                 windowManager.addView(barContainer, barLayoutParams);
+                // 光晕窗口重新置于横条之上（按压视觉需覆盖横条）
+                if (glowContainer != null && glowLayoutParams != null) {
+                    windowManager.addView(glowContainer, glowLayoutParams);
+                }
                 Log.d(TAG, "窗口层级已调整：barContainer 置于 overlayView 之上");
             } catch (Exception e) {
                 Log.e(TAG, "调整窗口层级失败", e);
@@ -4451,6 +4531,10 @@ public class FloatWindowService extends Service {
         // 确保 overlayView 在 barContainer 下方
         if (overlayView != null && barContainer != null) {
             try {
+                // 光晕窗口与 barContainer 一并换序（重加时恢复 Z 序：横条在下、光晕在上）
+                if (glowContainer != null && glowContainer.getWindowToken() != null) {
+                    windowManager.removeView(glowContainer);
+                }
                 // 如果 barContainer 当前在窗口中，先移除
                 if (barContainer.getWindowToken() != null) {
                     windowManager.removeView(barContainer);
@@ -4461,6 +4545,10 @@ public class FloatWindowService extends Service {
                 }
                 // 重新添加 barContainer（使用当前的 barLayoutParams）
                 windowManager.addView(barContainer, barLayoutParams);
+                // 光晕窗口重新置于横条之上（按压视觉需覆盖横条）
+                if (glowContainer != null && glowLayoutParams != null) {
+                    windowManager.addView(glowContainer, glowLayoutParams);
+                }
                 Log.d(TAG, "窗口层级已调整：barContainer 置于 overlayView 之上");
             } catch (Exception e) {
                 Log.e(TAG, "调整窗口层级失败", e);
@@ -5421,26 +5509,19 @@ public class FloatWindowService extends Service {
 //                    | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                     | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
             barLayoutParams.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
-            if (currentWidth != ViewGroup.LayoutParams.MATCH_PARENT) {
-                barLayoutParams.width = Math.max(currentWidth, pressedBarWidth + 2 * dpToPx(pressedBarGlowRadius));
-            } else {
-                barLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
-            }
-            barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)) + 2 * dpToPx(pressedBarGlowRadius));
+            barLayoutParams.width = computeBarWindowWidth();
+            barLayoutParams.height = computeBarWindowHeight();
             barLayoutParams.x = barPositionX;
             barLayoutParams.y = dpToPx(barPositionY);
             windowManager.updateViewLayout(barContainer, barLayoutParams);
+            syncGlowWindow();
 
             barContainer.setBackground(null);
             barContainer.setClipToOutline(false);
 
-            // 重新创建底部提示条
+            // 重新创建底部提示条（覆盖层/光晕常驻独立光晕窗口，无需重建）
             bottomBar = createBottomBarView();
             barContainer.addView(bottomBar);
-            glowOverlay = createGlowOverlay();
-            barContainer.addView(glowOverlay);
-            pressedOverlay = createPressedOverlay();
-            barContainer.addView(pressedOverlay);
             barContainer.setAlpha(1f);
 
             isShortcutWindowExpanded = false;
@@ -5694,32 +5775,22 @@ public class FloatWindowService extends Service {
 //                    | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                     | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
             barLayoutParams.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
-            // 容器尺寸取提示条和覆盖层中较大的，确保覆盖层不会被 Surface 裁切
-            if (currentWidth != ViewGroup.LayoutParams.MATCH_PARENT) {
-                barLayoutParams.width = Math.max(currentWidth, pressedBarWidth + 2 * dpToPx(pressedBarGlowRadius));
-            } else {
-                barLayoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
-            }
-            // 高度考虑覆盖层偏移（pressedBarPositionY 正值向上，容器需加高以容纳偏移后的覆盖层底部）
-            barLayoutParams.height = Math.max(dpToPx(currentHeight), dpToPx(pressedBarHeight) + 2 * Math.abs(dpToPx(pressedBarPositionY)) + 2 * dpToPx(pressedBarGlowRadius));
+            // 横条窗口尺寸恒等于设置的触发区（手势期间绝不缩放）；按压视觉由独立光晕窗口承载
+            barLayoutParams.width = computeBarWindowWidth();
+            barLayoutParams.height = computeBarWindowHeight();
             // CENTER_VERTICAL|CENTER_HORIZONTAL 下：直接使用 barPositionX/Y
             barLayoutParams.x = targetBtmX;
             barLayoutParams.y = targetBtmY;
             windowManager.updateViewLayout(barContainer, barLayoutParams);
+            syncGlowWindow();
 
             // 清除圆角背景和裁剪
             barContainer.setBackground(null);
             barContainer.setClipToOutline(false);
 
-            // 现在创建并添加底部提示条视图
+            // 现在创建并添加底部提示条视图（覆盖层/光晕常驻独立光晕窗口，无需重建）
             bottomBar = createBottomBarView();
             barContainer.addView(bottomBar);
-
-            // 重新创建并添加按下状态覆盖层
-            glowOverlay = createGlowOverlay();
-            barContainer.addView(glowOverlay);
-            pressedOverlay = createPressedOverlay();
-            barContainer.addView(pressedOverlay);
 
             // 恢复提示条透明度（长按淡出展开时可能被置为0）
             barContainer.setAlpha(1f);
@@ -7382,6 +7453,15 @@ public class FloatWindowService extends Service {
         if (barContainer != null && windowManager != null) {
             try {
                 windowManager.removeView(barContainer);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        // 移除光晕窗口
+        if (glowContainer != null && windowManager != null) {
+            try {
+                windowManager.removeView(glowContainer);
             } catch (Exception e) {
                 e.printStackTrace();
             }
