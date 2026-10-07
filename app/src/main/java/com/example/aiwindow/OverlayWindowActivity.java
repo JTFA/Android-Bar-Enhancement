@@ -2232,45 +2232,42 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * 窗口手势控制器（仅快捷方式窗口）：
-     * 1. 手指按住拖动 → 窗口沿手指方向轻微移动（不完全跟手）并沿拖动方向拉伸/压扁；
-     * 2. 松手 → 阻尼弹簧回弹（约 2 次超调震荡）到原始位置与正常比例；
-     * 3. 拖动/回弹期间逐帧用 UPDATE_BLUR_WINDOW_SIZE 同步模糊窗口的 x/y/w/h（方案 A：完全同步）；
-     * 4. 手指光晕跟随（点击/按住/移动）。
-     */
-    private class WindowGestureController {
-        // 弹簧参数：ζ=0.35（约 2 次可见超调）、ω=15rad/s（周期约 0.42s，约 1s 收敛）
-        private static final float SPRING_ZETA = 0.35f;
-        private static final float SPRING_OMEGA = 15f;
-        private static final float SPRING_DURATION_MS = 2000f;
-        private static final float DRAG_DAMPING = 0.05f;        // 位移跟手系数（轻微跟随）
-        private static final float MAX_DRAG_DP = 10f;           // 最大位移
-        private static final float STRETCH_DISTANCE_DP = 160f;  // 拉满所需拖动距离
-        private static final float MAX_STRETCH = 0.01f;         // 最大拉伸 6%
-        private static final float MAX_SPRING_VEL = 1000f;      // 松手速度钳位 (px/s)
+        /**
+         * 窗口手势控制器（仅快捷方式窗口）：
+         * 1. 手指按住拖动 → 窗口沿手指方向轻微移动（不完全跟手）并沿拖动方向拉伸/压扁；
+         *    位移为纯位置公式（只取决于手指位置，与移速无关，快慢移速位移一致）；
+         * 2. 松手 → 阻尼弹簧回弹（约 2 次超调震荡）到原始位置与正常比例，
+         *    不注入松手速度（v0=0），避免快速移速导致松手瞬间窜动；
+         * 3. 拖动/回弹期间逐帧用 UPDATE_BLUR_WINDOW_SIZE 同步模糊窗口的 x/y/w/h（方案 A：完全同步）；
+         * 4. 手指光晕跟随（点击/按住/移动）。
+         */
+        private class WindowGestureController {
+            // 弹簧参数：ζ=0.35（约 2 次可见超调）、ω=15rad/s（周期约 0.42s，约 1s 收敛）
+            private static final float SPRING_ZETA = 0.3f;
+            private static final float SPRING_OMEGA = 12f;
+            private static final float SPRING_DURATION_MS = 1500f;
+            private static final float DRAG_DAMPING = 0.08f;        // 位移跟手系数（轻微跟随）
+            private static final float MAX_DRAG_DP = 10f;           // 最大位移
+            private static final float STRETCH_DISTANCE_DP = 160f;  // 拉满所需拖动距离
+            private static final float MAX_STRETCH = 0.04f;         // 最大拉伸 6%
 
-        volatile boolean dragMoved; // 已发生拖动（抑制 cell 点击）
+            volatile boolean dragMoved; // 已发生拖动（抑制 cell 点击）
 
-        private boolean tracking;    // 按下位置在窗口内
-        private boolean dragging;    // 已越过 touch slop，进入拖动
-        private boolean springing;   // 松手回弹中
-        private float downRawX, downRawY;
-        private float baseLeft, baseTop;        // DOWN 时窗口屏幕坐标（含当时 translation）
-        private float baseTransX, baseTransY;   // DOWN 时的 translation（回弹目标）
-        private float offsetX, offsetY;         // 当前拖动位移
-        private float sx = 1f, sy = 1f;         // 当前拉伸比例
-        private float lastRawX, lastRawY;
-        private long lastMoveNanos;
-        private float velX, velY;               // 松手瞬时速度 (px/s)
-        // 模糊框逐帧同步（节流：字段有 ≥1px 变化才发）
-        private boolean blurFrameSent;
-        private int lastBlurX, lastBlurY, lastBlurW, lastBlurH;
-        // 弹簧快照
-        private float springQOffsetX, springQOffsetY, springQDevX, springQDevY;
-        private float springVelOffsetX, springVelOffsetY;
-        private long springStartNanos;
-        private final int[] tmpLoc = new int[2];
+            private boolean tracking;    // 按下位置在窗口内
+            private boolean dragging;    // 已越过 touch slop，进入拖动
+            private boolean springing;   // 松手回弹中
+            private float downRawX, downRawY;
+            private float baseLeft, baseTop;        // DOWN 时窗口屏幕坐标（含当时 translation）
+            private float baseTransX, baseTransY;   // DOWN 时的 translation（回弹目标）
+            private float offsetX, offsetY;         // 当前拖动位移
+            private float sx = 1f, sy = 1f;         // 当前拉伸比例
+            // 模糊框逐帧同步（节流：字段有 ≥1px 变化才发）
+            private boolean blurFrameSent;
+            private int lastBlurX, lastBlurY, lastBlurW, lastBlurH;
+            // 弹簧快照
+            private float springQOffsetX, springQOffsetY, springQDevX, springQDevY;
+            private long springStartNanos;
+            private final int[] tmpLoc = new int[2];
 
         void onRootDispatch(MotionEvent ev) {
             if (contentContainer == null || isFinishing()) return;
@@ -2333,8 +2330,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
             tracking = true;
             dragMoved = false;
             dragging = false;
-            downRawX = lastRawX = ev.getRawX();
-            downRawY = lastRawY = ev.getRawY();
+            downRawX = ev.getRawX();
+            downRawY = ev.getRawY();
             baseLeft = loc[0];
             baseTop = loc[1];
             baseTransX = contentContainer.getTranslationX();
@@ -2343,9 +2340,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
             offsetY = 0f;
             sx = 1f;
             sy = 1f;
-            velX = 0f;
-            velY = 0f;
-            lastMoveNanos = 0;
             blurFrameSent = false;
             // 保证拉伸绕中心（展开动画已设过，防外部改动）
             contentContainer.setPivotX(w / 2f);
@@ -2375,20 +2369,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             float dx = ev.getRawX() - downRawX;
             float dy = ev.getRawY() - downRawY;
 
-            // 速度估计（供弹簧初速度）
-            long now = System.nanoTime();
-            if (lastMoveNanos > 0) {
-                float dt = (now - lastMoveNanos) / 1e9f;
-                if (dt > 0.001f && dt < 0.2f) {
-                    velX = (ev.getRawX() - lastRawX) / dt;
-                    velY = (ev.getRawY() - lastRawY) / dt;
-                }
-            }
-            lastRawX = ev.getRawX();
-            lastRawY = ev.getRawY();
-            lastMoveNanos = now;
-
-            // 位移：轻微跟手，tanh 软钳位到 ≤16dp
+            // 位移：纯位置公式（与移速无关），tanh 软钳位到 ≤16dp
             float maxPx = dpToPxF(MAX_DRAG_DP);
             offsetX = (float) (maxPx * Math.tanh(dx * DRAG_DAMPING / maxPx));
             offsetY = (float) (maxPx * Math.tanh(dy * DRAG_DAMPING / maxPx));
@@ -2434,25 +2415,25 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
 
         private void startSpring() {
+            // 只从松手位置回弹，不注入松手速度（v0=0）：
+            // 避免快速移动手指后松手瞬间弹簧窜出较大位移，保证快/慢移速下回弹表现一致
             springQOffsetX = offsetX;
             springQOffsetY = offsetY;
             springQDevX = sx - 1f;
             springQDevY = sy - 1f;
-            springVelOffsetX = Math.max(-MAX_SPRING_VEL, Math.min(MAX_SPRING_VEL, velX));
-            springVelOffsetY = Math.max(-MAX_SPRING_VEL, Math.min(MAX_SPRING_VEL, velY));
             springStartNanos = System.nanoTime();
             springing = true;
             Choreographer.getInstance().postFrameCallback(springCallback);
         }
 
         /**
-         * 欠阻尼弹簧解析解：q(t) = e^{-ζωt} · (q0·cos(ωd·t) + ((v0+ζω·q0)/ωd)·sin(ωd·t))
+         * 欠阻尼弹簧解析解（v0=0）：q(t) = e^{-ζωt} · q0 · (cos(ωd·t) + (ζω/ωd)·sin(ωd·t))
          */
-        private float springValue(float q0, float v0, float tSec) {
+        private float springValue(float q0, float tSec) {
             float env = (float) Math.exp(-SPRING_ZETA * SPRING_OMEGA * tSec);
             float wd = SPRING_OMEGA * (float) Math.sqrt(1f - SPRING_ZETA * SPRING_ZETA);
-            return env * (q0 * (float) Math.cos(wd * tSec)
-                    + ((v0 + SPRING_ZETA * SPRING_OMEGA * q0) / wd) * (float) Math.sin(wd * tSec));
+            return env * q0 * ((float) Math.cos(wd * tSec)
+                    + (SPRING_ZETA * SPRING_OMEGA / wd) * (float) Math.sin(wd * tSec));
         }
 
         private final Choreographer.FrameCallback springCallback = new Choreographer.FrameCallback() {
@@ -2470,10 +2451,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     return;
                 }
                 float t = tMs / 1000f;
-                offsetX = springValue(springQOffsetX, springVelOffsetX, t);
-                offsetY = springValue(springQOffsetY, springVelOffsetY, t);
-                sx = 1f + springValue(springQDevX, 0f, t);
-                sy = 1f + springValue(springQDevY, 0f, t);
+                offsetX = springValue(springQOffsetX, t);
+                offsetY = springValue(springQOffsetY, t);
+                sx = 1f + springValue(springQDevX, t);
+                sy = 1f + springValue(springQDevY, t);
 
                 // 回弹超调同样不能越出屏幕
                 clampOffsets();
