@@ -130,7 +130,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // ─── 动画参数 ───
     private static final float SMOOTH_FACTOR = 0.65f;
     private final PathInterpolator animInterpolator = new PathInterpolator(0.4f, 0.0f, 0.2f, 1.0f);
-    private final OvershootInterpolator expandInterpolator = new OvershootInterpolator(0.5f);
+    private final OvershootInterpolator expandInterpolator = new OvershootInterpolator(0.8f);
 
     // ─── Intent 参数 ───
     private int windowType;
@@ -1651,9 +1651,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         firstBlurFrame[0] ? 0f : 1f, false);
                 firstBlurFrame[0] = false;
 
-                // 背景遮罩同步渐入（与窗口动画同时）
+                // 背景遮罩同步渐入（与窗口动画同时；超调段 eased>1，钳位防止 alpha 超 1）
                 if (overlayView != null) {
-                    float targetAlpha = overlayAlpha / 100.0f * eased;
+                    float targetAlpha = overlayAlpha / 100.0f * Math.min(eased, 1f);
                     if (Math.abs(targetAlpha - lastOverlayAlpha[0]) > 0.01f) {
                         overlayView.setAlpha(targetAlpha);
                         lastOverlayAlpha[0] = targetAlpha;
