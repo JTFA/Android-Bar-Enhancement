@@ -2243,13 +2243,13 @@ public class OverlayWindowActivity extends AppCompatActivity {
          */
         private class WindowGestureController {
             // 弹簧参数：ζ=0.35（约 2 次可见超调）、ω=15rad/s（周期约 0.42s，约 1s 收敛）
-            private static final float SPRING_ZETA = 0.3f;
-            private static final float SPRING_OMEGA = 12f;
+            private static final float SPRING_ZETA = 0.35f;
+            private static final float SPRING_OMEGA = 18f;
             private static final float SPRING_DURATION_MS = 1500f;
             private static final float DRAG_DAMPING = 0.08f;        // 位移跟手系数（轻微跟随）
-            private static final float MAX_DRAG_DP = 10f;           // 最大位移
-            private static final float STRETCH_DISTANCE_DP = 160f;  // 拉满所需拖动距离
-            private static final float MAX_STRETCH = 0.04f;         // 最大拉伸 6%
+            private static final float MAX_DRAG_DP = 6f;           // 最大位移
+            private static final float STRETCH_DISTANCE_DP = 560f;  // 拉满所需拖动距离
+            private static final float MAX_STRETCH = 0.05f;         // 最大拉伸 6%
 
             volatile boolean dragMoved; // 已发生拖动（抑制 cell 点击）
 
@@ -2459,9 +2459,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 // 回弹超调同样不能越出屏幕
                 clampOffsets();
 
-                // 收敛判定
-                if (Math.abs(offsetX) < 0.3f && Math.abs(offsetY) < 0.3f
-                        && Math.abs(sx - 1f) < 0.0008f && Math.abs(sy - 1f) < 0.0008f) {
+                // 收敛判定：按包络（振幅）判定，避免瞬时值在过零点误判收敛、掐掉超调
+                float env = (float) Math.exp(-SPRING_ZETA * SPRING_OMEGA * t);
+                boolean offsetSettled = env * Math.max(Math.abs(springQOffsetX), Math.abs(springQOffsetY)) < 0.3f;
+                boolean devSettled = env * Math.max(Math.abs(springQDevX), Math.abs(springQDevY)) < 0.0008f;
+                if (offsetSettled && devSettled) {
                     endSpring();
                     return;
                 }
