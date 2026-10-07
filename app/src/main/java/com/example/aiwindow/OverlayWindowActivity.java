@@ -1620,6 +1620,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 在 doFrame 回调外部（但仍在方法内）声明局部数组：
         final float[] lastOverlayAlpha = { -1f };
         final float[] lastWebAlpha = { -1f };
+        // 首帧仅同步尺寸（alpha 保持 0），次帧才开 alpha：
+        // 避免首次 relayout 中 alpha 0→1 与"全尺寸→细条"同帧生效——
+        // WMS 先应用 alpha、后应用 frame 时会闪现 1 帧全尺寸模糊
+        final boolean[] firstBlurFrame = { true };
 
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             @Override
@@ -1641,8 +1645,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 contentContainer.setTranslationX(curTransX);
                 contentContainer.setTranslationY(curTransY);
 
-                // 逐帧同步模糊层：第 1 帧起尺寸/位置与窗口实时一致（含超调阶段），alpha 恒为 1
-                syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, 1f, false);
+                // 逐帧同步模糊层：首帧仅落尺寸（alpha 仍 0，不可见），
+                // 第 2 帧起 alpha=1（此时尺寸已是细条，消除全尺寸闪烁窗口期）
+                syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY,
+                        firstBlurFrame[0] ? 0f : 1f, false);
+                firstBlurFrame[0] = false;
 
                 // 背景遮罩同步渐入（与窗口动画同时）
                 if (overlayView != null) {

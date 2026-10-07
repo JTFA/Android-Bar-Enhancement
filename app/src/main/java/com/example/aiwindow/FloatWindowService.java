@@ -2018,7 +2018,10 @@ public class FloatWindowService extends Service {
             blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_HEIGHT, targetHeight);
             blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_RADIUS, blurRadius);
             blurIntent.putExtra(BlurWindowActivity.EXTRA_BLUR_CORNER_RADIUS, dpToPx((int) cornerRadiusDp));
-            blurIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            // NO_ANIMATION：禁止模糊窗口的启动转场，避免转场期间覆写窗口 alpha
+            // 在展开开始瞬间闪现全尺寸模糊
+            blurIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK
+                    | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             startActivity(blurIntent);
             Log.d(TAG, "已启动模糊窗口: 位置(" + blurX + "," + blurY + ") 尺寸" + targetWidth + "x" + targetHeight 
                     + " 圆角" + dpToPx((int)cornerRadiusDp) + "px 模糊半径=" + blurRadius);
