@@ -147,6 +147,11 @@ public class MainActivity extends AppCompatActivity {
      * 请求麦克风和相机运行时权限，然后启动服务
      */
     private void requestRuntimePermissionsThenStart() {
+        // AI 窗口功能隐藏期间：不再申请麦克风/相机权限，直接启动服务
+        if (!AppConfig.AI_WINDOW_ENABLED) {
+            startFloatWindowService();
+            return;
+        }
         String[] permissions = {
             android.Manifest.permission.RECORD_AUDIO,
             android.Manifest.permission.CAMERA

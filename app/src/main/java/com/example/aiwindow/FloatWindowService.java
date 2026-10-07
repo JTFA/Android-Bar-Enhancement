@@ -1513,6 +1513,12 @@ public class FloatWindowService extends Service {
         String cls = getGestureAppClass(gesture);
         String name = getGestureAppName(gesture);
 
+        // AI 窗口功能隐藏期间：防御性拦截 ai 行为（旧存储值/外部下发均不拉起 AI 窗口）
+        if (!AppConfig.AI_WINDOW_ENABLED && ACTION_AI.equals(action)) {
+            Log.d(TAG, gesture + " 行为：AI窗口功能已隐藏，忽略");
+            return;
+        }
+
         if (ACTION_NONE.equals(action)) {
             Log.d(TAG, gesture + " 行为：无");
             return;
@@ -6969,7 +6975,15 @@ public class FloatWindowService extends Service {
                 clickAction = TextUtils.isEmpty(clickAppPackage) ? ACTION_NONE : ACTION_APP;
             }
             doubleClickAction = prefs.getString("double_click_action", ACTION_SHORTCUT);
-            longPressAction = prefs.getString("long_press_action", ACTION_AI);
+            longPressAction = prefs.getString("long_press_action",
+                    AppConfig.AI_WINDOW_ENABLED ? ACTION_AI : ACTION_NONE);
+
+            // AI 窗口功能隐藏期间：ai 行为按「无」处理（不覆写存储值，恢复配置后原样生效）
+            if (!AppConfig.AI_WINDOW_ENABLED) {
+                if (ACTION_AI.equals(clickAction)) clickAction = ACTION_NONE;
+                if (ACTION_AI.equals(doubleClickAction)) doubleClickAction = ACTION_NONE;
+                if (ACTION_AI.equals(longPressAction)) longPressAction = ACTION_NONE;
+            }
 
             // 加载双击打开的应用
             doubleClickAppPackage = prefs.getString("double_click_app_package", "");

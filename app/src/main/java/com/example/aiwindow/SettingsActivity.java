@@ -14,6 +14,7 @@ import android.text.TextWatcher;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -282,8 +283,51 @@ public class SettingsActivity extends AppCompatActivity {
         preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         
         initViews();
+        applyFeatureFlagVisibility(); // 按总配置隐藏 AI 窗口相关设置
         loadSettings(); // 加载已保存的设置
         setupListeners();
+    }
+
+    /**
+     * 按总配置 AppConfig.AI_WINDOW_ENABLED 隐藏 AI 窗口相关设置。
+     * 功能代码未删除：把配置项改为 true 后重新编译即可恢复。
+     */
+    private void applyFeatureFlagVisibility() {
+        if (AppConfig.AI_WINDOW_ENABLED) {
+            return;
+        }
+
+        // 隐藏「窗口设置」「AI 窗口模糊效果（含输入法避让）」两张卡片
+        findViewById(R.id.card_window_settings).setVisibility(View.GONE);
+        findViewById(R.id.card_ai_blur_card).setVisibility(View.GONE);
+
+        // 手势行为下拉框隐藏「打开AI窗口」选项（该选项在数组末尾，前 3 项索引不变）
+        String[] labels = {
+            getString(R.string.action_none),
+            getString(R.string.action_open_app),
+            getString(R.string.action_open_shortcut)
+        };
+        spinnerClickAction.setAdapter(newActionAdapter(labels));
+        spinnerDoubleClickAction.setAdapter(newActionAdapter(labels));
+        spinnerLongPressAction.setAdapter(newActionAdapter(labels));
+    }
+
+    private ArrayAdapter<String> newActionAdapter(String[] labels) {
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, labels);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        return adapter;
+    }
+
+    /**
+     * AI 窗口功能隐藏期间，把 ai 行为回退为「无」（仅运行时，不覆写存储值，
+     * 恢复配置后原保存行为自动重新生效）
+     */
+    private String resolveEnabledAction(String action) {
+        if (!AppConfig.AI_WINDOW_ENABLED && ACTION_AI.equals(action)) {
+            return ACTION_NONE;
+        }
+        return action;
     }
     
     /**
@@ -556,14 +600,18 @@ public class SettingsActivity extends AppCompatActivity {
             String savedPkg = preferences.getString(KEY_CLICK_APP_PACKAGE, "");
             clickAction = TextUtils.isEmpty(savedPkg) ? ACTION_NONE : ACTION_APP;
         }
+        clickAction = resolveEnabledAction(clickAction);
         spinnerClickAction.setSelection(getActionIndex(clickAction));
         
         // 双击行为（向后兼容：默认快捷方式）
-        doubleClickAction = preferences.getString(KEY_DOUBLE_CLICK_ACTION, ACTION_SHORTCUT);
+        doubleClickAction = resolveEnabledAction(
+                preferences.getString(KEY_DOUBLE_CLICK_ACTION, ACTION_SHORTCUT));
         spinnerDoubleClickAction.setSelection(getActionIndex(doubleClickAction));
         
-        // 长按行为（向后兼容：默认AI窗口）
-        longPressAction = preferences.getString(KEY_LONG_PRESS_ACTION, ACTION_AI);
+        // 长按行为（向后兼容：默认AI窗口；AI窗口功能隐藏期间默认为「无」）
+        longPressAction = preferences.getString(KEY_LONG_PRESS_ACTION,
+                AppConfig.AI_WINDOW_ENABLED ? ACTION_AI : ACTION_NONE);
+        longPressAction = resolveEnabledAction(longPressAction);
         spinnerLongPressAction.setSelection(getActionIndex(longPressAction));
         
         // 加载单击打开的应用
@@ -2218,13 +2266,21 @@ public class SettingsActivity extends AppCompatActivity {
      * 显示行为类型选择对话框
      */
     private void showActionPicker(final String gesture) {
-        final String[] actionKeys = {ACTION_NONE, ACTION_APP, ACTION_SHORTCUT, ACTION_AI};
-        final String[] actionLabels = {
-            getString(R.string.action_none),
-            getString(R.string.action_open_app),
-            getString(R.string.action_open_shortcut),
-            getString(R.string.action_open_ai)
-        };
+        final String[] actionKeys = AppConfig.AI_WINDOW_ENABLED
+                ? new String[]{ACTION_NONE, ACTION_APP, ACTION_SHORTCUT, ACTION_AI}
+                : new String[]{ACTION_NONE, ACTION_APP, ACTION_SHORTCUT};
+        final String[] actionLabels = AppConfig.AI_WINDOW_ENABLED
+                ? new String[]{
+                    getString(R.string.action_none),
+                    getString(R.string.action_open_app),
+                    getString(R.string.action_open_shortcut),
+                    getString(R.string.action_open_ai)
+                }
+                : new String[]{
+                    getString(R.string.action_none),
+                    getString(R.string.action_open_app),
+                    getString(R.string.action_open_shortcut)
+                };
         
         // 获取当前选中的行为
         final String currentAction = getGestureAction(gesture);
@@ -2285,7 +2341,7 @@ public class SettingsActivity extends AppCompatActivity {
         if (ACTION_NONE.equals(action)) return 0;
         else if (ACTION_APP.equals(action)) return 1;
         else if (ACTION_SHORTCUT.equals(action)) return 2;
-        else if (ACTION_AI.equals(action)) return 3;
+        else if (ACTION_AI.equals(action)) return AppConfig.AI_WINDOW_ENABLED ? 3 : 0;
         return 0;
     }
     
@@ -2293,6 +2349,7 @@ public class SettingsActivity extends AppCompatActivity {
      * 获取行为类型对应的显示名称
      */
     private String getActionDisplayName(String action) {
+        if (!AppConfig.AI_WINDOW_ENABLED && ACTION_AI.equals(action)) action = ACTION_NONE;
         if (ACTION_NONE.equals(action)) return getString(R.string.action_none);
         else if (ACTION_APP.equals(action)) return getString(R.string.action_open_app);
         else if (ACTION_SHORTCUT.equals(action)) return getString(R.string.action_open_shortcut);

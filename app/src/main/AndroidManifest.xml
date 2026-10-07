@@ -11,11 +11,12 @@
     <!-- 前台服务权限 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <!-- 网络权限 -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- 麦克风和相机权限（WebView 语音输入/文件上传） -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- 网络权限（AI_WINDOW_ENABLED=false 期间隐藏；恢复时取消注释并打开 AppConfig.AI_WINDOW_ENABLED） -->
+<!--    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />-->
+    <!-- 麦克风和相机权限（WebView 语音输入/文件上传）
+         AI_WINDOW_ENABLED=false 期间隐藏；恢复时取消注释并打开 AppConfig.AI_WINDOW_ENABLED -->
+<!--    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
@@ -23,7 +24,7 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
+        android:maxSdkVersion="28" />-->
     <!-- 开机自启权限 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 

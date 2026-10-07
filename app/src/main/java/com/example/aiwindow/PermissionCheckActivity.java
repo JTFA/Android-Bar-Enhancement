@@ -81,6 +81,9 @@ public class PermissionCheckActivity extends AppCompatActivity {
     /** 动态构建权限列表 */
     private void buildPermissionList() {
         for (PermItem item : permItems) {
+            // AI 窗口功能隐藏期间：不显示麦克风/相机/文件（存储）权限，仅保留悬浮窗
+            // （代码未删除，恢复 AppConfig.AI_WINDOW_ENABLED 后自动重新显示）
+            if (!AppConfig.AI_WINDOW_ENABLED && item.androidPerm != null) continue;
             // 检查 SDK 版本过滤
             if (Build.VERSION.SDK_INT < item.minSdk) continue;
             if (item.maxSdk > 0 && Build.VERSION.SDK_INT > item.maxSdk) continue;

@@ -759,6 +759,7 @@
 
         <!-- ===== 窗口设置卡片 ===== -->
         <LinearLayout
+            android:id="@+id/card_window_settings"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -1060,45 +1061,6 @@
                 android:progress="40"
                 android:layout_marginBottom="16dp" />
 
-            <!-- 点击窗口外关闭窗口 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="8dp">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="点击窗口外关闭窗口"
-                        android:textSize="14sp"
-                        android:textColor="?attr/textPrimary" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="点击窗口外部区域时关闭窗口（默认开启）"
-                        android:textSize="12sp"
-                        android:textColor="#9E9E9E" />
-
-                </LinearLayout>
-
-                <Switch
-                    android:id="@+id/switch_close_on_outside_click"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:thumbTint="?attr/colorPrimaryBrand"
-                    android:trackTint="#BDBDBD" />
-
-            </LinearLayout>
-
             <!-- 侧边返回手势行为 -->
             <LinearLayout
                 android:layout_width="match_parent"
@@ -1142,6 +1104,7 @@
 
         <!-- ===== AI 窗口模糊效果设置卡片 ===== -->
         <LinearLayout
+            android:id="@+id/card_ai_blur_card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -1748,7 +1711,47 @@
                 android:layout_height="wrap_content"
                 android:min="180"
                 android:max="500"
-                android:progress="180" />
+                android:progress="180"
+                android:layout_marginBottom="8dp" />
+
+            <!-- 点击窗口外关闭窗口（原窗口设置卡片，AI窗口功能隐藏期间保留在此） -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="点击窗口外关闭窗口"
+                        android:textSize="14sp"
+                        android:textColor="?attr/textPrimary" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="点击窗口外部区域时关闭窗口（默认开启）"
+                        android:textSize="12sp"
+                        android:textColor="#9E9E9E" />
+
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/switch_close_on_outside_click"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="?attr/colorPrimaryBrand"
+                    android:trackTint="#BDBDBD" />
+
+            </LinearLayout>
 
         </LinearLayout>
 
