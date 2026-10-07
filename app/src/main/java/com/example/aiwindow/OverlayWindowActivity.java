@@ -26,6 +26,7 @@ import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
+import android.graphics.RadialGradient;
 import android.graphics.Rect;
 import android.graphics.Shader;
 import android.graphics.Typeface;
@@ -46,6 +47,7 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewConfiguration;
 import android.view.ViewOutlineProvider;
 import android.view.ViewTreeObserver;
 import android.view.Window;
@@ -145,6 +147,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private boolean closeOnOutside, backPrioritizeWebview;
     private String aiUrl;
     private int shortcutIconSize, shortcutStyle, shortcutBlurRadius, shortcutOverlayAlpha;
+
+    // ─── ColorOS 风格效果开关（默认开启，下次打开窗口生效） ───
+    private boolean shortcutEdgeRefraction = true;   // 边缘折射光
+    private boolean shortcutFingerGlow = true;       // 手指光晕跟随
+    private boolean shortcutDragStretch = true;      // 拖动灵动拉伸回弹
     
     // AI 窗口模糊效果
     private int aiStyle, aiBlurRadius, aiOverlayAlpha;
@@ -170,7 +177,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private int topBarCollapsedW, topBarCollapsedH; // 收起尺寸（px）
     private boolean isExpanded = false;
     private boolean isCollapsing = false;
+    private boolean isExpandAnimating = false; // 展开动画进行中（期间禁入手势）
     private BroadcastReceiver restoreBarReceiver;
+
+    // ─── ColorOS 风格效果 ───
+    private FingerGlowView fingerGlowView;          // 手指光晕层（contentContainer 最上层）
+    private WindowGestureController gestureController; // 拖动拉伸/光晕手势控制器
     
     // ─── WebView 状态保持 ───
     private static WebView sPersistentWebView; // 静态 WebView，跨 Activity 生命周期保持
@@ -225,8 +237,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 3. 配置窗口（透明、全屏）
         setupWindow();
 
-        // 4. 创建根布局
-        rootLayout = new FrameLayout(this);
+        // 4. 创建根布局（TouchObserverFrameLayout：旁路观察所有触摸事件，供手势控制器使用）
+        rootLayout = new TouchObserverFrameLayout(this);
         rootLayout.setLayoutParams(new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
@@ -532,6 +544,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             shortcutStyle = intent.getIntExtra(EXTRA_SHORTCUT_STYLE, 0);
             shortcutBlurRadius = intent.getIntExtra(EXTRA_SHORTCUT_BLUR_RADIUS, 20);
             shortcutOverlayAlpha = intent.getIntExtra(EXTRA_SHORTCUT_OVERLAY_ALPHA, 180);
+
+            // ColorOS 风格效果开关（直接读 SharedPreferences，同输入法避让的加载模式）
+            loadShortcutEffectSettings();
         }
 
         // 读取顶部小横条透明度
@@ -539,6 +554,20 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         // 加载背景遮罩设置（所有窗口类型）
         loadOverlaySettings();
+    }
+
+    /**
+     * 从 SharedPreferences 加载 ColorOS 风格效果开关（仅快捷方式窗口）
+     */
+    private void loadShortcutEffectSettings() {
+        try {
+            SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
+            shortcutEdgeRefraction = prefs.getBoolean("shortcut_edge_refraction", true);
+            shortcutFingerGlow = prefs.getBoolean("shortcut_finger_glow", true);
+            shortcutDragStretch = prefs.getBoolean("shortcut_drag_stretch", true);
+        } catch (Exception e) {
+            Log.e(TAG, "加载快捷方式效果开关失败", e);
+        }
     }
 
     /**
@@ -619,6 +648,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
         AcrylicRoundRectDrawable bg = new AcrylicRoundRectDrawable(
                 getAcrylicBgColor(), dpToPx(cornerRadius), density);
         bg.setBrightnessFactor(0.9f);
+        // 边缘折射光（上下亮、左右暗，仅快捷方式窗口）
+        bg.setRefractionEnabled(windowType == WINDOW_TYPE_SHORTCUT && shortcutEdgeRefraction);
         if (borderWidth > 0) {
             int borderColorWithAlpha = parseColorWithAlpha(borderColor, borderAlpha);
             bg.setStroke(dpToPx(borderWidth), borderColorWithAlpha);
@@ -681,6 +712,16 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         // 创建背景遮罩（插入到 rootLayout 最底层）
         createBackgroundOverlay();
+
+        // ColorOS 风格效果：手势控制器（观察全部触点）+ 手指光晕层（仅快捷方式窗口）
+        if (windowType == WINDOW_TYPE_SHORTCUT) {
+            gestureController = new WindowGestureController();
+            if (shortcutFingerGlow) {
+                fingerGlowView = new FingerGlowView(this);
+                contentContainer.addView(fingerGlowView, new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            }
+        }
     }
 
 //    private int getAcrylicBgColor() {
@@ -1081,6 +1122,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 点击事件（使用 ShortcutLaunchConfig 启动，与服务行为一致）
         // 注意：将应用启动延迟到收起动画完成后，避免 startActivity 立即触发 onUserLeaveHint 中断动画
         cell.setOnClickListener(v -> {
+            // 拖动过窗口则抑制本次点击，避免拖动松手时误启动应用
+            if (gestureController != null && gestureController.dragMoved) return;
             if (windowType == WINDOW_TYPE_SHORTCUT) {
                 // 设置兜底标志位：即使进程冻结导致 fadeOutAndFinish 的 Handler 动画未执行，
                 // 进程恢复后 BlurWindowActivity.onResume 也会检测到此标志并自销毁
@@ -1551,6 +1594,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
 
         isExpanded = true;
+        isExpandAnimating = true;
 
         // 缓存背景 Drawable 和目标透明度，避免每帧重复获取
         final Drawable expandBg = contentContainer.getBackground();
@@ -1649,6 +1693,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     Choreographer.getInstance().postFrameCallback(this);
                 } else {
                     // 完成
+                    isExpandAnimating = false;
                     contentContainer.setScaleX(1f);
                     contentContainer.setScaleY(1f);
                     contentContainer.setTranslationX(0f);
@@ -1692,7 +1737,19 @@ public class OverlayWindowActivity extends AppCompatActivity {
         if (!isExpanded || isCollapsing) return;
         isCollapsing = true;
         isExpanded = false;
+        isExpandAnimating = false;
 
+        // 交出变换控制权：取消拖动/回弹（不重置当前 transform，收起动画从当前值开始）
+        if (gestureController != null) {
+            gestureController.cancelAll();
+        }
+
+        // 从当前变换状态插值到收起目标（拖动/回弹中途触发收起时避免视觉跳变；
+        // 静止时 start 值即 scale=1/translation=0，行为与原来一致）
+        final float startScaleX = contentContainer.getScaleX();
+        final float startScaleY = contentContainer.getScaleY();
+        final float startTransX = contentContainer.getTranslationX();
+        final float startTransY = contentContainer.getTranslationY();
         final float endScaleX = initScaleX;
         final float endScaleY = initScaleY;
         final float endTransX = initTranslationX;
@@ -1725,10 +1782,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 progress = Math.max(0f, Math.min(progress, 1.0f));
                 float eased = animInterpolator.getInterpolation(progress);
 
-                float curScaleX = 1f + (endScaleX - 1f) * eased;
-                float curScaleY = 1f + (endScaleY - 1f) * eased;
-                float curTransX = endTransX * eased;
-                float curTransY = endTransY * eased;
+                float curScaleX = startScaleX + (endScaleX - startScaleX) * eased;
+                float curScaleY = startScaleY + (endScaleY - startScaleY) * eased;
+                float curTransX = startTransX + (endTransX - startTransX) * eased;
+                float curTransY = startTransY + (endTransY - startTransY) * eased;
 
                 // 末尾淡出：最后 30% 进度渐隐
                 float containerAlpha = 1.0f;
@@ -1893,6 +1950,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
         return Math.round(dp * getResources().getDisplayMetrics().density);
     }
 
+    private float dpToPxF(float dp) {
+        return dp * getResources().getDisplayMetrics().density;
+    }
+
     private int parseColorWithAlpha(String colorHex, float alpha) {
         try {
             int color = Color.parseColor(colorHex);
@@ -1948,6 +2009,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
         private final Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint glassPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint darkOverlayPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        // 边缘折射光：上下横边亮、左右竖边暗（竖向渐变描边）
+        private final Paint refractionBandPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint refractionLinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private boolean refractionEnabled = false;
         private final Path path = new Path();
         private float cornerRadius;
         private int width, height;
@@ -1974,6 +2039,33 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     Color.argb(0, 255, 255, 255),
                     Shader.TileMode.CLAMP);
             glassPaint.setShader(glassGradient);
+            // 折射光描边画笔（shader 在 onBoundsChange 中按实际高度重建）
+            refractionBandPaint.setStyle(Paint.Style.STROKE);
+            refractionBandPaint.setStrokeWidth(6f * density);
+            refractionBandPaint.setAlpha(140);
+            refractionLinePaint.setStyle(Paint.Style.STROKE);
+            refractionLinePaint.setStrokeWidth(1.5f * density);
+        }
+
+        void setRefractionEnabled(boolean enabled) {
+            refractionEnabled = enabled;
+            invalidateSelf();
+        }
+
+        private void buildRefractionShader() {
+            if (height <= 0) return;
+            // 顶部/底部亮、中部（即左右竖边所在区域）暗 → 模拟玻璃片边缘折射
+            LinearGradient refraction = new LinearGradient(0, 0, 0, height,
+                    new int[]{
+                            Color.argb(110, 255, 255, 255),
+                            Color.argb(25, 255, 255, 255),
+                            Color.argb(10, 255, 255, 255),
+                            Color.argb(25, 255, 255, 255),
+                            Color.argb(110, 255, 255, 255)},
+                    new float[]{0f, 0.06f, 0.5f, 0.94f, 1f},
+                    Shader.TileMode.CLAMP);
+            refractionBandPaint.setShader(refraction);
+            refractionLinePaint.setShader(refraction);
         }
 
         void setStroke(int widthPx, int color) {
@@ -1988,6 +2080,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             this.width = bounds.width();
             this.height = bounds.height();
             buildPath();
+            buildRefractionShader();
         }
 
         private void buildPath() {
@@ -2027,7 +2120,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
             canvas.clipPath(path);
             canvas.drawRect(0, 0, width, Math.min(height, Math.round(80 * density)), glassPaint);
             canvas.restore();
-            // 4. 绘制边框
+            // 4. 边缘折射光（玻璃片边缘：上下横边亮、左右竖边几乎不可见）
+            if (refractionEnabled) {
+                canvas.save();
+                canvas.clipPath(path);
+                canvas.drawPath(path, refractionBandPaint);
+                canvas.drawPath(path, refractionLinePaint);
+                canvas.restore();
+            }
+            // 5. 绘制边框
             if (strokePaint.getStrokeWidth() > 0
                     && strokePaint.getColor() != Color.TRANSPARENT) {
                 canvas.drawPath(path, strokePaint);
@@ -2070,6 +2171,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
             fillPaint.setAlpha(alpha);
             strokePaint.setAlpha(alpha);    // strokePaint 的透明度保持 setStroke 时设置的值，不在此修改
             glassPaint.setAlpha(alpha);
+            refractionBandPaint.setAlpha(Math.round(alpha * 140f / 255f));
+            refractionLinePaint.setAlpha(alpha);
         }
 
         @Override
@@ -2077,11 +2180,438 @@ public class OverlayWindowActivity extends AppCompatActivity {
             fillPaint.setColorFilter(colorFilter);
             strokePaint.setColorFilter(colorFilter);
             glassPaint.setColorFilter(colorFilter);
+            refractionBandPaint.setColorFilter(colorFilter);
+            refractionLinePaint.setColorFilter(colorFilter);
         }
 
         @Override
         public int getOpacity() {
             return PixelFormat.TRANSLUCENT;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ColorOS 风格效果：手势观察 / 灵动拉伸回弹 / 手指光晕
+    // ═══════════════════════════════════════════════════════════
+
+    /**
+     * 根布局：先走默认分发（不影响子 View 的点击/滚动），再旁路观察事件。
+     * 窗口内手势的真正 target 是 contentContainer / cell，
+     * 普通 rootLayout 监听收不到内部事件，必须在 dispatch 层观察。
+     */
+    private class TouchObserverFrameLayout extends FrameLayout {
+        TouchObserverFrameLayout(Context context) {
+            super(context);
+        }
+
+        @Override
+        public boolean dispatchTouchEvent(MotionEvent ev) {
+            boolean handled = super.dispatchTouchEvent(ev);
+            if (gestureController != null) {
+                gestureController.onRootDispatch(ev);
+            }
+            return handled;
+        }
+    }
+
+    /**
+     * 窗口手势控制器（仅快捷方式窗口）：
+     * 1. 手指按住拖动 → 窗口沿手指方向轻微移动（不完全跟手）并沿拖动方向拉伸/压扁；
+     * 2. 松手 → 阻尼弹簧回弹（约 2 次超调震荡）到原始位置与正常比例；
+     * 3. 拖动/回弹期间逐帧用 UPDATE_BLUR_WINDOW_SIZE 同步模糊窗口的 x/y/w/h（方案 A：完全同步）；
+     * 4. 手指光晕跟随（点击/按住/移动）。
+     */
+    private class WindowGestureController {
+        // 弹簧参数：ζ=0.35（约 2 次可见超调）、ω=26rad/s（周期约 0.26s，0.8s 内收敛）
+        private static final float SPRING_ZETA = 0.35f;
+        private static final float SPRING_OMEGA = 26f;
+        private static final float SPRING_DURATION_MS = 800f;
+        private static final float DRAG_DAMPING = 0.35f;        // 位移跟手系数
+        private static final float MAX_DRAG_DP = 40f;           // 最大位移
+        private static final float STRETCH_DISTANCE_DP = 160f;  // 拉满所需拖动距离
+        private static final float MAX_STRETCH = 0.06f;         // 最大拉伸 6%
+        private static final float MAX_SPRING_VEL = 1000f;      // 松手速度钳位 (px/s)
+
+        volatile boolean dragMoved; // 已发生拖动（抑制 cell 点击）
+
+        private boolean tracking;    // 按下位置在窗口内
+        private boolean dragging;    // 已越过 touch slop，进入拖动
+        private boolean springing;   // 松手回弹中
+        private float downRawX, downRawY;
+        private float baseLeft, baseTop;        // DOWN 时窗口屏幕坐标（含当时 translation）
+        private float baseTransX, baseTransY;   // DOWN 时的 translation（回弹目标）
+        private float offsetX, offsetY;         // 当前拖动位移
+        private float sx = 1f, sy = 1f;         // 当前拉伸比例
+        private float lastRawX, lastRawY;
+        private long lastMoveNanos;
+        private float velX, velY;               // 松手瞬时速度 (px/s)
+        // 模糊框逐帧同步（节流：字段有 ≥1px 变化才发）
+        private boolean blurFrameSent;
+        private int lastBlurX, lastBlurY, lastBlurW, lastBlurH;
+        // 弹簧快照
+        private float springQOffsetX, springQOffsetY, springQDevX, springQDevY;
+        private float springVelOffsetX, springVelOffsetY;
+        private long springStartNanos;
+        private final int[] tmpLoc = new int[2];
+
+        void onRootDispatch(MotionEvent ev) {
+            if (contentContainer == null || isFinishing()) return;
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    onDown(ev);
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    onMove(ev);
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    onUp(ev);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        private boolean canInteract() {
+            return isExpanded && !isCollapsing && !isExpandAnimating
+                    && !isKeyboardAnimating && !isFinishing();
+        }
+
+        private void onDown(MotionEvent ev) {
+            int[] loc = tmpLoc;
+            contentContainer.getLocationOnScreen(loc);
+            float w = contentContainer.getWidth();
+            float h = contentContainer.getHeight();
+            if (w <= 0 || h <= 0) {
+                tracking = false;
+                return;
+            }
+
+            // 回弹中重新按下：立即收敛到静止状态，再以静止状态为新手势基准
+            if (springing) {
+                springing = false;
+                offsetX = 0f;
+                offsetY = 0f;
+                sx = 1f;
+                sy = 1f;
+                contentContainer.setTranslationX(baseTransX);
+                contentContainer.setTranslationY(baseTransY);
+                contentContainer.setScaleX(1f);
+                contentContainer.setScaleY(1f);
+                contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
+                sendBlurFrame(true); // 校正模糊层到静止框
+                contentContainer.getLocationOnScreen(loc);
+            }
+
+            // 仅窗口内部按下才跟踪（外部按下交给原有“点击外部关闭”逻辑）
+            if (ev.getRawX() < loc[0] || ev.getRawX() > loc[0] + w
+                    || ev.getRawY() < loc[1] || ev.getRawY() > loc[1] + h) {
+                tracking = false;
+                dragMoved = false;
+                updateGlow(ev.getRawX(), ev.getRawY(), false);
+                return;
+            }
+
+            tracking = true;
+            dragMoved = false;
+            dragging = false;
+            downRawX = lastRawX = ev.getRawX();
+            downRawY = lastRawY = ev.getRawY();
+            baseLeft = loc[0];
+            baseTop = loc[1];
+            baseTransX = contentContainer.getTranslationX();
+            baseTransY = contentContainer.getTranslationY();
+            offsetX = 0f;
+            offsetY = 0f;
+            sx = 1f;
+            sy = 1f;
+            velX = 0f;
+            velY = 0f;
+            lastMoveNanos = 0;
+            blurFrameSent = false;
+            // 保证拉伸绕中心（展开动画已设过，防外部改动）
+            contentContainer.setPivotX(w / 2f);
+            contentContainer.setPivotY(h / 2f);
+            updateGlow(ev.getRawX(), ev.getRawY(), true);
+        }
+
+        private void onMove(MotionEvent ev) {
+            if (!tracking) return;
+            updateGlow(ev.getRawX(), ev.getRawY(), true);
+            if (!canInteract()) {
+                abortGesture();
+                return;
+            }
+            if (!shortcutDragStretch) return;
+
+            if (!dragging) {
+                int slop = ViewConfiguration.get(OverlayWindowActivity.this).getScaledTouchSlop();
+                float dx0 = ev.getRawX() - downRawX;
+                float dy0 = ev.getRawY() - downRawY;
+                if (dx0 * dx0 + dy0 * dy0 < (float) slop * slop) return;
+                dragging = true;
+                dragMoved = true;
+                contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+            }
+
+            float dx = ev.getRawX() - downRawX;
+            float dy = ev.getRawY() - downRawY;
+
+            // 速度估计（供弹簧初速度）
+            long now = System.nanoTime();
+            if (lastMoveNanos > 0) {
+                float dt = (now - lastMoveNanos) / 1e9f;
+                if (dt > 0.001f && dt < 0.2f) {
+                    velX = (ev.getRawX() - lastRawX) / dt;
+                    velY = (ev.getRawY() - lastRawY) / dt;
+                }
+            }
+            lastRawX = ev.getRawX();
+            lastRawY = ev.getRawY();
+            lastMoveNanos = now;
+
+            // 位移：轻微跟手，tanh 软钳位到 ≤40dp
+            float maxPx = dpToPxF(MAX_DRAG_DP);
+            offsetX = (float) (maxPx * Math.tanh(dx * DRAG_DAMPING / maxPx));
+            offsetY = (float) (maxPx * Math.tanh(dy * DRAG_DAMPING / maxPx));
+
+            // 拉伸：沿拖动方向拉伸、垂直方向压扁
+            float len = (float) Math.hypot(dx, dy);
+            float s = Math.min(1f, len / dpToPxF(STRETCH_DISTANCE_DP)) * MAX_STRETCH;
+            float ux = len > 0.001f ? Math.abs(dx) / len : 0f;
+            float uy = len > 0.001f ? Math.abs(dy) / len : 0f;
+            sx = 1f + s * (ux - 0.4f * uy);
+            sy = 1f + s * (uy - 0.4f * ux);
+
+            applyTransformAndSyncBlur();
+        }
+
+        private void onUp(MotionEvent ev) {
+            updateGlow(ev.getRawX(), ev.getRawY(), false);
+            if (!tracking) return;
+            tracking = false;
+            if (dragging) {
+                dragging = false;
+                startSpring();
+            }
+        }
+
+        /** 手势被更高优先级状态打断（收起/键盘等）：只清状态不改 transform */
+        private void abortGesture() {
+            tracking = false;
+            dragging = false;
+            updateGlow(0, 0, false);
+        }
+
+        /** 取消全部手势（收起动画开始时调用），transform 控制权交回收起动画 */
+        void cancelAll() {
+            tracking = false;
+            dragging = false;
+            springing = false;
+            dragMoved = false;
+            if (fingerGlowView != null) fingerGlowView.release();
+        }
+
+        private void startSpring() {
+            springQOffsetX = offsetX;
+            springQOffsetY = offsetY;
+            springQDevX = sx - 1f;
+            springQDevY = sy - 1f;
+            springVelOffsetX = Math.max(-MAX_SPRING_VEL, Math.min(MAX_SPRING_VEL, velX));
+            springVelOffsetY = Math.max(-MAX_SPRING_VEL, Math.min(MAX_SPRING_VEL, velY));
+            springStartNanos = System.nanoTime();
+            springing = true;
+            Choreographer.getInstance().postFrameCallback(springCallback);
+        }
+
+        /**
+         * 欠阻尼弹簧解析解：q(t) = e^{-ζωt} · (q0·cos(ωd·t) + ((v0+ζω·q0)/ωd)·sin(ωd·t))
+         */
+        private float springValue(float q0, float v0, float tSec) {
+            float env = (float) Math.exp(-SPRING_ZETA * SPRING_OMEGA * tSec);
+            float wd = SPRING_OMEGA * (float) Math.sqrt(1f - SPRING_ZETA * SPRING_ZETA);
+            return env * (q0 * (float) Math.cos(wd * tSec)
+                    + ((v0 + SPRING_ZETA * SPRING_OMEGA * q0) / wd) * (float) Math.sin(wd * tSec));
+        }
+
+        private final Choreographer.FrameCallback springCallback = new Choreographer.FrameCallback() {
+            @Override
+            public void doFrame(long frameTimeNanos) {
+                if (!springing) return;
+                if (isCollapsing || isFinishing() || !canInteract()) {
+                    // 收起动画接管 transform，此处直接退出
+                    springing = false;
+                    return;
+                }
+                float tMs = (frameTimeNanos - springStartNanos) / 1_000_000f;
+                if (tMs >= SPRING_DURATION_MS) {
+                    endSpring();
+                    return;
+                }
+                float t = tMs / 1000f;
+                offsetX = springValue(springQOffsetX, springVelOffsetX, t);
+                offsetY = springValue(springQOffsetY, springVelOffsetY, t);
+                sx = 1f + springValue(springQDevX, 0f, t);
+                sy = 1f + springValue(springQDevY, 0f, t);
+
+                // 收敛判定
+                if (Math.abs(offsetX) < 0.3f && Math.abs(offsetY) < 0.3f
+                        && Math.abs(sx - 1f) < 0.0008f && Math.abs(sy - 1f) < 0.0008f) {
+                    endSpring();
+                    return;
+                }
+                applyTransformAndSyncBlur();
+                Choreographer.getInstance().postFrameCallback(this);
+            }
+        };
+
+        private void endSpring() {
+            springing = false;
+            if (isCollapsing || isFinishing()) return;
+            offsetX = 0f;
+            offsetY = 0f;
+            sx = 1f;
+            sy = 1f;
+            contentContainer.setTranslationX(baseTransX);
+            contentContainer.setTranslationY(baseTransY);
+            contentContainer.setScaleX(1f);
+            contentContainer.setScaleY(1f);
+            contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
+            sendBlurFrame(true); // 最后一帧恢复到与布局精确一致的基础框
+        }
+
+        private void applyTransformAndSyncBlur() {
+            contentContainer.setTranslationX(baseTransX + offsetX);
+            contentContainer.setTranslationY(baseTransY + offsetY);
+            contentContainer.setScaleX(sx);
+            contentContainer.setScaleY(sy);
+            sendBlurFrame(false);
+        }
+
+        /**
+         * 方案 A：逐帧同步模糊窗口完整 x/y/w/h。
+         * 复用现有 UPDATE_BLUR_WINDOW_SIZE 协议（接收端已支持）。
+         * 若真机实测掉帧，降级顺序：尺寸量化到 2px → 隔帧发送 → 退回包络方案。
+         */
+        private void sendBlurFrame(boolean force) {
+            if (contentContainer == null) return;
+            float w = contentContainer.getWidth();
+            float h = contentContainer.getHeight();
+            if (w <= 0 || h <= 0) return;
+            // 缩放绕中心：中心 = 基准左上 + 半尺寸 + 当前位移
+            float centerX = baseLeft + w / 2f + offsetX;
+            float centerY = baseTop + h / 2f + offsetY;
+            int bx = Math.round(centerX - w * sx / 2f);
+            int by = Math.round(centerY - h * sy / 2f);
+            int bw = Math.round(w * sx);
+            int bh = Math.round(h * sy);
+            if (!force && blurFrameSent
+                    && bx == lastBlurX && by == lastBlurY && bw == lastBlurW && bh == lastBlurH) {
+                return;
+            }
+            if (force && !blurFrameSent) return;
+            lastBlurX = bx;
+            lastBlurY = by;
+            lastBlurW = bw;
+            lastBlurH = bh;
+            blurFrameSent = true;
+            try {
+                Intent intent = new Intent("UPDATE_BLUR_WINDOW_SIZE");
+                intent.setPackage(getPackageName());
+                intent.putExtra("blur_x", bx);
+                intent.putExtra("blur_y", by);
+                intent.putExtra("blur_width", bw);
+                intent.putExtra("blur_height", bh);
+                intent.putExtra("blur_corner_radius", dpToPx(cornerRadius));
+                sendBroadcast(intent);
+            } catch (Exception e) {
+                Log.e(TAG, "发送模糊窗口逐帧同步失败", e);
+            }
+        }
+
+        // ─── 手指光晕 ───
+
+        private void updateGlow(float rawX, float rawY, boolean pressed) {
+            if (fingerGlowView == null) return;
+            if (!pressed) {
+                fingerGlowView.release();
+                return;
+            }
+            if (!canInteract()) {
+                fingerGlowView.release();
+                return;
+            }
+            int[] loc = tmpLoc;
+            contentContainer.getLocationOnScreen(loc);
+            float scx = Math.max(0.01f, contentContainer.getScaleX());
+            float scy = Math.max(0.01f, contentContainer.getScaleY());
+            fingerGlowView.setPointer((rawX - loc[0]) / scx, (rawY - loc[1]) / scy);
+            fingerGlowView.press();
+        }
+    }
+
+    /**
+     * 手指光晕：跟随手指的径向白色高光，叠在 contentContainer 最上层。
+     * 永不消费触摸事件（onTouchEvent 恒 false），事件自动穿透给下层内容。
+     */
+    private class FingerGlowView extends View {
+        private final Paint glowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private float pointerX, pointerY;
+        private float glowRadius;
+        private boolean pressed;
+
+        FingerGlowView(Context context) {
+            super(context);
+            glowPaint.setStyle(Paint.Style.FILL);
+            setAlpha(0f);
+        }
+
+        @Override
+        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+            super.onSizeChanged(w, h, oldw, oldh);
+            glowRadius = Math.round(Math.max(dpToPx(100),
+                    Math.min(dpToPx(140), Math.min(w, h) * 0.6f)));
+            // 以 (0,0) 为圆心创建 shader，绘制时平移到指针位置，避免每次移动都分配对象
+            glowPaint.setShader(new RadialGradient(0, 0, glowRadius,
+                    Color.argb(70, 255, 255, 255),
+                    Color.argb(0, 255, 255, 255),
+                    Shader.TileMode.CLAMP));
+        }
+
+        void setPointer(float x, float y) {
+            pointerX = x;
+            pointerY = y;
+            invalidate();
+        }
+
+        void press() {
+            if (pressed) return;
+            pressed = true;
+            animate().cancel();
+            animate().alpha(1f).setDuration(180)
+                    .setInterpolator(new DecelerateInterpolator()).start();
+        }
+
+        void release() {
+            if (!pressed && getAlpha() == 0f) return;
+            pressed = false;
+            animate().cancel();
+            animate().alpha(0f).setDuration(350)
+                    .setInterpolator(new DecelerateInterpolator()).start();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            if (getAlpha() <= 0.001f || glowPaint.getShader() == null) return;
+            canvas.save();
+            canvas.translate(pointerX, pointerY);
+            canvas.drawCircle(0, 0, glowRadius, glowPaint);
+            canvas.restore();
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            return false; // 永不消费，事件穿透给下层 cell / ScrollView
         }
     }
 

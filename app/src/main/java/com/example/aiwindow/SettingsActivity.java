@@ -255,6 +255,11 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView textAiBlurRadius, textAiOverlayAlpha;
     private EditText editCustomCss; // 自定义 CSS
     private Switch switchWebpageBgTransparent; // 网页背景透明
+
+    // ColorOS 风格效果开关（快捷方式窗口）
+    private Switch switchShortcutEdgeRefraction;   // 边缘折射光
+    private Switch switchShortcutFingerGlow;       // 手指光晕
+    private Switch switchShortcutDragStretch;      // 拖动灵动拉伸
     
     // 顶部小横条透明度控件
     private SeekBar seekTopBarTransparency;
@@ -429,7 +434,12 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutOverlayAlpha = findViewById(R.id.seek_shortcut_overlay_alpha);
         textShortcutBlurRadius = findViewById(R.id.text_shortcut_blur_radius);
         textShortcutOverlayAlpha = findViewById(R.id.text_shortcut_overlay_alpha);
-        
+
+        // ColorOS 风格效果开关
+        switchShortcutEdgeRefraction = findViewById(R.id.switch_shortcut_edge_refraction);
+        switchShortcutFingerGlow = findViewById(R.id.switch_shortcut_finger_glow);
+        switchShortcutDragStretch = findViewById(R.id.switch_shortcut_drag_stretch);
+
         // AI 窗口模糊效果控件
         spinnerAiStyle = findViewById(R.id.spinner_ai_style);
         seekAiBlurRadius = findViewById(R.id.seek_ai_blur_radius);
@@ -695,6 +705,11 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutOverlayAlpha.setProgress(overlayAlpha1);
         textShortcutOverlayAlpha.setText("叠加色透明度: " + (overlayAlpha1 * 100 / 255) + "%");
         updateShortcutStyleVisibility(style);
+
+        // 加载 ColorOS 风格效果开关（默认开启）
+        switchShortcutEdgeRefraction.setChecked(preferences.getBoolean("shortcut_edge_refraction", true));
+        switchShortcutFingerGlow.setChecked(preferences.getBoolean("shortcut_finger_glow", true));
+        switchShortcutDragStretch.setChecked(preferences.getBoolean("shortcut_drag_stretch", true));
         
         // 加载 AI 窗口模糊效果设置
         int aiStyle = preferences.getInt(KEY_AI_STYLE, 0);
@@ -861,6 +876,11 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putInt(KEY_SHORTCUT_STYLE, spinnerShortcutStyle.getSelectedItemPosition());
         editor.putInt(KEY_SHORTCUT_BLUR_RADIUS, seekShortcutBlurRadius.getProgress());
         editor.putInt(KEY_SHORTCUT_OVERLAY_ALPHA, seekShortcutOverlayAlpha.getProgress());
+
+        // 保存 ColorOS 风格效果开关
+        editor.putBoolean("shortcut_edge_refraction", switchShortcutEdgeRefraction.isChecked());
+        editor.putBoolean("shortcut_finger_glow", switchShortcutFingerGlow.isChecked());
+        editor.putBoolean("shortcut_drag_stretch", switchShortcutDragStretch.isChecked());
         
         // 保存 AI 窗口模糊效果设置
         editor.putInt(KEY_AI_STYLE, spinnerAiStyle.getSelectedItemPosition());

@@ -39,6 +39,8 @@ public class BlurWindowActivity extends Activity {
     private int originalBlurRadius = 25;
     private int originalY = 0; // 保存原始 Y 位置
     private FrameLayout root;
+    // 窗口圆角背景复用（拖动期间会被逐帧 UPDATE_BLUR_WINDOW_SIZE 调用，避免每帧 new 对象）
+    private android.graphics.drawable.GradientDrawable windowBackgroundDrawable;
 
     public static final String EXTRA_BLUR_X = "blur_x";
     public static final String EXTRA_BLUR_Y = "blur_y";
@@ -69,6 +71,27 @@ public class BlurWindowActivity extends Activity {
         }
     }
 
+    /**
+     * 设置/更新窗口圆角背景。背景为完全透明的圆角矩形，
+     * 让窗口级模糊（setBackgroundBlurRadius）穿透显示；复用同一 Drawable 实例。
+     */
+    private void applyWindowCornerRadius(int cornerRadius) {
+        if (cornerRadius > 0) {
+            if (windowBackgroundDrawable == null) {
+                windowBackgroundDrawable = new android.graphics.drawable.GradientDrawable();
+                windowBackgroundDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+                // 使用完全透明的颜色，让模糊效果穿透显示
+                windowBackgroundDrawable.setColor(Color.TRANSPARENT);
+                getWindow().setBackgroundDrawable(windowBackgroundDrawable);
+                Log.d(TAG, "已设置窗口圆角背景: " + cornerRadius + "px");
+            }
+            windowBackgroundDrawable.setCornerRadius(cornerRadius - 7);
+        } else if (windowBackgroundDrawable != null) {
+            windowBackgroundDrawable = null;
+            getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+    }
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -94,18 +117,7 @@ public class BlurWindowActivity extends Activity {
         
         // 关键：设置窗口背景为圆角矩形（半透明或完全透明）
         // 这样模糊效果会透过这个圆角背景显示出来
-        if (cornerRadius > 0) {
-            android.graphics.drawable.GradientDrawable windowBackground = new android.graphics.drawable.GradientDrawable();
-            windowBackground.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-            windowBackground.setCornerRadius(cornerRadius-7);
-            // 使用完全透明的颜色，让模糊效果穿透显示
-            windowBackground.setColor(Color.TRANSPARENT);
-            getWindow().setBackgroundDrawable(windowBackground);
-            Log.d(TAG, "已设置窗口圆角背景: " + cornerRadius + "px");
-        } else {
-            // 没有圆角时使用默认透明背景
-            getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        }
+        applyWindowCornerRadius(cornerRadius);
 
         // 空根布局，全透明，仅用于承载窗口
         root = new FrameLayout(this);
@@ -152,15 +164,8 @@ public class BlurWindowActivity extends Activity {
                     params.height = newBlurHeight;
                     getWindow().setAttributes(params);
                     
-                    // 更新窗口圆角背景
-                    if (newCornerRadius > 0) {
-                        android.graphics.drawable.GradientDrawable windowBackground = new android.graphics.drawable.GradientDrawable();
-                        windowBackground.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-                        windowBackground.setCornerRadius(newCornerRadius-7);
-                        windowBackground.setColor(Color.TRANSPARENT);
-                        getWindow().setBackgroundDrawable(windowBackground);
-                        Log.d(TAG, "模糊窗口圆角已更新: " + newCornerRadius + "px");
-                    }
+                    // 更新窗口圆角背景（复用 Drawable，逐帧调用不分配对象）
+                    applyWindowCornerRadius(newCornerRadius);
                     
                     Log.d(TAG, "模糊窗口已更新: (" + newBlurX + "," + newBlurY + ") " 
                             + newBlurWidth + "x" + newBlurHeight);
