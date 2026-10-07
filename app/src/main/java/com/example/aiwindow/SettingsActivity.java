@@ -131,6 +131,7 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_SHORTCUT_ICON_SIZE = "shortcut_icon_size";
 
     private static final String KEY_SHORTCUT_STYLE = "shortcut_style";
+    private static final String KEY_BLUR_SYNC_MODE = "blur_sync_mode";
     private static final String KEY_SHORTCUT_BLUR_RADIUS = "shortcut_blur_radius";
     private static final String KEY_SHORTCUT_OVERLAY_ALPHA = "shortcut_overlay_alpha";
     
@@ -246,6 +247,7 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView textShortcutIconSize;
 
     private Spinner spinnerShortcutStyle;
+    private Spinner spinnerBlurSyncMode;
     private SeekBar seekShortcutBlurRadius, seekShortcutOverlayAlpha;
     private TextView textShortcutBlurRadius, textShortcutOverlayAlpha;
     
@@ -430,6 +432,7 @@ public class SettingsActivity extends AppCompatActivity {
 
 
         spinnerShortcutStyle = findViewById(R.id.spinner_shortcut_style);
+        spinnerBlurSyncMode = findViewById(R.id.spinner_blur_sync_mode);
         seekShortcutBlurRadius = findViewById(R.id.seek_shortcut_blur_radius);
         seekShortcutOverlayAlpha = findViewById(R.id.seek_shortcut_overlay_alpha);
         textShortcutBlurRadius = findViewById(R.id.text_shortcut_blur_radius);
@@ -698,6 +701,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         int style = preferences.getInt(KEY_SHORTCUT_STYLE, 0);
         spinnerShortcutStyle.setSelection(style);
+        spinnerBlurSyncMode.setSelection(preferences.getInt(KEY_BLUR_SYNC_MODE, 0));
         int blurRadius = preferences.getInt(KEY_SHORTCUT_BLUR_RADIUS, 20);
         seekShortcutBlurRadius.setProgress(blurRadius);
         textShortcutBlurRadius.setText("模糊半径: " + blurRadius + "dp");
@@ -874,6 +878,7 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putInt(KEY_SHORTCUT_ICON_SIZE, seekShortcutIconSize.getProgress());
 
         editor.putInt(KEY_SHORTCUT_STYLE, spinnerShortcutStyle.getSelectedItemPosition());
+        editor.putInt(KEY_BLUR_SYNC_MODE, spinnerBlurSyncMode.getSelectedItemPosition());
         editor.putInt(KEY_SHORTCUT_BLUR_RADIUS, seekShortcutBlurRadius.getProgress());
         editor.putInt(KEY_SHORTCUT_OVERLAY_ALPHA, seekShortcutOverlayAlpha.getProgress());
 

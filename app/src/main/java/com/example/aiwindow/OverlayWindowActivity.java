@@ -189,9 +189,16 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private static String sLoadedAiUrl = null; // 记录 WebView 实际加载的初始 AI URL（用于判断设置中的 URL 是否被用户修改，不受页面内部导航影响）
     private static boolean sWebViewClientInitialized = false; // ← 新增：标记 Client 是否已初始化
     
-    // ─── 模糊窗口渐变标志 ───
-    private boolean blurWindowFadeInSent = false; // 标记是否已发送模糊窗口渐变显示广播
-    private boolean blurFadeOutStarted = false; // 标记收起动画中是否已触发模糊淡出
+    // ─── 模糊窗口逐帧同步状态（展开/收起动画与拖动手势共用，见 sendBlurRect） ───
+    private boolean blurFrameSent;
+    private int lastBlurX, lastBlurY, lastBlurW, lastBlurH;
+    private float lastBlurAlpha = -1f;
+    private long lastBlurSendNanos;            // 上次发送时刻（性能档限频用）
+    private Intent blurUpdateIntent;           // 复用广播 Intent，避免每帧 new 分配
+    // 模糊层同步模式：0 精确同步（默认） / 1 均衡（2px 量化） / 2 性能优先（量化 + 约30fps 限频）
+    private int blurSyncMode;
+    // 内容窗口布局基准屏幕坐标（纯布局位置；展开动画应用 transform 前捕获，收起动画复用）
+    private int layoutBaseLeft, layoutBaseTop;
     // ─── 文件上传相关 ───
     private boolean mIsStartingFileChooser = false; // 标记是否正在启动文件选择器
     private static ValueCallback<Uri[]> sPendingUploadCallback; // 待投递的 WebView 回调
@@ -621,6 +628,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             overlayAlpha = prefs.getInt("overlay_alpha", 50);
             overlayColor = prefs.getString("overlay_color", "#000000");
             overlayAnimDuration = prefs.getInt("overlay_anim_duration", 100);
+            blurSyncMode = prefs.getInt("blur_sync_mode", 0);
             Log.d(TAG, "已加载遮罩设置 - 透明度: " + overlayAlpha + "%, 颜色: " + overlayColor + ", 动画时长: " + overlayAnimDuration + "ms");
         } catch (Exception e) {
             Log.e(TAG, "加载遮罩设置失败", e);
@@ -1567,6 +1575,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 之前隐藏是为了避免系统 Activity 转场淡入动画导致窗口透明度渐变
         rootLayout.setVisibility(View.VISIBLE);
 
+        // 捕获布局基准屏幕坐标（此时尚未应用 transform；rootLayout 为 INVISIBLE 但已布局，坐标有效）
+        int[] animLoc = new int[2];
+        contentContainer.getLocationOnScreen(animLoc);
+        layoutBaseLeft = animLoc[0];
+        layoutBaseTop = animLoc[1];
+
         // 限制最小比例，防止除零
         if (initScaleX <= 0) initScaleX = 0.01f;
         if (initScaleY <= 0) initScaleY = 0.01f;
@@ -1601,10 +1615,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
         final AcrylicRoundRectDrawable expandAcrylicBg = (expandBg instanceof AcrylicRoundRectDrawable) ? (AcrylicRoundRectDrawable) expandBg : null;
         final int expandTargetAlpha = (windowType == WINDOW_TYPE_AI) ? aiOverlayAlpha : shortcutOverlayAlpha;
 
+        // 背景从首个可见帧起即为目标透明度（模糊层已逐帧对齐，可直接作为背景），
+        // 不再做"前 60% 不透明 → 渐变透明"的过渡
+        if (expandAcrylicBg != null) {
+            expandAcrylicBg.updateFillColorAndAlpha(expandTargetAlpha, expandTargetAlpha);
+        }
+
         final long startNanos = System.nanoTime();
 
         // 在 doFrame 回调外部（但仍在方法内）声明局部数组：
-        final float[] lastDrawableAlpha = { -1f };
         final float[] lastOverlayAlpha = { -1f };
         final float[] lastWebAlpha = { -1f };
 
@@ -1628,6 +1647,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 contentContainer.setTranslationX(curTransX);
                 contentContainer.setTranslationY(curTransY);
 
+                // 逐帧同步模糊层：第 1 帧起尺寸/位置与窗口实时一致（含超调阶段），alpha 恒为 1
+                syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, 1f, false);
+
                 // 背景遮罩同步渐入（与窗口动画同时）
                 if (overlayView != null) {
                     float targetAlpha = overlayAlpha / 100.0f * eased;
@@ -1645,21 +1667,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
 //                    blurBackgroundView.setTranslationX(curTransX);
 //                    blurBackgroundView.setTranslationY(curTransY);
 //                }
-
-                // 计算当前背景透明度
-                if (expandAcrylicBg != null) {
-                    int currentAlpha;
-                    if (progress <= 0.6f) {
-                        currentAlpha = 255; // 前60%完全不透明
-                    } else {
-                        float t = (progress - 0.6f) / 0.4f;
-                        currentAlpha = (int)(255 + (expandTargetAlpha - 255) * t);
-                    }
-                    if (Math.abs(currentAlpha - lastDrawableAlpha[0]) >= 10) {
-                        expandAcrylicBg.updateFillColorAndAlpha(currentAlpha, expandTargetAlpha);
-                        lastDrawableAlpha[0] = currentAlpha;
-                    }
-                }
 
                 // WebView 后 50% 渐入
                 if (webView != null) {
@@ -1682,13 +1689,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     }
                 }
 
-                // 当动画进度达到60%时，通知模糊窗口开始渐变显示
-                if (progress >= 0.6f && !blurWindowFadeInSent) {
-                    blurWindowFadeInSent = true;
-                    sendBlurWindowFadeInBroadcast(progress);
-                    Log.d(TAG, "展开动画进度达到60%，已发送模糊窗口渐变显示广播");
-                }
-
                 if (progress < 1.0f) {
                     Choreographer.getInstance().postFrameCallback(this);
                 } else {
@@ -1698,6 +1698,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     contentContainer.setScaleY(1f);
                     contentContainer.setTranslationX(0f);
                     contentContainer.setTranslationY(0f);
+
+                    // 终帧强制同步（性能档限频不跳过），保证展开结束后模糊层与窗口精确一致
+                    syncBlurToTransform(0f, 0f, 1f, 1f, 1f, true);
 
                     contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
 //                    if (blurBackgroundView != null) {
@@ -1756,28 +1759,16 @@ public class OverlayWindowActivity extends AppCompatActivity {
         final float endTransY = initTranslationY;
         final long startNanos = System.nanoTime();
 
-        // 缓存背景 Drawable 和目标透明度，避免每帧重复获取
-        final Drawable bg = contentContainer.getBackground();
-        final AcrylicRoundRectDrawable acrylicBg = (bg instanceof AcrylicRoundRectDrawable) ? (AcrylicRoundRectDrawable) bg : null;
-        final int collapseTargetAlpha = (windowType == WINDOW_TYPE_AI) ? aiOverlayAlpha : shortcutOverlayAlpha;
-
+        // 缓存目标透明度（背景保持全程目标透明度，不再做渐变）
         contentContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-        blurFadeOutStarted = false;
 
         // ===== 优化：添加阈值跟踪，减少不必要的属性更新 =====
-        final float[] lastDrawableAlpha = { -1f };
         final float[] lastOverlayAlpha = { -1f };
         final float[] lastWebAlpha = { -1f };
 
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             @Override
             public void doFrame(long frameTimeNanos) {
-                // 只触发一次模糊淡出，避免重复
-                if (!blurFadeOutStarted) {
-                    blurFadeOutStarted = true;
-                    BlurWindowActivity.fadeOutIfAlive();
-                }
-
                 float progress = (float) (frameTimeNanos - startNanos) / 1_000_000f / animDuration;
                 progress = Math.max(0f, Math.min(progress, 1.0f));
                 float eased = animInterpolator.getInterpolation(progress);
@@ -1810,20 +1801,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 contentContainer.setTranslationX(curTransX);
                 contentContainer.setTranslationY(curTransY);
 
-                // ===== 优化：Drawable 透明度阈值更新 =====
-                if (acrylicBg != null) {
-                    int currentAlpha;
-                    if (progress <= 0.3f) {
-                        float t = progress / 0.3f;
-                        currentAlpha = (int)(collapseTargetAlpha + (255 - collapseTargetAlpha) * t);
-                    } else {
-                        currentAlpha = 255; // 后70%保持完全不透明
-                    }
-                    if (Math.abs(currentAlpha - lastDrawableAlpha[0]) >= 10) {
-                        acrylicBg.updateFillColorAndAlpha(currentAlpha, collapseTargetAlpha);
-                        lastDrawableAlpha[0] = currentAlpha;
-                    }
-                }
+                // 逐帧同步模糊层：尺寸跟随窗口收缩，透明度与内容同曲线（最后 30%）淡出
+                syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, containerAlpha, false);
 
                 // ===== 优化：WebView 透明度阈值更新 =====
                 if (webView != null) {
@@ -1855,6 +1834,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
                     // ===== 优化：恢复硬件层 =====
                     contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
+
+                    // 模糊层已被最后一帧的 alpha=0 置为不可见；
+                    // 此处触发其内部逐帧递减模糊半径 + finish，保留进程冻结兜底
+                    BlurWindowActivity.fadeOutIfAlive();
 
                     if (webView != null) {
                         webView.setAlpha(0f);
@@ -1896,22 +1879,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
     }
     
     /**
-     * 发送模糊窗口渐变显示广播
-     * @param progress 当前动画进度（0.0-1.0）
-     */
-    private void sendBlurWindowFadeInBroadcast(float progress) {
-        try {
-            Intent intent = new Intent("BLUR_WINDOW_FADE_IN");
-            intent.setPackage(getPackageName());
-            intent.putExtra("progress", progress);
-            sendBroadcast(intent);
-            Log.d(TAG, "已发送模糊窗口渐变显示广播，progress=" + progress);
-        } catch (Exception e) {
-            Log.e(TAG, "发送模糊窗口渐变显示广播失败", e);
-        }
-    }
-    
-    /**
      * 发送模糊层平移广播（让 BlurWindowActivity 同步移动）
      * @param translationY 内容窗口的 Y 方向平移量
      */
@@ -1924,6 +1891,87 @@ public class OverlayWindowActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.e(TAG, "发送模糊窗口平移广播失败", e);
         }
+    }
+
+    /**
+     * 将模糊窗口同步到指定屏幕矩形（逐帧，复用 UPDATE_BLUR_WINDOW_SIZE 协议，接收端已支持）。
+     * 与屏幕求交集：请求框越界会触发 WMS 钳制，钳到屏幕边界后与被屏幕裁切的内容严格对齐。
+     * 去重含 alpha：rect 或 alpha 任一变化才发送。
+     * 若真机实测掉帧，降级顺序：尺寸量化到 2px → 隔帧发送。
+     */
+    private void sendBlurRect(int bx, int by, int bw, int bh, float blurAlpha, boolean force) {
+        // 性能档（mode 2）：限频发送（alpha 变化帧与 force 终帧不跳过）
+        long now = System.nanoTime();
+        if (blurSyncMode >= 2 && !force && blurFrameSent
+                && blurAlpha == lastBlurAlpha
+                && now - lastBlurSendNanos < 32_000_000L) {
+            return;
+        }
+        // 均衡/性能档（mode ≥ 1）：量化到 2px，减少 WMS relayout/缓冲区重分配次数（偏差 ≤1px）
+        if (blurSyncMode >= 1) {
+            bx = bx & ~1;
+            by = by & ~1;
+            bw = (bw + 1) & ~1;
+            bh = (bh + 1) & ~1;
+        }
+
+        int sx0 = Math.max(0, bx);
+        int sy0 = Math.max(0, by);
+        int sx1 = Math.min(screenWidth, bx + bw);
+        int sy1 = Math.min(screenHeight, by + bh);
+        if (sx1 - sx0 <= 0 || sy1 - sy0 <= 0) return;
+        bx = sx0;
+        by = sy0;
+        bw = sx1 - sx0;
+        bh = sy1 - sy0;
+
+        if (!force && blurFrameSent
+                && bx == lastBlurX && by == lastBlurY && bw == lastBlurW && bh == lastBlurH
+                && blurAlpha == lastBlurAlpha) {
+            return;
+        }
+        if (force && !blurFrameSent) return;
+        lastBlurX = bx;
+        lastBlurY = by;
+        lastBlurW = bw;
+        lastBlurH = bh;
+        lastBlurAlpha = blurAlpha;
+        blurFrameSent = true;
+        lastBlurSendNanos = now;
+        try {
+            if (blurUpdateIntent == null) {
+                blurUpdateIntent = new Intent("UPDATE_BLUR_WINDOW_SIZE");
+                blurUpdateIntent.setPackage(getPackageName());
+            }
+            blurUpdateIntent.putExtra("blur_x", bx);
+            blurUpdateIntent.putExtra("blur_y", by);
+            blurUpdateIntent.putExtra("blur_width", bw);
+            blurUpdateIntent.putExtra("blur_height", bh);
+            blurUpdateIntent.putExtra("blur_corner_radius", dpToPx(cornerRadius));
+            blurUpdateIntent.putExtra("blur_alpha", blurAlpha);
+            sendBroadcast(blurUpdateIntent);
+        } catch (Exception e) {
+            Log.e(TAG, "发送模糊窗口逐帧同步失败", e);
+        }
+    }
+
+    /**
+     * 展开/收起动画逐帧调用：按 contentContainer 当前变换计算视觉矩形并同步模糊层。
+     * 中心 = 布局基准 + pivot（跟随实际 pivot 设置，展开/拖动后均正确）+ translation。
+     */
+    private void syncBlurToTransform(float transX, float transY, float scaleX, float scaleY,
+                                     float blurAlpha, boolean force) {
+        if (contentContainer == null) return;
+        float w = contentContainer.getWidth();
+        float h = contentContainer.getHeight();
+        if (w <= 0 || h <= 0) return;
+        float centerX = layoutBaseLeft + contentContainer.getPivotX() + transX;
+        float centerY = layoutBaseTop + contentContainer.getPivotY() + transY;
+        int bx = Math.round(centerX - w * scaleX / 2f);
+        int by = Math.round(centerY - h * scaleY / 2f);
+        int bw = Math.round(w * scaleX);
+        int bh = Math.round(h * scaleY);
+        sendBlurRect(bx, by, bw, bh, blurAlpha, force);
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
@@ -2269,9 +2317,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
             private float baseTransX, baseTransY;   // DOWN 时的 translation（回弹目标）
             private float offsetX, offsetY;         // 当前拖动位移
             private float sx = 1f, sy = 1f;         // 当前拉伸比例
-            // 模糊框逐帧同步（节流：字段有 ≥1px 变化才发）
-            private boolean blurFrameSent;
-            private int lastBlurX, lastBlurY, lastBlurW, lastBlurH;
             // 弹簧快照
             private float springQOffsetX, springQOffsetY, springQDevX, springQDevY;
             private long springStartNanos;
@@ -2521,9 +2566,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
 
         /**
-         * 方案 A：逐帧同步模糊窗口完整 x/y/w/h。
-         * 复用现有 UPDATE_BLUR_WINDOW_SIZE 协议（接收端已支持）。
-         * 若真机实测掉帧，降级顺序：尺寸量化到 2px → 隔帧发送 → 退回包络方案。
+         * 方案 A：逐帧同步模糊窗口完整 x/y/w/h（拖动/回弹路径）。
+         * 钳制与去重在 sendBlurRect 中实现（与展开/收起动画共用）。
          */
         private void sendBlurFrame(boolean force) {
             if (contentContainer == null) return;
@@ -2537,41 +2581,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             int by = Math.round(centerY - h * sy / 2f);
             int bw = Math.round(w * sx);
             int bh = Math.round(h * sy);
-
-            // 与屏幕求交集：请求框越界同样会触发 WMS 钳制（拉伸瞬间可能略微越界），
-            // 钳到屏幕边界后与被屏幕裁切的内容严格对齐
-            int sx0 = Math.max(0, bx);
-            int sy0 = Math.max(0, by);
-            int sx1 = Math.min(screenWidth, bx + bw);
-            int sy1 = Math.min(screenHeight, by + bh);
-            if (sx1 - sx0 <= 0 || sy1 - sy0 <= 0) return;
-            bx = sx0;
-            by = sy0;
-            bw = sx1 - sx0;
-            bh = sy1 - sy0;
-
-            if (!force && blurFrameSent
-                    && bx == lastBlurX && by == lastBlurY && bw == lastBlurW && bh == lastBlurH) {
-                return;
-            }
-            if (force && !blurFrameSent) return;
-            lastBlurX = bx;
-            lastBlurY = by;
-            lastBlurW = bw;
-            lastBlurH = bh;
-            blurFrameSent = true;
-            try {
-                Intent intent = new Intent("UPDATE_BLUR_WINDOW_SIZE");
-                intent.setPackage(getPackageName());
-                intent.putExtra("blur_x", bx);
-                intent.putExtra("blur_y", by);
-                intent.putExtra("blur_width", bw);
-                intent.putExtra("blur_height", bh);
-                intent.putExtra("blur_corner_radius", dpToPx(cornerRadius));
-                sendBroadcast(intent);
-            } catch (Exception e) {
-                Log.e(TAG, "发送模糊窗口逐帧同步失败", e);
-            }
+            sendBlurRect(bx, by, bw, bh, 1f, force);
         }
 
         // ─── 手指光晕 ───

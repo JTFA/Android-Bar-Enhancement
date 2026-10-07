@@ -41,6 +41,7 @@ public class BlurWindowActivity extends Activity {
     private FrameLayout root;
     // 窗口圆角背景复用（拖动期间会被逐帧 UPDATE_BLUR_WINDOW_SIZE 调用，避免每帧 new 对象）
     private android.graphics.drawable.GradientDrawable windowBackgroundDrawable;
+    private int appliedCornerRadius = -1; // 当前已应用的圆角，未变化时跳过更新
 
     public static final String EXTRA_BLUR_X = "blur_x";
     public static final String EXTRA_BLUR_Y = "blur_y";
@@ -74,9 +75,14 @@ public class BlurWindowActivity extends Activity {
     /**
      * 设置/更新窗口圆角背景。背景为完全透明的圆角矩形，
      * 让窗口级模糊（setBackgroundBlurRadius）穿透显示；复用同一 Drawable 实例。
+     * 半径未变化时直接返回，避免逐帧 setCornerRadius 导致 drawable 失效重绘。
      */
     private void applyWindowCornerRadius(int cornerRadius) {
         if (cornerRadius > 0) {
+            if (windowBackgroundDrawable != null && appliedCornerRadius == cornerRadius) {
+                return;
+            }
+            appliedCornerRadius = cornerRadius;
             if (windowBackgroundDrawable == null) {
                 windowBackgroundDrawable = new android.graphics.drawable.GradientDrawable();
                 windowBackgroundDrawable.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
@@ -87,6 +93,7 @@ public class BlurWindowActivity extends Activity {
             }
             windowBackgroundDrawable.setCornerRadius(cornerRadius - 7);
         } else if (windowBackgroundDrawable != null) {
+            appliedCornerRadius = 0;
             windowBackgroundDrawable = null;
             getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         }
@@ -136,7 +143,7 @@ public class BlurWindowActivity extends Activity {
         wmParams.y = blurY;
         wmParams.width = blurWidth;
         wmParams.height = blurHeight;
-        // 初始透明度为0，等待展开动画到70%时开始渐变
+        // 初始透明度为 0，由 OverlayWindowActivity 展开动画逐帧广播的 blur_alpha 驱动显示
         wmParams.alpha = 0f;
 
         getWindow().setAttributes(wmParams);
@@ -162,13 +169,13 @@ public class BlurWindowActivity extends Activity {
                     params.y = newBlurY;
                     params.width = newBlurWidth;
                     params.height = newBlurHeight;
+                    // 同步透明度（展开恒 1 / 收起跟随内容淡出曲线）；
+                    // 不带该 extra 的旧广播（配置变更同步）保持现值
+                    params.alpha = intent.getFloatExtra("blur_alpha", params.alpha);
                     getWindow().setAttributes(params);
                     
-                    // 更新窗口圆角背景（复用 Drawable，逐帧调用不分配对象）
+                    // 更新窗口圆角背景（复用 Drawable，半径未变时早退，避免每帧失效重绘）
                     applyWindowCornerRadius(newCornerRadius);
-                    
-                    Log.d(TAG, "模糊窗口已更新: (" + newBlurX + "," + newBlurY + ") " 
-                            + newBlurWidth + "x" + newBlurHeight);
                 } else if ("BLUR_WINDOW_FADE_OUT".equals(intent.getAction())) {
                     // 收到渐变消失通知，执行透明度动画
                     Log.d(TAG, "收到 BLUR_WINDOW_FADE_OUT 广播，开始渐变消失");
@@ -181,7 +188,6 @@ public class BlurWindowActivity extends Activity {
                     // 所以新的 y = originalY + translationY
                     params.y = originalY + (int)translationY;
                     getWindow().setAttributes(params);
-                    Log.d(TAG, "模糊窗口平移: translationY=" + translationY + ", newY=" + params.y);
                 } else if ("BLUR_WINDOW_FADE_IN".equals(intent.getAction())) {
                     // 收到渐变显示通知，执行透明度动画（从70%进度开始）
                     float progress = intent.getFloatExtra("progress", 0.7f);
