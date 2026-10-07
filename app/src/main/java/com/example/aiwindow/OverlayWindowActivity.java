@@ -2601,6 +2601,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
             super(context);
             glowPaint.setStyle(Paint.Style.FILL);
             setAlpha(0f);
+            // 光晕裁剪到窗口圆角轮廓内，避免手指移到四角时光晕溢出圆角显示为直角
+            setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View v, android.graphics.Outline outline) {
+                    outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(),
+                            dpToPx(cornerRadius));
+                }
+            });
+            setClipToOutline(true);
         }
 
         @Override
