@@ -86,7 +86,7 @@
     <string-array name="blur_sync_entries">
         <item>精确同步（模糊层全程逐帧跟随，默认）</item>
         <item>均衡（展开/收起 40%-60% 区间淡入淡出，带外不渲染）</item>
-        <item>性能优先（展开 70%-90% 淡入、收起 10%-30% 淡出，渲染时间最短）</item>
+        <item>性能优先（展开 60%-90% 按最终尺寸淡入、收起 5%-40% 淡出，渲染时间最短）</item>
     </string-array>
 
 </resources>

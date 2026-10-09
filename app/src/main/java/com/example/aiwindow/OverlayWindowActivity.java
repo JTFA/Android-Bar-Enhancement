@@ -207,7 +207,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // 模糊层同步模式（淡入/淡出带；带外不可见相位 = 冻结矩形 + 半径置 0）：
     //   0 精确同步（默认）——模糊层逐帧全程跟随窗口动画
     //   1 均衡——展开 [0.4, 0.6] 淡入、收起 [0.4, 0.6] 淡出，带内逐帧同步、带外仅大小跟随或不渲染
-    //   2 性能优先——展开 [0.7, 0.9] 淡入、收起 [0.1, 0.3] 淡出（时间镜像），不渲染占比最大
+    //   2 性能优先——展开 [0.6, 0.9] 按最终尺寸淡入、收起 [0.05, 0.4] 淡出（矩形全程冻结不跟随）
     private int blurSyncMode;
     // 内容窗口布局基准屏幕坐标（纯布局位置；展开动画应用 transform 前捕获，收起动画复用）
     private int layoutBaseLeft, layoutBaseTop;
@@ -1713,27 +1713,41 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 contentContainer.setTranslationY(curTransY);
 
                 // 逐帧同步模糊层（按 blurSyncMode 分档）：
-                // 淡入区间：均衡 [0.4, 0.6]，性能优先 [0.7, 0.9]
-                float fadeInStart = (blurSyncMode == 1) ? 0.4f : 0.7f;
-                float fadeInEnd = (blurSyncMode == 1) ? 0.6f : 0.9f;
+                // 淡入区间：均衡 [0.4, 0.6]（带内尺寸跟随）；
+                // 性能优先 [0.6, 0.9] 按最终尺寸淡入（矩形冻结，不跟随窗口缩放）
                 if (blurSyncMode == 0) {
                     // 精确同步：首帧仅落尺寸（alpha 仍 0），第 2 帧起 alpha=1，
                     // 消除"全尺寸→细条"与 alpha 同帧的 1 帧闪烁
                     syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY,
                             firstBlurFrame[0] ? 0f : 1f, false);
                     firstBlurFrame[0] = false;
-                } else if (progress < fadeInStart) {
-                    // 不可见相位：冻结矩形（不下发任何同步），alpha=0、半径=0 已在动画入口置好
+                } else if (blurSyncMode == 1) {
+                    if (progress < 0.4f) {
+                        // 不可见相位：冻结矩形（不下发任何同步），alpha=0、半径=0 已在动画入口置好
+                    } else if (!blurCalibrated[0]) {
+                        // 校准帧（淡入起点）：矩形一次性跳到当前视觉位置（alpha 仍为 0，
+                        // 尺寸跳变不可见），同时恢复原始模糊半径，随后进入淡入
+                        syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, 0f, false);
+                        BlurWindowActivity.restoreRadiusIfAlive();
+                        blurCalibrated[0] = true;
+                    } else {
+                        // 可见相位：[0.4, 0.6] 线性渐入，区间结束后仅大小跟随（alpha 恒 1）
+                        float a = Math.min(1f, (progress - 0.4f) / 0.2f);
+                        syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, a, false);
+                    }
+                } else if (progress < 0.6f) {
+                    // 不可见相位（至 0.6）：冻结矩形（不下发），alpha=0、半径=0 已在动画入口置好
                 } else if (!blurCalibrated[0]) {
-                    // 校准帧（淡入起点）：矩形一次性跳到当前视觉位置（alpha 仍为 0，
-                    // 尺寸跳变不可见），同时恢复原始模糊半径，随后进入淡入
-                    syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, 0f, false);
+                    // 校准帧（0.6 处）：矩形一次性跳到最终尺寸（trans=0、scale=1，alpha 仍为 0，
+                    // 尺寸跳变不可见），同时恢复原始模糊半径；此后淡入全程不再改变模糊层大小
+                    syncBlurToTransform(0f, 0f, 1f, 1f, 0f, false);
                     BlurWindowActivity.restoreRadiusIfAlive();
                     blurCalibrated[0] = true;
-                } else {
-                    // 可见相位：淡入区间内线性渐入，区间结束后仅大小跟随（alpha 恒 1）
-                    float a = Math.min(1f, (progress - fadeInStart) / (fadeInEnd - fadeInStart));
-                    syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, a, false);
+                } else if (progress < 0.9f) {
+                    // [0.6, 0.9] 按最终尺寸线性淡入：矩形恒为最终值（去重跳过重复 rect，仅下发 alpha）；
+                    // 0.9 之后不再下发，终帧强制同步保证收敛
+                    float a = Math.min(1f, (progress - 0.6f) / 0.3f);
+                    syncBlurToTransform(0f, 0f, 1f, 1f, a, false);
                 }
 
                 // 背景遮罩同步渐入（与窗口动画同时；超调段 eased>1，钳位防止 alpha 超 1）
@@ -1897,25 +1911,37 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 if (blurSyncMode == 0) {
                     // 精确同步：尺寸跟随窗口收缩，透明度与内容同曲线（最后 30%）淡出
                     syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, containerAlpha, false);
+                } else if (collapseStartBlurAlpha <= 0f) {
+                    // 模糊层本就不可见（展开相位未到即收起）：确保半径归零（可能刚过
+                    // 校准帧、半径已恢复但 alpha 仍为 0）并冻结矩形，不下发
+                    if (!blurZeroed[0]) {
+                        BlurWindowActivity.applyRadius(0);
+                        blurZeroed[0] = true;
+                    }
+                } else if (blurSyncMode == 2) {
+                    // 性能优先：矩形全程冻结在展开终态尺寸（不下发 rect），淡出区间 [0.05, 0.4]
+                    if (progress < 0.05f) {
+                        // alpha 保持收起开始时的值，不下发（尺寸与 alpha 均未变化）
+                    } else if (progress < 0.4f) {
+                        // 淡出区间：矩形不变，仅线性淡出 alpha 到 0
+                        float a = collapseStartBlurAlpha * (1f - (progress - 0.05f) / 0.35f);
+                        sendBlurRect(lastBlurX, lastBlurY, lastBlurW, lastBlurH, a, false);
+                    } else if (!blurZeroed[0]) {
+                        // 关断帧：alpha 归零 + 半径置 0（一次性），随后冻结矩形直至动画结束
+                        sendBlurRect(lastBlurX, lastBlurY, lastBlurW, lastBlurH, 0f, false);
+                        BlurWindowActivity.applyRadius(0);
+                        blurZeroed[0] = true;
+                    }
                 } else {
-                    // 淡出区间：均衡 [0.4, 0.6]，性能优先 [0.1, 0.3]（展开淡入带的时间镜像）
-                    float fadeOutStart = (blurSyncMode == 1) ? 0.2f : 0.1f;
-                    float fadeOutEnd = (blurSyncMode == 1) ? 0.4f : 0.3f;
-                    if (collapseStartBlurAlpha <= 0f) {
-                        // 模糊层本就不可见（展开相位未到即收起）：确保半径归零（可能刚过
-                        // 校准帧、半径已恢复但 alpha 仍为 0）并冻结矩形，不下发
-                        if (!blurZeroed[0]) {
-                            BlurWindowActivity.applyRadius(0);
-                            blurZeroed[0] = true;
-                        }
-                    } else if (progress < fadeOutStart) {
+                    // 均衡档淡出区间 [0.2, 0.4]（带内尺寸跟随）
+                    if (progress < 0.2f) {
                         // 仅大小跟随：alpha 保持收起开始时的值，逐帧同步
                         syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY,
                                 collapseStartBlurAlpha, false);
-                    } else if (progress < fadeOutEnd) {
+                    } else if (progress < 0.4f) {
                         // 淡出区间：线性淡出到 0
                         float a = collapseStartBlurAlpha
-                                * (1f - (progress - fadeOutStart) / (fadeOutEnd - fadeOutStart));
+                                * (1f - (progress - 0.2f) / 0.2f);
                         syncBlurToTransform(curTransX, curTransY, curScaleX, curScaleY, a, false);
                     } else if (!blurZeroed[0]) {
                         // 关断帧：alpha 归零 + 半径置 0（一次性），随后冻结矩形直至动画结束
