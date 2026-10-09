@@ -2379,10 +2379,13 @@ public class FloatWindowService extends Service {
             // 在展开开始瞬间闪现全尺寸模糊
             blurIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK
                     | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            // 启动握手：通知 OverlayWindowActivity 等模糊窗口就绪后再开始展开动画
+            BlurWindowActivity.sPendingLaunch = true;
             startActivity(blurIntent);
             Log.d(TAG, "已启动模糊窗口: 位置(" + blurX + "," + blurY + ") 尺寸" + targetWidth + "x" + targetHeight 
                     + " 圆角" + dpToPx((int)cornerRadiusDp) + "px 模糊半径=" + blurRadius);
         } catch (Exception e) {
+            BlurWindowActivity.sPendingLaunch = false; // 启动失败时清除握手标志，避免展开白等
             Log.e(TAG, "启动模糊窗口失败", e);
         }
     }

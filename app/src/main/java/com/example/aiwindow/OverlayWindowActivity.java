@@ -204,8 +204,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private boolean blurFrameSent;
     private int lastBlurX, lastBlurY, lastBlurW, lastBlurH;
     private float lastBlurAlpha = -1f;
-    // 模式 0（精确同步）广播交付复用的 Intent，避免逐帧 new 分配（恢复 v1 路径）
-    private Intent blurUpdateIntent;
     // 模糊层同步模式（淡入/淡出带；带外不可见相位 = 冻结矩形 + 半径置 0）：
     //   0 精确同步（默认）——模糊层逐帧全程跟随窗口动画
     //   1 均衡——展开 [0.4, 0.6] 淡入、收起 [0.4, 0.6] 淡出，带内逐帧同步、带外仅大小跟随或不渲染
@@ -311,8 +309,19 @@ public class OverlayWindowActivity extends AppCompatActivity {
             }
         });
 
-        // 9. 布局完成后，延迟执行展开动画
-        contentContainer.postDelayed(this::performExpandAnimation, 180);
+        // 9. 布局完成后，延迟执行展开动画；若本次启动了模糊窗口（sPendingLaunch），
+        // 等其 onCreate 就绪后再开始，消灭"展开前段更新打空 → 模糊层跳进"的启动竞态。
+        // 未启用模糊窗口时 sPendingLaunch 恒 false，时序与原来完全一致（180ms）。
+        contentContainer.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (!BlurWindowActivity.sPendingLaunch) {
+                    performExpandAnimation();
+                    return;
+                }
+                waitForBlurReady(0);
+            }
+        }, 180);
 
         // 10. 设置输入法检测监听器
         setupKeyboardListener(rootLayout);
@@ -1615,6 +1624,26 @@ public class OverlayWindowActivity extends AppCompatActivity {
         return 1f - e;
     }
 
+    /** 等待模糊窗口就绪（16ms 轮询，最长 500ms 超时兜底），就绪/超时后开始展开动画。 */
+    private void waitForBlurReady(final int waitedMs) {
+        if (!BlurWindowActivity.sPendingLaunch || BlurWindowActivity.sReady) {
+            performExpandAnimation();
+            return;
+        }
+        if (waitedMs >= 500) {
+            Log.w(TAG, "等待模糊窗口就绪超时(" + waitedMs + "ms)，直接开始展开");
+            BlurWindowActivity.sPendingLaunch = false;
+            performExpandAnimation();
+            return;
+        }
+        contentContainer.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                waitForBlurReady(waitedMs + 16);
+            }
+        }, 16);
+    }
+
     private void performExpandAnimation() {
         initExpandSpring();
 
@@ -2031,11 +2060,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
     /**
      * 将模糊窗口同步到指定屏幕矩形（展开/收起/拖动/回弹共用的逐帧路径）。
      * 与屏幕求交集：请求框越界会触发 WMS 钳制，钳到屏幕边界后与被屏幕裁切的内容严格对齐。
-     * 去重含 alpha：rect 或 alpha 任一变化才下发。
-     * 交付通道按档位分流（几何计算与协议完全一致，仅传输方式不同）：
-     *   mode 0 精确同步 → UPDATE_BLUR_WINDOW_SIZE 广播（稳定滞后约 1 帧，无直连的
-     *     同帧/下一帧 WMS placement 竞态——竞态表现为时有时无的错位，收起时最明显）
-     *   mode 1/2 → 同进程静态直连（带内帧数少、带外冻结，低延迟）
+     * 去重含 alpha：rect 或 alpha 任一变化才下发；下发方式为同进程静态直连（无广播）——
+     * 广播路径经 AMS 往返，延迟 2~4 帧且随负载波动（曾引入更严重的变量错位），
+     * 直连把可变项压缩到 WMS placement 的固有 ±1 帧。
      * 相位控制（均衡/性能优先档的不可见相位冻结、半径置 0）由展开/收起动画分支处理，
      * 本方法始终逐帧精确下发，不量化、不限频。
      */
@@ -2062,34 +2089,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
         lastBlurH = bh;
         lastBlurAlpha = blurAlpha;
         blurFrameSent = true;
-        if (blurSyncMode == 0) {
-            // 精确同步（mode 0）：广播交付（v1 路径）——AMS 往返后接收器在主线程下一轮
-            // 消息泵应用，模糊层稳定滞后约 1 帧（固定延迟，人眼基本无感）；
-            // 直连同步调用存在"同帧/下一帧"的 WMS placement 竞态，表现为时有时无的错位，
-            // 收起（每帧大幅改尺寸、WMS 排队更久）时概率最高。
-            // 接收端 UPDATE_BLUR_WINDOW_SIZE 分支与直连共用 applyWindowRect，协议一致。
-            try {
-                if (blurUpdateIntent == null) {
-                    blurUpdateIntent = new Intent("UPDATE_BLUR_WINDOW_SIZE");
-                    blurUpdateIntent.setPackage(getPackageName());
-                }
-                blurUpdateIntent.putExtra("blur_x", bx);
-                blurUpdateIntent.putExtra("blur_y", by);
-                blurUpdateIntent.putExtra("blur_width", bw);
-                blurUpdateIntent.putExtra("blur_height", bh);
-                blurUpdateIntent.putExtra("blur_corner_radius", dpToPx(cornerRadius));
-                blurUpdateIntent.putExtra("blur_alpha", blurAlpha);
-                sendBroadcast(blurUpdateIntent);
-            } catch (Exception e) {
-                Log.e(TAG, "发送模糊窗口逐帧同步广播失败", e);
-            }
-        } else {
-            // 均衡/性能优先（mode 1/2）：同进程静态直连，保持原有低延迟交付
-            try {
-                BlurWindowActivity.applyRect(bx, by, bw, bh, dpToPx(cornerRadius), blurAlpha);
-            } catch (Exception e) {
-                Log.e(TAG, "直连更新模糊窗口失败", e);
-            }
+        try {
+            BlurWindowActivity.applyRect(bx, by, bw, bh, dpToPx(cornerRadius), blurAlpha);
+        } catch (Exception e) {
+            Log.e(TAG, "直连更新模糊窗口失败", e);
         }
     }
 
@@ -2829,6 +2832,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
      */
     private void animateForKeyboard(final boolean show, final int detectedHeight) {
         if (contentContainer == null) return;
+        // 键盘避让仅为 AI 窗口设计；快捷方式窗口不使用此功能，
+        // 误触发只会通过 setTranslationY/applyTranslate 与窗口动画抢写位置
+        if (windowType != WINDOW_TYPE_AI) return;
+        // 展开/收起动画期间丢弃键盘避让：onGlobalLayout 误判会与动画帧互相抢写
+        // 内容层 translationY 与模糊层 y（垂直方向随机错位的来源之一）
+        if (isExpandAnimating || isCollapsing) return;
 
         final float startTranslationY = contentContainer.getTranslationY();
         // 始终使用设置项中的固定避让高度，不根据检测到的键盘高度动态调整
@@ -2881,6 +2890,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private void resetKeyboardOffset() {
         // 正在执行键盘动画时不要打断
         if (isKeyboardAnimating) {
+            return;
+        }
+        // 展开/收起动画期间不得重置 translationY（会与动画帧抢写内容层位置）
+        if (isExpandAnimating || isCollapsing) {
             return;
         }
         if (contentContainer == null) return;

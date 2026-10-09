@@ -34,6 +34,13 @@ public class BlurWindowActivity extends Activity {
      * 用于进程冻结恢复后的兜底清理——onResume 中检测到此标志时自销毁模糊层。
      */
     static volatile boolean sShortcutLaunched = false;
+
+    // 启动握手：Service 启动模糊窗口前置 sPendingLaunch=true；onCreate 完成初始化后置
+    // sReady=true。OverlayWindowActivity 等 sReady 后再开始展开动画，消灭"展开前段更新
+    // 打空（接收方尚未创建）→ 模糊层跳进"的启动竞态。未启用模糊窗口时 sPendingLaunch
+    // 恒为 false，展开时序与原来完全一致。
+    static volatile boolean sPendingLaunch = false;
+    static volatile boolean sReady = false;
     
     private BroadcastReceiver sizeUpdateReceiver;
     private int originalBlurRadius = 25;
@@ -305,6 +312,10 @@ public class BlurWindowActivity extends Activity {
         }
 
         Log.d(TAG, "BlurWindowActivity 创建完成");
+
+        // 握手：初始窗口属性/接收器/模糊半径均已就位，通知等待方可以开始展开动画
+        sPendingLaunch = false;
+        sReady = true;
     }
 
     @Override
@@ -328,6 +339,9 @@ public class BlurWindowActivity extends Activity {
         Log.d(TAG, "onDestroy");
         if (sInstance != null && sInstance.get() == this) {
             sInstance = null;
+            // 仅当前实例（而非被 CLEAR_TASK 顶替的旧实例）负责清除就绪标志，防止旧 onDestroy
+            // 误清新实例刚置好的 sReady
+            sReady = false;
         }
         // 注销广播接收器
         if (sizeUpdateReceiver != null) {
