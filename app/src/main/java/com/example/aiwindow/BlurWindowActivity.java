@@ -412,6 +412,16 @@ public class BlurWindowActivity extends Activity {
         final float startWindowAlpha = wmParams.alpha;
         // 从"实际已应用"的半径起算：相位模式下可能已置 0，避免 0→原始→0 的无效反弹
         final int startBlurRadius = appliedBlurRadius;
+
+        // 无需动画：精确同步档收起末帧已把 alpha 置 0（且半径可能已置 0），
+        // 100ms 渐变纯属空转，只会让模糊窗口多残留约 100ms（收起结束后可见残影风险）→ 直接销毁
+        if (startWindowAlpha <= 0.01f && startBlurRadius == 0) {
+            Log.d(TAG, "fadeOutAndFinish: alpha/半径已为 0，跳过渐变直接 finish");
+            finish();
+            overridePendingTransition(0, 0);
+            return;
+        }
+
         final long startTime = System.currentTimeMillis();
         final int duration = 100;
         

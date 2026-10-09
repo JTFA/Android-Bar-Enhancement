@@ -204,6 +204,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private boolean blurFrameSent;
     private int lastBlurX, lastBlurY, lastBlurW, lastBlurH;
     private float lastBlurAlpha = -1f;
+    // 模式 0（精确同步）广播交付复用的 Intent，避免逐帧 new 分配（恢复 v1 路径）
+    private Intent blurUpdateIntent;
     // 模糊层同步模式（淡入/淡出带；带外不可见相位 = 冻结矩形 + 半径置 0）：
     //   0 精确同步（默认）——模糊层逐帧全程跟随窗口动画
     //   1 均衡——展开 [0.4, 0.6] 淡入、收起 [0.4, 0.6] 淡出，带内逐帧同步、带外仅大小跟随或不渲染
@@ -2029,7 +2031,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
     /**
      * 将模糊窗口同步到指定屏幕矩形（展开/收起/拖动/回弹共用的逐帧路径）。
      * 与屏幕求交集：请求框越界会触发 WMS 钳制，钳到屏幕边界后与被屏幕裁切的内容严格对齐。
-     * 去重含 alpha：rect 或 alpha 任一变化才下发；下发方式为同进程静态直连（无广播）。
+     * 去重含 alpha：rect 或 alpha 任一变化才下发。
+     * 交付通道按档位分流（几何计算与协议完全一致，仅传输方式不同）：
+     *   mode 0 精确同步 → UPDATE_BLUR_WINDOW_SIZE 广播（稳定滞后约 1 帧，无直连的
+     *     同帧/下一帧 WMS placement 竞态——竞态表现为时有时无的错位，收起时最明显）
+     *   mode 1/2 → 同进程静态直连（带内帧数少、带外冻结，低延迟）
      * 相位控制（均衡/性能优先档的不可见相位冻结、半径置 0）由展开/收起动画分支处理，
      * 本方法始终逐帧精确下发，不量化、不限频。
      */
@@ -2056,12 +2062,34 @@ public class OverlayWindowActivity extends AppCompatActivity {
         lastBlurH = bh;
         lastBlurAlpha = blurAlpha;
         blurFrameSent = true;
-        // 直连静态调用（同进程同主线程）：消除每帧 Intent 分配/AMS 广播往返/接收调度延迟，
-        // setAttributes 与本次 doFrame 同帧生效（旧广播路径要到下一帧才应用，模糊层滞后 1 帧）
-        try {
-            BlurWindowActivity.applyRect(bx, by, bw, bh, dpToPx(cornerRadius), blurAlpha);
-        } catch (Exception e) {
-            Log.e(TAG, "直连更新模糊窗口失败", e);
+        if (blurSyncMode == 0) {
+            // 精确同步（mode 0）：广播交付（v1 路径）——AMS 往返后接收器在主线程下一轮
+            // 消息泵应用，模糊层稳定滞后约 1 帧（固定延迟，人眼基本无感）；
+            // 直连同步调用存在"同帧/下一帧"的 WMS placement 竞态，表现为时有时无的错位，
+            // 收起（每帧大幅改尺寸、WMS 排队更久）时概率最高。
+            // 接收端 UPDATE_BLUR_WINDOW_SIZE 分支与直连共用 applyWindowRect，协议一致。
+            try {
+                if (blurUpdateIntent == null) {
+                    blurUpdateIntent = new Intent("UPDATE_BLUR_WINDOW_SIZE");
+                    blurUpdateIntent.setPackage(getPackageName());
+                }
+                blurUpdateIntent.putExtra("blur_x", bx);
+                blurUpdateIntent.putExtra("blur_y", by);
+                blurUpdateIntent.putExtra("blur_width", bw);
+                blurUpdateIntent.putExtra("blur_height", bh);
+                blurUpdateIntent.putExtra("blur_corner_radius", dpToPx(cornerRadius));
+                blurUpdateIntent.putExtra("blur_alpha", blurAlpha);
+                sendBroadcast(blurUpdateIntent);
+            } catch (Exception e) {
+                Log.e(TAG, "发送模糊窗口逐帧同步广播失败", e);
+            }
+        } else {
+            // 均衡/性能优先（mode 1/2）：同进程静态直连，保持原有低延迟交付
+            try {
+                BlurWindowActivity.applyRect(bx, by, bw, bh, dpToPx(cornerRadius), blurAlpha);
+            } catch (Exception e) {
+                Log.e(TAG, "直连更新模糊窗口失败", e);
+            }
         }
     }
 
