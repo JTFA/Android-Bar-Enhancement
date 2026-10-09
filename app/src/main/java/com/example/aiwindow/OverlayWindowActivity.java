@@ -163,6 +163,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private boolean shortcutEdgeRefraction = true;   // 边缘折射光
     private boolean shortcutFingerGlow = true;       // 手指光晕跟随
     private boolean shortcutDragStretch = true;      // 拖动灵动拉伸回弹
+    private int shortcutEdgeBandDp = 4;              // 边缘光可见带宽 (dp)
+    private int shortcutEdgeOpacity = 48;            // 边缘光透明度 (%)
     
     // AI 窗口模糊效果
     private int aiStyle, aiBlurRadius, aiOverlayAlpha;
@@ -604,6 +606,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
             shortcutEdgeRefraction = prefs.getBoolean("shortcut_edge_refraction", true);
             shortcutFingerGlow = prefs.getBoolean("shortcut_finger_glow", true);
             shortcutDragStretch = prefs.getBoolean("shortcut_drag_stretch", true);
+            shortcutEdgeBandDp = prefs.getInt("shortcut_edge_band_dp", 4);
+            shortcutEdgeOpacity = prefs.getInt("shortcut_edge_opacity", 48);
         } catch (Exception e) {
             Log.e(TAG, "加载快捷方式效果开关失败", e);
         }
@@ -686,11 +690,13 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 设置连续圆角 + 半透明亚克力背景
         final float density = getResources().getDisplayMetrics().density;
         AcrylicRoundRectDrawable bg = new AcrylicRoundRectDrawable(
-                getAcrylicBgColor(), dpToPx(cornerRadius), density);
+                getAcrylicBgColor(), dpToPx(cornerRadius), density,
+                shortcutEdgeBandDp, shortcutEdgeOpacity / 100f);
         bg.setBrightnessFactor(0.9f);
         // 边缘折射光（上下亮、左右暗，仅快捷方式窗口）
         bg.setRefractionEnabled(windowType == WINDOW_TYPE_SHORTCUT && shortcutEdgeRefraction);
-        if (borderWidth > 0) {
+        // 快捷窗口不描边（边框设置已移除，视觉由边缘光承担）；AI 窗口边框不受影响
+        if (windowType != WINDOW_TYPE_SHORTCUT && borderWidth > 0) {
             int borderColorWithAlpha = parseColorWithAlpha(borderColor, borderAlpha);
             bg.setStroke(dpToPx(borderWidth), borderColorWithAlpha);
         }
@@ -2201,9 +2207,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 边缘折射光：多层描边由宽到窄、由暗到亮叠加，内侧形成渐变过渡（无明显分界）
         // 边缘折射光：20 层平滑衰减描边（替代旧 5 层固定描边，消除肉眼可见的同心台阶）
         private static final int REFRACTION_LAYERS = 20;
-        private static final float REFRACTION_BAND_DP = 4f;      // 边缘光可见带宽
-        private static final float REFRACTION_PEAK = 0.48f;      // 顶部边缘目标复合不透明度（透出底层颜色）
         private static final float REFRACTION_FALLOFF = 1.8f;    // 衰减曲线指数
+        private final float refractionBandDp;   // 边缘光可见带宽 (dp)
+        private final float refractionPeak;     // 顶部边缘目标复合不透明度
         private final Paint[] refractionLayerPaints = new Paint[REFRACTION_LAYERS];
         private final float[] refractionBaseAlpha = new float[REFRACTION_LAYERS];
         private boolean refractionEnabled = false;
@@ -2215,8 +2221,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 黑色遮罩层的最大透明度（展开/收起动画中调节亮度用，替代修改颜色值方案）
         private int mMaxOverlayAlpha = 26; // 默认对应亮度因子 0.9
 
-        AcrylicRoundRectDrawable(int fillColor, float cornerRadiusPx, float density) {
+        AcrylicRoundRectDrawable(int fillColor, float cornerRadiusPx, float density,
+                float refractionBandDp, float refractionPeak) {
             this.density = density;
+            this.refractionBandDp = refractionBandDp;
+            this.refractionPeak = refractionPeak;
             fillPaint.setColor(fillColor);
             darkOverlayPaint.setColor(Color.BLACK);
             darkOverlayPaint.setStyle(Paint.Style.FILL);
@@ -2239,7 +2248,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             float sTop = 110f / 255f;
             float prefix = 1f; // Π(1 - a·sTop) 前缀积
             for (int i = 0; i < REFRACTION_LAYERS; i++) {
-                float target = REFRACTION_PEAK
+                float target = refractionPeak
                         * (float) Math.pow((i + 1f) / REFRACTION_LAYERS, REFRACTION_FALLOFF);
                 float layerEff = 1f - (1f - target) / prefix;
                 prefix = 1f - target;
@@ -2247,7 +2256,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 refractionBaseAlpha[i] = baseAlpha;
                 Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG);
                 p.setStyle(Paint.Style.STROKE);
-                p.setStrokeWidth(2f * REFRACTION_BAND_DP * density
+                p.setStrokeWidth(2f * refractionBandDp * density
                         * (REFRACTION_LAYERS - i) / REFRACTION_LAYERS);
                 p.setAlpha(Math.round(baseAlpha));
                 refractionLayerPaints[i] = p;

@@ -168,10 +168,7 @@ public class FloatWindowService extends Service {
     private int shortcutWindowWidth = 350;  // dp
     private int shortcutWindowHeight = 350; // dp
     private int shortcutWindowPositionY = 231; // 居中位置
-    private int shortcutBorderWidth = 1; // dp
     private int shortcutCornerRadius = 24; // dp
-    private String shortcutBorderColor = "#000000";
-    private float shortcutBorderAlpha = 0.1f;
     private String shortcutBgColor = "#FFFFFF";
     private int shortcutIconSize = 100; // 图标大小百分比 50-150，默认 100%
 
@@ -776,11 +773,7 @@ public class FloatWindowService extends Service {
             shortcutWindowWidth = intent.getIntExtra("shortcut_window_width", shortcutWindowWidth);
             shortcutWindowHeight = intent.getIntExtra("shortcut_window_height", shortcutWindowHeight);
             shortcutWindowPositionY = intent.getIntExtra("shortcut_window_position_y", shortcutWindowPositionY);
-            shortcutBorderWidth = intent.getIntExtra("shortcut_border_width", shortcutBorderWidth);
             shortcutCornerRadius = intent.getIntExtra("shortcut_corner_radius", shortcutCornerRadius);
-            String sBorderColor = intent.getStringExtra("shortcut_border_color");
-            if (sBorderColor != null) shortcutBorderColor = sBorderColor;
-            shortcutBorderAlpha = intent.getFloatExtra("shortcut_border_alpha", shortcutBorderAlpha);
             shortcutIconSize = intent.getIntExtra("shortcut_icon_size", shortcutIconSize);
             shortcutStyle = intent.getIntExtra("shortcut_style", shortcutStyle);
             shortcutBlurRadius = intent.getIntExtra("shortcut_blur_radius", shortcutBlurRadius);
@@ -2449,9 +2442,6 @@ public class FloatWindowService extends Service {
         intent.putExtra(OverlayWindowActivity.EXTRA_TARGET_POS_Y, shortcutWindowPositionY);
         intent.putExtra(OverlayWindowActivity.EXTRA_ANIM_DURATION, animationDuration);
         intent.putExtra(OverlayWindowActivity.EXTRA_CORNER_RADIUS, shortcutCornerRadius);
-        intent.putExtra(OverlayWindowActivity.EXTRA_BORDER_WIDTH, shortcutBorderWidth);
-        intent.putExtra(OverlayWindowActivity.EXTRA_BORDER_COLOR, shortcutBorderColor);
-        intent.putExtra(OverlayWindowActivity.EXTRA_BORDER_ALPHA, shortcutBorderAlpha);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHOW_CLOSE_BUTTON, showCloseButton);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHOW_REFRESH_BUTTON, showRefreshButton);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHOW_BACK_BUTTON, showBackButton);
@@ -5011,21 +5001,6 @@ public class FloatWindowService extends Service {
         // 添加内容层（在背景之上）
         contentContainer.addView(contentView);
 
-        // ===== 5. 边框（绘制在 contentContainer 的 Foreground） =====
-        if (shortcutBorderWidth > 0) {
-            try {
-                int borderColorWithAlpha = parseColorWithAlpha(shortcutBorderColor, shortcutBorderAlpha);
-                GradientDrawable borderDrawable = new GradientDrawable();
-                borderDrawable.setShape(GradientDrawable.RECTANGLE);
-                borderDrawable.setCornerRadius(dpToPx(shortcutCornerRadius));
-                borderDrawable.setColor(Color.TRANSPARENT);
-                borderDrawable.setStroke(dpToPx(shortcutBorderWidth), borderColorWithAlpha);
-                contentContainer.setForeground(borderDrawable);
-            } catch (Exception e) {
-                Log.e(TAG, "set shortcut border failed", e);
-            }
-        }
-
         // 保存引用（用于后续样式更新）
         shortcutContentContainer = contentContainer;
 
@@ -7365,10 +7340,7 @@ public class FloatWindowService extends Service {
             shortcutWindowWidth = prefs.getInt("shortcut_window_width", shortcutWindowWidth);
             shortcutWindowHeight = prefs.getInt("shortcut_window_height", shortcutWindowHeight);
             shortcutWindowPositionY = prefs.getInt("shortcut_window_position_y", shortcutWindowPositionY);
-            shortcutBorderWidth = prefs.getInt("shortcut_border_width", shortcutBorderWidth);
             shortcutCornerRadius = prefs.getInt("shortcut_corner_radius", shortcutCornerRadius);
-            shortcutBorderColor = prefs.getString("shortcut_border_color", shortcutBorderColor);
-            shortcutBorderAlpha = prefs.getInt("shortcut_border_alpha", (int) (shortcutBorderAlpha * 100)) / 100.0f;
             shortcutIconSize = prefs.getInt("shortcut_icon_size", shortcutIconSize);
             shortcutStyle = prefs.getInt("shortcut_style", 0);
             shortcutBlurRadius = prefs.getInt("shortcut_blur_radius", 20);
