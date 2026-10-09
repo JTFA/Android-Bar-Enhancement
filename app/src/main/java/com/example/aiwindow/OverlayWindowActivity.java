@@ -803,7 +803,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
 //    }
     private int getAcrylicBgColor() {
         // 背景本身完全不透明，透明度由 Drawable.setAlpha 控制
-        return isDarkMode() ? 0xFF2B2B2B : 0xFFFFFFFF;
+        return isDarkMode() ? 0xFF7B7B7B : 0xFFFFFFFF;
     }
 
     private boolean isDarkMode() {
@@ -1703,7 +1703,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 缓存背景 Drawable 和目标透明度，避免每帧重复获取
         final Drawable expandBg = contentContainer.getBackground();
         final AcrylicRoundRectDrawable expandAcrylicBg = (expandBg instanceof AcrylicRoundRectDrawable) ? (AcrylicRoundRectDrawable) expandBg : null;
-        final int expandTargetAlpha = (windowType == WINDOW_TYPE_AI) ? aiOverlayAlpha : shortcutOverlayAlpha;
+        // 不透明样式（style=0）：底色强制全不透明，不使用叠加色透明度（否则会残留旧的低透明度值导致底色消失）
+        final int expandTargetAlpha = (windowType == WINDOW_TYPE_AI)
+                ? (aiStyle == 0 ? 255 : aiOverlayAlpha)
+                : (shortcutStyle == 0 ? 255 : shortcutOverlayAlpha);
 
         // 背景从首个可见帧起即为目标透明度（模糊层已逐帧对齐，可直接作为背景），
         // 不再做"前 60% 不透明 → 渐变透明"的过渡
