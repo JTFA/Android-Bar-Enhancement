@@ -147,6 +147,15 @@ public class MainActivity extends AppCompatActivity {
      * 请求麦克风和相机运行时权限，然后启动服务
      */
     private void requestRuntimePermissionsThenStart() {
+        // Android 13+：申请通知权限（前台服务通知/诊断通知需要；被拒绝也会继续启动服务）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS)
+                        != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{android.Manifest.permission.POST_NOTIFICATIONS},
+                    REQUEST_CODE_RUNTIME_PERMISSIONS);
+            return;
+        }
         // AI 窗口功能隐藏期间：不再申请麦克风/相机权限，直接启动服务
         if (!AppConfig.AI_WINDOW_ENABLED) {
             startFloatWindowService();

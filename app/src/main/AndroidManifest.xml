@@ -11,6 +11,8 @@
     <!-- 前台服务权限 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- 通知权限（Android 13+ 必须声明，否则通知被系统拦截且设置开关置灰） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 网络权限（AI_WINDOW_ENABLED=false 期间隐藏；恢复时取消注释并打开 AppConfig.AI_WINDOW_ENABLED） -->
 <!--    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />-->

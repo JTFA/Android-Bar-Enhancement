@@ -1,6 +1,7 @@
 package com.example.aiwindow;
 
 import android.app.Notification;
+import android.app.PendingIntent;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
@@ -77,6 +78,10 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Random;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.nio.charset.StandardCharsets;
 
 import android.app.DownloadManager;
 import android.webkit.URLUtil;
@@ -284,6 +289,10 @@ public class FloatWindowService extends Service {
 
     // 按下样式预览自动隐藏（设置页调节按下样式时使用）
     private Handler pressedPreviewHandler = new Handler(Looper.getMainLooper());
+
+    // ===== 诊断包 =====
+    private Handler diagHandler = new Handler(Looper.getMainLooper());
+    private Runnable diagTick;
     private Runnable pressedPreviewTimeout = new Runnable() {
         @Override
         public void run() {
@@ -537,6 +546,8 @@ public class FloatWindowService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        DiagLog.installUncaughtHandler(this);
+        DiagLog.log(this, "service onCreate");
         Log.d(TAG, "========================================");
         Log.d(TAG, "FloatWindowService onCreate 被调用");
         Log.d(TAG, "Android 版本: " + Build.VERSION.SDK_INT);
@@ -574,6 +585,7 @@ public class FloatWindowService extends Service {
             stopSelf(); // 启动失败则停止服务
         }
 
+        startDiagLoop();
         Log.d(TAG, "========================================");
     }
 
@@ -595,6 +607,14 @@ public class FloatWindowService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        // 诊断包：通知栏按钮动作
+        if (intent != null && intent.getAction() != null && intent.getAction().startsWith("DIAG_")) {
+            handleDiagAction(intent.getAction());
+            return START_NOT_STICKY;
+        }
+        if (intent != null) {
+            DiagLog.log(this, "onStartCommand action=" + intent.getAction());
+        }
         // 处理样式更新请求
         if (intent != null && "UPDATE_STYLE".equals(intent.getAction())) {
             int width = intent.getIntExtra("width", currentWidth);
@@ -634,6 +654,8 @@ public class FloatWindowService extends Service {
             if (intent.hasExtra("pressed_bar_glow_radius")) {
                 pressedBarGlowRadius = intent.getIntExtra("pressed_bar_glow_radius", pressedBarGlowRadius);
             }
+            DiagLog.log(this, "UPDATE_STYLE w=" + width + " h=" + height + " posY=" + posY
+                    + " pressed=" + pressedBarWidth + "x" + pressedBarHeight + "dp glowR=" + pressedBarGlowRadius);
             if (intent.hasExtra("pressed_bar_color_mode")) {
                 String colorMode = intent.getStringExtra("pressed_bar_color_mode");
                 if (colorMode != null && !colorMode.isEmpty()) {
@@ -880,12 +902,143 @@ public class FloatWindowService extends Service {
      * 创建前台通知
      */
     private Notification createNotification() {
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("悬浮窗正在运行")
-                .setContentText("点击可关闭悬浮窗")
+        String snap = buildDiagSnapshot();
+        boolean glowAttached = glowContainer != null && glowContainer.getWindowToken() != null;
+        boolean barTouchOn = barLayoutParams == null
+                || (barLayoutParams.flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) == 0;
+        NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("悬浮窗运行中·诊断")
+                .setContentText(snap.substring(0, Math.min(snap.length(), 50)).replace('\n', ' '))
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(snap))
                 .setSmallIcon(android.R.drawable.ic_dialog_info) // 使用系统图标
-                .setOngoing(true) // 设置为持续通知，不可滑动删除
-                .build();
+                .setOngoing(true); // 设置为持续通知，不可滑动删除
+        b.addAction(0, glowAttached ? "光晕:开" : "光晕:关", diagPendingIntent("DIAG_GLOW", 1));
+        b.addAction(0, barTouchOn ? "触摸:开" : "触摸:关", diagPendingIntent("DIAG_BAR_TOUCH", 2));
+        b.addAction(0, "导出日志", diagPendingIntent("DIAG_EXPORT", 3));
+        return b.build();
+    }
+
+    private PendingIntent diagPendingIntent(String action, int requestCode) {
+        Intent i = new Intent(this, FloatWindowService.class);
+        i.setAction(action);
+        return PendingIntent.getService(this, requestCode, i,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+    }
+
+    /** 实时窗口状态快照（显示在通知栏，冻结时下拉通知栏截图取证） */
+    private String buildDiagSnapshot() {
+        StringBuilder sb = new StringBuilder();
+        if (barLayoutParams != null && barContainer != null) {
+            sb.append("bar ").append(barLayoutParams.width).append("x").append(barLayoutParams.height)
+                    .append(" @(").append(barLayoutParams.x).append(",").append(barLayoutParams.y).append(")")
+                    .append(" fl=0x").append(Integer.toHexString(barLayoutParams.flags))
+                    .append(" attached=").append(barContainer.getWindowToken() != null)
+                    .append(" view=").append(barContainer.getWidth()).append("x").append(barContainer.getHeight())
+                    .append(" child=").append(bottomBar != null ? bottomBar.getWidth() + "x" + bottomBar.getHeight() : "null");
+        } else {
+            sb.append("bar=null");
+        }
+        sb.append('\n');
+        if (glowLayoutParams != null && glowContainer != null) {
+            sb.append("glow ").append(glowLayoutParams.width).append("x").append(glowLayoutParams.height)
+                    .append(" fl=0x").append(Integer.toHexString(glowLayoutParams.flags))
+                    .append(" attached=").append(glowContainer.getWindowToken() != null)
+                    .append(" view=").append(glowContainer.getWidth()).append("x").append(glowContainer.getHeight());
+        } else {
+            sb.append("glow=null");
+        }
+        sb.append('\n');
+        sb.append("cfg w=").append(currentWidth).append(" h=").append(currentHeight).append("dp posY=").append(barPositionY)
+                .append(" pressed=").append(pressedBarWidth).append("x").append(pressedBarHeight).append("dp glowR=").append(pressedBarGlowRadius)
+                .append(" | expanded=").append(isShortcutWindowExpanded).append("/").append(isAiWindowExpanded);
+        return sb.toString();
+    }
+
+    /** 每 2 秒刷新通知栏窗口状态快照 */
+    private void startDiagLoop() {
+        diagTick = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    NotificationManager nm = getSystemService(NotificationManager.class);
+                    if (nm != null) {
+                        nm.notify(NOTIFICATION_ID, createNotification());
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "diag notify failed", e);
+                }
+                diagHandler.postDelayed(this, 2000);
+            }
+        };
+        diagHandler.postDelayed(diagTick, 2000);
+    }
+
+    /** 通知栏按钮：现场 A/B 实验（移除光晕 / 禁横条触摸 / 导出日志） */
+    private void handleDiagAction(String action) {
+        DiagLog.log(this, "diag action: " + action);
+        try {
+            if ("DIAG_GLOW".equals(action)) {
+                boolean attached = glowContainer != null && glowContainer.getWindowToken() != null;
+                if (attached) {
+                    windowManager.removeView(glowContainer);
+                    Toast.makeText(this, "光晕窗口已移除：请测试死区是否消失", Toast.LENGTH_SHORT).show();
+                } else if (glowContainer != null) {
+                    windowManager.addView(glowContainer, glowLayoutParams);
+                    Toast.makeText(this, "光晕窗口已恢复", Toast.LENGTH_SHORT).show();
+                }
+            } else if ("DIAG_BAR_TOUCH".equals(action)) {
+                boolean touchable = (barLayoutParams.flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) == 0;
+                if (touchable) {
+                    barLayoutParams.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                    Toast.makeText(this, "横条窗口已禁触摸：请测试死区是否消失（横条手势将失效）", Toast.LENGTH_SHORT).show();
+                } else {
+                    barLayoutParams.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                    Toast.makeText(this, "横条窗口已恢复可触摸", Toast.LENGTH_SHORT).show();
+                }
+                windowManager.updateViewLayout(barContainer, barLayoutParams);
+            } else if ("DIAG_EXPORT".equals(action)) {
+                exportDiagLog();
+                return;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "diag action failed", e);
+            DiagLog.log(this, "diag action failed: " + e);
+        }
+        DiagLog.log(this, "state now: " + buildDiagSnapshot().replace('\n', ' '));
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        if (nm != null) {
+            nm.notify(NOTIFICATION_ID, createNotification());
+        }
+    }
+
+    /** 把 diag.log 复制到系统下载目录（Android/data 目录手机上不好取，下载目录可直接发文件） */
+    private void exportDiagLog() {
+        try {
+            String content = DiagLog.readAll(this);
+            String name = "aiwindow_diag_" + new SimpleDateFormat("MMdd_HHmmss", Locale.US).format(new Date()) + ".log";
+            ContentValues v = new ContentValues();
+            v.put(MediaStore.Downloads.DISPLAY_NAME, name);
+            v.put(MediaStore.Downloads.MIME_TYPE, "text/plain");
+            v.put(MediaStore.Downloads.IS_PENDING, 1);
+            Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+            if (uri == null) {
+                throw new IllegalStateException("MediaStore insert failed");
+            }
+            OutputStream os = getContentResolver().openOutputStream(uri);
+            if (os == null) {
+                throw new IllegalStateException("openOutputStream null");
+            }
+            os.write(content.getBytes(StandardCharsets.UTF_8));
+            os.close();
+            v.clear();
+            v.put(MediaStore.Downloads.IS_PENDING, 0);
+            getContentResolver().update(uri, v, null, null);
+            DiagLog.log(this, "exported to Downloads: " + name);
+            Toast.makeText(this, "日志已导出到下载目录: " + name, Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            Log.e(TAG, "export diag failed", e);
+            Toast.makeText(this, "导出失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
     }
 
     /**
@@ -949,13 +1102,23 @@ public class FloatWindowService extends Service {
             e.printStackTrace();
         }
 
-        // 光晕窗口后添加 → Z 序高于横条，按压视觉覆盖横条；FLAG_NOT_TOUCHABLE 触摸穿透
-        try {
-            windowManager.addView(glowContainer, glowLayoutParams);
-            Log.d(TAG, "光晕窗口已成功添加到窗口");
-        } catch (Exception e) {
-            Log.e(TAG, "添加光晕窗口失败", e);
-        }
+        // 光晕窗口不在服务启动时挂载：仅按下瞬间挂载、松手淡出后移除
+        //（该机型对 FLAG_NOT_TOUCHABLE 处理异常，常驻光晕窗口会拦截其覆盖范围内的系统弹窗点击）
+        DiagLog.log(this, "initBottomBar bar=" + barLayoutParams.width + "x" + barLayoutParams.height
+                + " @(" + barLayoutParams.x + "," + barLayoutParams.y + ")"
+                + " fl=0x" + Integer.toHexString(barLayoutParams.flags)
+                + " glow=" + glowLayoutParams.width + "x" + glowLayoutParams.height
+                + " fl=0x" + Integer.toHexString(glowLayoutParams.flags)
+                + " cfg w=" + currentWidth + " h=" + currentHeight + "dp posY=" + barPositionY
+                + " pressed=" + pressedBarWidth + "x" + pressedBarHeight + "dp glowR=" + pressedBarGlowRadius);
+        barContainer.post(new Runnable() {
+            @Override
+            public void run() {
+                DiagLog.log(FloatWindowService.this, "layout barContainer=" + barContainer.getWidth() + "x" + barContainer.getHeight()
+                        + " bottomBar=" + (bottomBar != null ? bottomBar.getWidth() + "x" + bottomBar.getHeight() : "null")
+                        + " children=" + barContainer.getChildCount());
+            }
+        });
     }
 
     /**
@@ -1082,6 +1245,7 @@ public class FloatWindowService extends Service {
                         // 手指按下时，记录坐标、应用按下样式并启动延迟任务
                         downX[0] = event.getX();
                         downY[0] = event.getY();
+                        DiagLog.log(FloatWindowService.this, "bar_touch DOWN (" + (int) event.getX() + "," + (int) event.getY() + ")");
                         applyPressedBarStyles();
                         longPressHandler.postDelayed(longPressRunnable, longPressDuration);
                         Log.d(TAG, "手指按下，开始计时: " + longPressDuration + "ms");
@@ -1228,6 +1392,9 @@ public class FloatWindowService extends Service {
         glowLayoutParams.height = computeGlowWindowHeight();
         glowLayoutParams.x = barLayoutParams.x;
         glowLayoutParams.y = barLayoutParams.y;
+        if (glowContainer.getWindowToken() == null) {
+            return; // 未挂载（静止态）：仅保留参数，挂载时机=按下
+        }
         try {
             windowManager.updateViewLayout(glowContainer, glowLayoutParams);
         } catch (Exception e) {
@@ -1483,6 +1650,43 @@ public class FloatWindowService extends Service {
     /**
      * 应用按下状态样式（手指按住提示条时的视觉效果）
      */
+    /** 光晕窗口拆卸任务（按下样式淡出完成后执行） */
+    private final Runnable glowWindowDetachRunnable = new Runnable() {
+        @Override
+        public void run() {
+            detachGlowWindow();
+        }
+    };
+
+    /**
+     * 按下瞬间挂载光晕窗口（服务启动/静止态不挂载）。
+     * 该机型对 FLAG_NOT_TOUCHABLE 处理异常：常驻光晕窗口会拦截其覆盖范围内、
+     * 横条之外的系统弹窗点击；改为仅按下期间存在后，静止态死区消失。
+     */
+    private void ensureGlowWindowAttached() {
+        if (glowContainer == null || glowLayoutParams == null || windowManager == null) return;
+        pressedPreviewHandler.removeCallbacks(glowWindowDetachRunnable);
+        if (glowContainer.getWindowToken() != null) return;
+        try {
+            windowManager.addView(glowContainer, glowLayoutParams);
+            DiagLog.log(this, "glow attached (press)");
+        } catch (Exception e) {
+            Log.e(TAG, "挂载光晕窗口失败", e);
+        }
+    }
+
+    /** 松手淡出后拆卸光晕窗口，恢复静止态无死区 */
+    private void detachGlowWindow() {
+        if (glowContainer == null || windowManager == null) return;
+        if (glowContainer.getWindowToken() == null) return;
+        try {
+            windowManager.removeView(glowContainer);
+            DiagLog.log(this, "glow detached (rest)");
+        } catch (Exception e) {
+            Log.e(TAG, "拆卸光晕窗口失败", e);
+        }
+    }
+
     private void applyPressedBarStyles() {
         if (bottomBar == null || pressedOverlay == null || barLayoutParams == null || windowManager == null)
             return;
@@ -1490,6 +1694,9 @@ public class FloatWindowService extends Service {
         if (isAiWindowExpanded) return;
 
         try {
+            // 按下瞬间挂载光晕窗口（静止态不挂载，避免死区）
+            ensureGlowWindowAttached();
+
             // 取消正在进行的动画
             pressedOverlay.animate().cancel();
 
@@ -1612,6 +1819,10 @@ public class FloatWindowService extends Service {
             // 仅淡出按下样式（用于长按触发展开前）
             pressedOverlay.animate().alpha(0f).setDuration(100).start();
         }
+
+        // 淡出完成后拆卸光晕窗口：静止态不挂光晕窗口（防系统弹窗死区回归）
+        pressedPreviewHandler.removeCallbacks(glowWindowDetachRunnable);
+        pressedPreviewHandler.postDelayed(glowWindowDetachRunnable, restoreWindow ? 200 : 150);
 
         Log.d(TAG, "已恢复原始样式（透明度渐变）");
     }
@@ -2067,6 +2278,87 @@ public class FloatWindowService extends Service {
     }
 
     /**
+     * 展开/收起中途失败后的兜底恢复：
+     * 把 bar 窗口恢复为触发区尺寸、移除全屏遮罩、清除触摸拦截并重建提示条。
+     * 若不恢复，残留的全屏可触摸窗口/常驻遮罩会导致整屏无法点击（历史"系统弹窗卡死"同型问题）。
+     */
+    private void restoreBarWindowAfterFailure(String from) {
+        Log.e(TAG, "restoreBarWindowAfterFailure: " + from);
+        try {
+            isAiWindowExpanded = false;
+            isShortcutWindowExpanded = false;
+            isOverlayAnimating = false;
+
+            if (barContainer != null && windowManager != null && barLayoutParams != null) {
+                barLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+                barLayoutParams.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
+                barLayoutParams.width = computeBarWindowWidth();
+                barLayoutParams.height = computeBarWindowHeight();
+                barLayoutParams.x = barPositionX;
+                barLayoutParams.y = dpToPx(barPositionY);
+
+                boolean attached = barContainer.getWindowToken() != null;
+                if (attached) {
+                    windowManager.updateViewLayout(barContainer, barLayoutParams);
+                } else {
+                    windowManager.addView(barContainer, barLayoutParams);
+                }
+
+                barContainer.removeAllViews();
+                barContainer.setBackground(null);
+                barContainer.setClipToOutline(false);
+                barContainer.setOnTouchListener(null);
+                barContainer.setAlpha(1f);
+                bottomBar = createBottomBarView();
+                barContainer.addView(bottomBar);
+            }
+
+            // 光晕窗口不参与失败恢复（静止态不挂载，按下时由 applyPressedBarStyles 挂载）
+            syncGlowWindow();
+
+            removeOverlayWindow();
+            closeBlurWindow();
+            finishWindowHostActivity();
+            Log.e(TAG, "restoreBarWindowAfterFailure: 已恢复为触发区尺寸");
+        } catch (Exception e) {
+            Log.e(TAG, "restoreBarWindowAfterFailure 异常: " + from, e);
+        }
+    }
+
+    /**
+     * 展开看门狗：展开发起 5 秒后若仍未进入展开状态但 bar 窗口停留在全屏，
+     * 说明展开流程中途夭折（异常/回调未执行），强制恢复，保证整屏不可能永久冻结。
+     */
+    private void scheduleExpandWatchdog(final String tag) {
+        try {
+            new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        if (isAiWindowExpanded || isShortcutWindowExpanded) return;
+                        if (barLayoutParams == null || barContainer == null || windowManager == null) return;
+                        if (barContainer.getWindowToken() == null) return;
+                        DisplayMetrics realMetrics = new DisplayMetrics();
+                        windowManager.getDefaultDisplay().getRealMetrics(realMetrics);
+                        boolean fullscreen = barLayoutParams.width == ViewGroup.LayoutParams.MATCH_PARENT
+                                || barLayoutParams.width >= realMetrics.widthPixels;
+                        if (fullscreen) {
+                            restoreBarWindowAfterFailure("watchdog(" + tag + "): 展开5秒后仍未完成");
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "expand watchdog error", e);
+                    }
+                }
+            }, 5000L);
+        } catch (Exception e) {
+            Log.e(TAG, "scheduleExpandWatchdog 失败", e);
+        }
+    }
+
+    /**
      * 展开为 AI 对话窗口
      */
     private void expandToAiWindow() {
@@ -2081,11 +2373,7 @@ public class FloatWindowService extends Service {
         // 确保 overlayView 在 barContainer 下方
         if (overlayView != null && barContainer != null) {
             try {
-                // 光晕窗口与 barContainer 一并换序（重加时恢复 Z 序：横条在下、光晕在上）
-                if (glowContainer != null && glowContainer.getWindowToken() != null) {
-                    windowManager.removeView(glowContainer);
-                }
-                // 如果 barContainer 当前在窗口中，先移除
+                // 光晕窗口不参与换序（仅按下期间挂载）
                 if (barContainer.getWindowToken() != null) {
                     windowManager.removeView(barContainer);
                 }
@@ -2095,10 +2383,7 @@ public class FloatWindowService extends Service {
                 }
                 // 重新添加 barContainer（使用当前的 barLayoutParams）
                 windowManager.addView(barContainer, barLayoutParams);
-                // 光晕窗口重新置于横条之上（按压视觉需覆盖横条）
-                if (glowContainer != null && glowLayoutParams != null) {
-                    windowManager.addView(glowContainer, glowLayoutParams);
-                }
+                // 光晕窗口不参与换序（仅按下期间挂载）
                 Log.d(TAG, "窗口层级已调整：barContainer 置于 overlayView 之上");
             } catch (Exception e) {
                 Log.e(TAG, "调整窗口层级失败", e);
@@ -2148,6 +2433,7 @@ public class FloatWindowService extends Service {
                 barLayoutParams.height = requiredHeight;
                 windowManager.updateViewLayout(barContainer, barLayoutParams);
                 Log.d(TAG, "[EXPAND_DEBUG] barContainer 全屏: w=" + requiredWidth + " h=" + requiredHeight);
+                scheduleExpandWatchdog("ai");
 
                 // ===== 关键修复：嵌套 OnGlobalLayoutListener 确保两层布局都完成 =====
                 // 第一层：等待 barContainer 完成全屏布局
@@ -2300,7 +2586,8 @@ public class FloatWindowService extends Service {
                                                 // 不在这里设置 cc.setAlpha(1f)——遮罩期间 content 保持不可见，
                                                 // 避免在初始小尺寸+translation 状态下暴露"白条"
                                                 // 等遮罩完成后的 performSmoothExpandAnimation 再设为可见
-                                                if (!isOverlayAnimating) return;
+                                                // 以"AI窗口已展开"为准：共享标志被失败路径置 false 会导致循环静默死亡
+                                                if (!isAiWindowExpanded) return;
                                                 long elapsed = System.currentTimeMillis() - startTime;
                                                 float progress = Math.min((float) elapsed / overlayAnimDuration, 1.0f);
                                                 float eased = easeOutCubic(progress);
@@ -2313,6 +2600,9 @@ public class FloatWindowService extends Service {
                                                 }
                                             }
                                         });
+                                    } else {
+                                        // 遮罩创建失败时也要继续展开，否则停在全屏不可见状态造成整屏冻结
+                                        performSmoothExpandAnimation(cc);
                                     }
                                 }
                             });
@@ -2320,6 +2610,7 @@ public class FloatWindowService extends Service {
                             Log.e(TAG, "[EXPAND_DEBUG] 布局回调内展开失败", e);
                             isOverlayAnimating = false;
                             e.printStackTrace();
+                            restoreBarWindowAfterFailure("expandToAiWindow 布局回调内失败");
                         }
                     }
                 });
@@ -2328,6 +2619,7 @@ public class FloatWindowService extends Service {
                 Log.e(TAG, "expand failed", e);
                 isOverlayAnimating = false;
                 e.printStackTrace();
+                restoreBarWindowAfterFailure("expandToAiWindow 外层失败");
             }
         }
     }
@@ -4524,11 +4816,7 @@ public class FloatWindowService extends Service {
         // 确保 overlayView 在 barContainer 下方
         if (overlayView != null && barContainer != null) {
             try {
-                // 光晕窗口与 barContainer 一并换序（重加时恢复 Z 序：横条在下、光晕在上）
-                if (glowContainer != null && glowContainer.getWindowToken() != null) {
-                    windowManager.removeView(glowContainer);
-                }
-                // 如果 barContainer 当前在窗口中，先移除
+                // 光晕窗口不参与换序（仅按下期间挂载）
                 if (barContainer.getWindowToken() != null) {
                     windowManager.removeView(barContainer);
                 }
@@ -4538,10 +4826,7 @@ public class FloatWindowService extends Service {
                 }
                 // 重新添加 barContainer（使用当前的 barLayoutParams）
                 windowManager.addView(barContainer, barLayoutParams);
-                // 光晕窗口重新置于横条之上（按压视觉需覆盖横条）
-                if (glowContainer != null && glowLayoutParams != null) {
-                    windowManager.addView(glowContainer, glowLayoutParams);
-                }
+                // 光晕窗口不参与换序（仅按下期间挂载）
                 Log.d(TAG, "窗口层级已调整：barContainer 置于 overlayView 之上");
             } catch (Exception e) {
                 Log.e(TAG, "调整窗口层级失败", e);
@@ -4582,6 +4867,7 @@ public class FloatWindowService extends Service {
 
             windowManager.updateViewLayout(barContainer, barLayoutParams);
             Log.d(TAG, "[SHORTCUT_EXPAND_DEBUG] barContainer 全屏: w=" + requiredWidth + " h=" + requiredHeight);
+            scheduleExpandWatchdog("shortcut");
 
             // ===== 关键修复：等待 barContainer 布局完成后再设置变换和启动动画 =====
             barContainer.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
@@ -4709,7 +4995,9 @@ public class FloatWindowService extends Service {
                                     Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
                                         @Override
                                         public void doFrame(long frameTimeNanos) {
-                                            if (!isOverlayAnimating) return;
+                                            // 以"快捷窗口已展开"为准：isOverlayAnimating 是共享标志，
+                                            // 被失败路径置 false 会导致本循环静默死亡、展开中途停摆（整屏冻结）
+                                            if (!isShortcutWindowExpanded) return;
                                             long elapsed = System.currentTimeMillis() - startTime;
                                             float progress = Math.min((float) elapsed / overlayAnimDuration, 1.0f);
                                             float eased = easeOutCubic(progress);
@@ -4732,6 +5020,9 @@ public class FloatWindowService extends Service {
                         Log.e(TAG, "[SHORTCUT_EXPAND_DEBUG] 布局回调内展开失败", e);
                         isOverlayAnimating = false;
                         isShortcutWindowExpanded = false;
+                        // 关键：展开已把 bar 窗口改为全屏并可能已加入遮罩，失败必须恢复，
+                        // 否则残留全屏可触摸窗口导致整屏无法点击
+                        restoreBarWindowAfterFailure("expandToShortcutWindow 布局回调内失败");
                     }
                 }
             });
@@ -4739,6 +5030,7 @@ public class FloatWindowService extends Service {
         } catch (Exception e) {
             Log.e(TAG, "展开快捷方式窗口失败", e);
             isShortcutWindowExpanded = false;
+            restoreBarWindowAfterFailure("expandToShortcutWindow 外层失败");
         }
     }
 
@@ -5541,6 +5833,8 @@ public class FloatWindowService extends Service {
             Log.e(TAG, "finishCollapseShortcutWindow 失败", e);
             isShortcutWindowExpanded = false;
             finishWindowHostActivity();
+            // 收起中途异常时尺寸可能尚未恢复、触摸拦截可能仍在，必须兜底恢复
+            restoreBarWindowAfterFailure("finishCollapseShortcutWindow 失败");
         }
     }
 
@@ -5818,6 +6112,8 @@ public class FloatWindowService extends Service {
             Log.e(TAG, "finishCollapse failed", e);
             isAiWindowExpanded = false;
             finishWindowHostActivity();
+            // 收起中途异常时尺寸可能尚未恢复、触摸拦截可能仍在，必须兜底恢复
+            restoreBarWindowAfterFailure("finishCollapseToBottomBar 失败");
         }
     }
 
@@ -6882,55 +7178,66 @@ public class FloatWindowService extends Service {
         // 立即记录开始时间，避免首帧被跳过
         final long adjustedStartTime = System.nanoTime();
 
+        // 完成状态：无论正常完成还是中途异常，onComplete 只执行一次，
+        // 避免异常导致回调丢失、全屏窗口与触摸拦截残留造成整屏冻结
+        final boolean[] completed = {false};
+
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             private int frameCount = 0;
             private long prevFrameTime = 0;
 
-            @Override
-            public void doFrame(long frameTimeNanos) {
-                if (prevFrameTime == 0) {
-                    prevFrameTime = frameTimeNanos;
+            private void finishNow() {
+                if (completed[0]) return;
+                completed[0] = true;
+                try {
+                    contentContainer.setScaleX(1f);
+                    contentContainer.setScaleY(1f);
+                    contentContainer.setTranslationX(0f);
+                    contentContainer.setTranslationY(0f);
+                    contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
-
-                frameCount++;
-                long intervalNs = frameTimeNanos - prevFrameTime;
-                prevFrameTime = frameTimeNanos;
-                // 纯时间进度
-                float timeProgress = (float) (frameTimeNanos - adjustedStartTime) / 1000000f / animationDuration;
-                float progress = Math.min(timeProgress, 1.0f);
-                float easedProgress = animInterpolator.getInterpolation(progress);
-
-                // WebView 透明度：前一半从 1 渐变为 0，后一半保持 0
-                if (aiWebView != null) {
-                    if (progress < 0.5f) {
-                        float alphaProgress = progress * 2f;
-                        aiWebView.setAlpha(1f - easeOutCubic(alphaProgress));
-                    } else {
-                        aiWebView.setAlpha(0f);
+                if (onComplete != null) {
+                    try {
+                        onComplete.run();
+                    } catch (Exception e) {
+                        Log.e(TAG, "collapse onComplete 执行失败", e);
                     }
                 }
+            }
 
-                // 插值 scaleX/scaleY/translationX/translationY
-                float curScaleX = 1f + (endScaleX - 1f) * easedProgress;
-                float curScaleY = 1f + (endScaleY - 1f) * easedProgress;
-                float curTranslationX = endTranslationX * easedProgress;
-                float curTranslationY = endTranslationY * easedProgress;
-
+            @Override
+            public void doFrame(long frameTimeNanos) {
+                if (completed[0]) return;
                 try {
-                    // 圆角动画：前一半保持窗口圆角不变，后一半从窗口圆角过渡到提示条圆角
-//                    int currentCornerPx;
-//                    if (progress < 0.5f) {
-//                        currentCornerPx = startCornerPx;
-//                    } else {
-//                        float cornerSubProgress = (progress - 0.5f) * 2f;
-//                        float easedCornerProgress = easeOutCubic(cornerSubProgress);
-//                        currentCornerPx = Math.round(startCornerPx + (targetCornerPx - startCornerPx) * easedCornerProgress);
-//                    }
-//                    contentBg.setCornerRadius(currentCornerPx);
-//                    if (foreground instanceof GradientDrawable) {
-//                        ((GradientDrawable) foreground).setCornerRadius(currentCornerPx);
-//                    }
-//                    contentContainer.invalidateOutline();
+                    if (prevFrameTime == 0) {
+                        prevFrameTime = frameTimeNanos;
+                    }
+
+                    frameCount++;
+                    long intervalNs = frameTimeNanos - prevFrameTime;
+                    prevFrameTime = frameTimeNanos;
+                    // 纯时间进度
+                    float timeProgress = (float) (frameTimeNanos - adjustedStartTime) / 1000000f / animationDuration;
+                    float progress = Math.min(timeProgress, 1.0f);
+                    float easedProgress = animInterpolator.getInterpolation(progress);
+
+                    // WebView 透明度：前一半从 1 渐变为 0，后一半保持 0
+                    if (aiWebView != null) {
+                        if (progress < 0.5f) {
+                            float alphaProgress = progress * 2f;
+                            aiWebView.setAlpha(1f - easeOutCubic(alphaProgress));
+                        } else {
+                            aiWebView.setAlpha(0f);
+                        }
+                    }
+
+                    // 插值 scaleX/scaleY/translationX/translationY
+                    float curScaleX = 1f + (endScaleX - 1f) * easedProgress;
+                    float curScaleY = 1f + (endScaleY - 1f) * easedProgress;
+                    float curTranslationX = endTranslationX * easedProgress;
+                    float curTranslationY = endTranslationY * easedProgress;
 
                     // 应用变换（只改 View 属性，不触发 updateViewLayout）
                     contentContainer.setScaleX(curScaleX);
@@ -6938,23 +7245,17 @@ public class FloatWindowService extends Service {
                     contentContainer.setTranslationX(curTranslationX);
                     contentContainer.setTranslationY(curTranslationY);
 
-
                     if (progress < 1.0f) {
                         Choreographer.getInstance().postFrameCallback(this);
                     } else {
                         // 动画完成，恢复普通图层、重置变换
-                        contentContainer.setScaleX(1f);
-                        contentContainer.setScaleY(1f);
-                        contentContainer.setTranslationX(0f);
-                        contentContainer.setTranslationY(0f);
-                        contentContainer.setLayerType(View.LAYER_TYPE_NONE, null);
-                        if (onComplete != null) onComplete.run();
+                        finishNow();
                     }
-
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    // 关键：异常时强制完成收起，绝不允许动画静默中断导致整屏冻结
+                    Log.e(TAG, "collapse animation frame failed, 强制完成收起", e);
+                    finishNow();
                 }
-
             }
         });
     }
@@ -7403,6 +7704,8 @@ public class FloatWindowService extends Service {
 
     @Override
     public void onDestroy() {
+        diagHandler.removeCallbacksAndMessages(null);
+        DiagLog.log(this, "service onDestroy");
         if (rainbowAnimator != null) {
             rainbowAnimator.cancel();
             rainbowAnimator = null;
