@@ -1,5 +1,6 @@
 package com.example.aiwindow;
 
+import android.app.ActivityOptions;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -2521,7 +2522,7 @@ public class FloatWindowService extends Service {
                     | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             // 启动握手：通知 OverlayWindowActivity 等模糊窗口就绪后再开始展开动画
             BlurWindowActivity.sPendingLaunch = true;
-            startActivity(blurIntent);
+            startActivity(blurIntent, ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle());
             Log.d(TAG, "已启动模糊窗口: 位置(" + blurX + "," + blurY + ") 尺寸" + targetWidth + "x" + targetHeight 
                     + " 圆角" + dpToPx((int)cornerRadiusDp) + "px 模糊半径=" + blurRadius);
         } catch (Exception e) {
@@ -2561,8 +2562,8 @@ public class FloatWindowService extends Service {
         intent.putExtra(OverlayWindowActivity.EXTRA_AI_BLUR_RADIUS, aiBlurRadius);
         intent.putExtra(OverlayWindowActivity.EXTRA_AI_OVERLAY_ALPHA, aiOverlayAlpha);
         intent.putExtra(OverlayWindowActivity.EXTRA_TOP_BAR_TRANSPARENCY, topBarTransparency);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(intent);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+        startActivity(intent, ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle());
         // 隐藏底部提示条（透明度设为0）
         if (bottomBar != null) bottomBar.setAlpha(0f);
     }
@@ -2598,8 +2599,8 @@ public class FloatWindowService extends Service {
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_STYLE, shortcutStyle);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_BLUR_RADIUS, shortcutBlurRadius);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_OVERLAY_ALPHA, shortcutOverlayAlpha);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(intent);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+        startActivity(intent, ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle());
         if (bottomBar != null) bottomBar.setAlpha(0f);
     }
 
@@ -6033,7 +6034,7 @@ public class FloatWindowService extends Service {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                     | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
                     | Intent.FLAG_ACTIVITY_NO_ANIMATION);
-            startActivity(intent);
+            startActivity(intent, ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle());
             Log.d(TAG, "WindowHostActivity started");
         } catch (Exception e) {
             Log.e(TAG, "Failed to start WindowHostActivity", e);

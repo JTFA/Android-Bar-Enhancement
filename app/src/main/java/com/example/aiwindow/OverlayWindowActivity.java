@@ -240,10 +240,22 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // 生命周期
     // ═══════════════════════════════════════════════════════════
 
+    /**
+     * 零时长进/出转场：API 34+ 用 overrideActivityTransition（overridePendingTransition 已废弃，
+     * 且部分机型接收方调用不生效，需配合启动方 ActivityOptions）；以下版本回退 overridePendingTransition。
+     */
+    private void suppressTransition(int overrideType) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            overrideActivityTransition(overrideType, 0, 0);
+        } else {
+            overridePendingTransition(0, 0);
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        overridePendingTransition(0, 0);
+        suppressTransition(Activity.OVERRIDE_TRANSITION_OPEN);
         Log.d(TAG, "onCreate");
 
         // 1. 解析参数
@@ -411,7 +423,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             sendRestoreBarBroadcast();
             Log.d(TAG, "onUserLeaveHint: finishing activity");
             finish();
-            overridePendingTransition(0, 0);
+            suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
         }
     }
 
@@ -429,7 +441,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             sendRestoreBarBroadcast();
             Log.d(TAG, "onStop: finishing activity");
             finish();
-            overridePendingTransition(0, 0);
+            suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
         }
     }
     
@@ -2036,7 +2048,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     }
                     sendRestoreBarBroadcast();
                     finish();
-                    overridePendingTransition(0, 0);
+                    suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
                 }
             }
         });

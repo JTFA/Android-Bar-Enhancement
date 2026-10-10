@@ -186,9 +186,23 @@ public class BlurWindowActivity extends Activity {
         }
     }
 
+    /**
+     * 零时长进/出转场：API 34+ 用 overrideActivityTransition（overridePendingTransition 已废弃，
+     * 且部分机型接收方调用不生效，需配合启动方 ActivityOptions）；以下版本回退 overridePendingTransition。
+     */
+    private void suppressTransition(int overrideType) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            overrideActivityTransition(overrideType, 0, 0);
+        } else {
+            overridePendingTransition(0, 0);
+        }
+    }
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // 零时长打开转场：避免任务级过渡动画与状态栏跟随
+        suppressTransition(Activity.OVERRIDE_TRANSITION_OPEN);
         // 重置兜底标志位：新实例创建时清除上次生命周期遗留的残值
         // 防止 onResume 误判导致新 BlurWindowActivity 被立即销毁
         sShortcutLaunched = false;
@@ -405,9 +419,9 @@ public class BlurWindowActivity extends Activity {
         Log.d(TAG, "fadeoutAndFinish: 开始执行，root=" + (root != null ? "存在" : "null"));
         
         if (root == null) {
-            Log.w(TAG, "fadeoutAndFinish: root 为 null，直接 finish");
+            Log.w(TAG, "fadeOutAndFinish: root 为 null，直接 finish");
             finish();
-            overridePendingTransition(0, 0);
+            suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
             return;
         }
         
@@ -432,7 +446,7 @@ public class BlurWindowActivity extends Activity {
         if (startWindowAlpha <= 0.01f && startBlurRadius == 0) {
             Log.d(TAG, "fadeOutAndFinish: alpha/半径已为 0，跳过渐变直接 finish");
             finish();
-            overridePendingTransition(0, 0);
+            suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
             return;
         }
 
@@ -466,7 +480,7 @@ public class BlurWindowActivity extends Activity {
                     }
                     Log.d(TAG, "fadeoutAndFinish: 动画完成，准备 finish");
                     finish();
-                    overridePendingTransition(0, 0);
+                    suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
                 }
             }
         });

@@ -1,5 +1,6 @@
 package com.example.aiwindow;
 
+import android.app.Activity;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
@@ -31,12 +32,24 @@ public class WindowHostActivity extends AppCompatActivity {
 
     private boolean handled = false;
 
+    /**
+     * 零时长进/出转场：API 34+ 用 overrideActivityTransition（overridePendingTransition 已废弃，
+     * 且部分机型接收方调用不生效，需配合启动方 ActivityOptions）；以下版本回退 overridePendingTransition。
+     */
+    private void suppressTransition(int overrideType) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            overrideActivityTransition(overrideType, 0, 0);
+        } else {
+            overridePendingTransition(0, 0);
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         instance = this;
         // Eliminate enter transition animation
-        overridePendingTransition(0, 0);
+        suppressTransition(Activity.OVERRIDE_TRANSITION_OPEN);
         Log.d(TAG, "onCreate - task=" + getTaskId());
 
         // Make system bars transparent
@@ -74,7 +87,7 @@ public class WindowHostActivity extends AppCompatActivity {
         if (savedInstanceState != null) {
             Log.d(TAG, "Recreated by system, finishing");
             finish();
-            overridePendingTransition(0, 0);
+            suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
         }
     }
 
@@ -105,7 +118,7 @@ public class WindowHostActivity extends AppCompatActivity {
 
     private void finishActivity() {
         finish();
-        overridePendingTransition(0, 0);
+        suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
     }
 
     @Override
