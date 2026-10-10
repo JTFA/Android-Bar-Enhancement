@@ -127,7 +127,7 @@
 
         <activity
             android:name=".BlurWindowActivity"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:theme="@style/Theme.BlurNoAnim"
             android:excludeFromRecents="true"
             android:exported="false"
             android:taskAffinity="com.example.aiwindow.floating" />

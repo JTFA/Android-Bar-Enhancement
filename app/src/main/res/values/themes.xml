@@ -1,3 +1,4 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Theme.AI悬浮窗" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
@@ -14,7 +15,7 @@
         <!-- Customize your theme here. -->
     </style>
 
-    <!-- 现代风格主题：用于MainActivity、SettingsActivity等页面 -->
+    <!-- 现代风格主题：用于 MainActivity、SettingsActivity 等页面 -->
     <style name="Theme.ModernSettings" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">#1976D2</item>
         <item name="colorPrimaryVariant">#1565C0</item>
@@ -42,14 +43,37 @@
         <item name="inputStroke">#D0D0D0</item>
     </style>
 
+    <!-- 显式零时长窗口转场：@null 在部分 OEM（OriginOS 等）会回退到系统默认动画，
+         显式把 activity/task 级进出动画全部指向空动画才能真正关闭 -->
+    <style name="WindowAnimNone">
+        <item name="android:activityOpenEnterAnimation">@anim/none</item>
+        <item name="android:activityOpenExitAnimation">@anim/none</item>
+        <item name="android:activityCloseEnterAnimation">@anim/none</item>
+        <item name="android:activityCloseExitAnimation">@anim/none</item>
+        <item name="android:taskOpenEnterAnimation">@anim/none</item>
+        <item name="android:taskOpenExitAnimation">@anim/none</item>
+        <item name="android:taskCloseEnterAnimation">@anim/none</item>
+        <item name="android:taskCloseExitAnimation">@anim/none</item>
+        <item name="android:taskToFrontEnterAnimation">@anim/none</item>
+        <item name="android:taskToFrontExitAnimation">@anim/none</item>
+        <item name="android:taskToBackEnterAnimation">@anim/none</item>
+        <item name="android:taskToBackExitAnimation">@anim/none</item>
+        <item name="android:wallpaperOpenEnterAnimation">@anim/none</item>
+        <item name="android:wallpaperOpenExitAnimation">@anim/none</item>
+        <item name="android:wallpaperCloseEnterAnimation">@anim/none</item>
+        <item name="android:wallpaperCloseExitAnimation">@anim/none</item>
+    </style>
+
     <!-- Transparent proxy Activity theme: visually transparent but NOT system-translucent -->
     <!-- This ensures the Activity is the focused foreground task, so back gestures route to it -->
+    <!-- 快捷窗口关闭动画（显式零转场 WindowAnimNone，避免关闭窗口时播放淡出动画；
+         @null 在部分 OEM 会回退到系统默认动画） -->
     <style name="Theme.TransparentHost" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowContentOverlay">@null</item>
         <item name="android:windowNoTitle">true</item>
-        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowAnimationStyle">@style/WindowAnimNone</item>
         <item name="android:windowIsFloating">false</item>
         <item name="android:backgroundDimEnabled">false</item>
     </style>
@@ -60,7 +84,7 @@
         <item name="android:windowIsFloating">false</item>
         <item name="android:backgroundDimEnabled">false</item>
         <item name="android:windowContentOverlay">@null</item>
-        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowAnimationStyle">@style/WindowAnimNone</item>
     </style>
 
     <!-- 浮动窗口主题：Window 只覆盖面板区域，用于将模糊限制在圆角矩形内 -->
@@ -70,8 +94,13 @@
         <item name="android:windowIsFloating">true</item>
         <item name="android:backgroundDimEnabled">false</item>
         <item name="android:windowContentOverlay">@null</item>
-        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowAnimationStyle">@style/WindowAnimNone</item>
         <item name="android:windowMinWidthMajor">0dp</item>
         <item name="android:windowMinWidthMinor">0dp</item>
+    </style>
+
+    <!-- BlurWindowActivity：框架 Translucent 主题 + 显式零转场（替代 @android:style/Theme.Translucent.NoTitleBar） -->
+    <style name="Theme.BlurNoAnim" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowAnimationStyle">@style/WindowAnimNone</item>
     </style>
 </resources>

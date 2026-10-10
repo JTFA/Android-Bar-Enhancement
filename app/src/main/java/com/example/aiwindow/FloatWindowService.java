@@ -6053,7 +6053,7 @@ public class FloatWindowService extends Service {
                 + " isFinishing=" + (activity != null && activity.isFinishing()));
         if (activity != null) {
             try {
-                activity.finish();
+                activity.finishWithoutTransition();
                 Log.d(TAG, "WindowHostActivity finished");
             } catch (Exception e) {
                 Log.e(TAG, "Failed to finish WindowHostActivity", e);

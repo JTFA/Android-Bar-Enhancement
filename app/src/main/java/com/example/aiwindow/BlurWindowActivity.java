@@ -65,6 +65,7 @@ public class BlurWindowActivity extends Activity {
         BlurWindowActivity act = sInstance != null ? sInstance.get() : null;
         if (act != null && !act.isFinishing()) {
             Log.d(TAG, "接收到关闭信号，主动 finish");
+            act.suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
             act.finish();
         }
     }
@@ -203,6 +204,7 @@ public class BlurWindowActivity extends Activity {
         super.onCreate(savedInstanceState);
         // 零时长打开转场：避免任务级过渡动画与状态栏跟随
         suppressTransition(Activity.OVERRIDE_TRANSITION_OPEN);
+        suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
         // 重置兜底标志位：新实例创建时清除上次生命周期遗留的残值
         // 防止 onResume 误判导致新 BlurWindowActivity 被立即销毁
         sShortcutLaunched = false;
@@ -342,6 +344,7 @@ public class BlurWindowActivity extends Activity {
             sShortcutLaunched = false;
             if (!isFinishing()) {
                 Log.d(TAG, "onResume: 检测到快捷方式已启动，清理模糊层");
+                suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
                 finish();
             }
         }
@@ -420,8 +423,8 @@ public class BlurWindowActivity extends Activity {
         
         if (root == null) {
             Log.w(TAG, "fadeOutAndFinish: root 为 null，直接 finish");
-            finish();
             suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+            finish();
             return;
         }
         
@@ -445,8 +448,8 @@ public class BlurWindowActivity extends Activity {
         // 100ms 渐变纯属空转，只会让模糊窗口多残留约 100ms（收起结束后可见残影风险）→ 直接销毁
         if (startWindowAlpha <= 0.01f && startBlurRadius == 0) {
             Log.d(TAG, "fadeOutAndFinish: alpha/半径已为 0，跳过渐变直接 finish");
-            finish();
             suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+            finish();
             return;
         }
 
@@ -479,8 +482,8 @@ public class BlurWindowActivity extends Activity {
                         getWindow().setBackgroundBlurRadius(0);
                     }
                     Log.d(TAG, "fadeoutAndFinish: 动画完成，准备 finish");
-                    finish();
                     suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+                    finish();
                 }
             }
         });

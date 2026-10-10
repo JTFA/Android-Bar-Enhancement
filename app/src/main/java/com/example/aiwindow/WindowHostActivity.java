@@ -50,6 +50,7 @@ public class WindowHostActivity extends AppCompatActivity {
         instance = this;
         // Eliminate enter transition animation
         suppressTransition(Activity.OVERRIDE_TRANSITION_OPEN);
+        suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
         Log.d(TAG, "onCreate - task=" + getTaskId());
 
         // Make system bars transparent
@@ -86,8 +87,8 @@ public class WindowHostActivity extends AppCompatActivity {
         // If recreated by system (e.g. config change), just finish
         if (savedInstanceState != null) {
             Log.d(TAG, "Recreated by system, finishing");
-            finish();
             suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+            finish();
         }
     }
 
@@ -117,8 +118,14 @@ public class WindowHostActivity extends AppCompatActivity {
     }
 
     private void finishActivity() {
-        finish();
         suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+        finishAndRemoveTask();
+    }
+
+    /** 无过渡关闭：供 FloatWindowService 收起流程直接调用（API 34+ overrideActivityTransition CLOSE，以下回退 overridePendingTransition） */
+    public void finishWithoutTransition() {
+        suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+        finishAndRemoveTask();
     }
 
     @Override

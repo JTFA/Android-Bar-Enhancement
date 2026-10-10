@@ -256,6 +256,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         suppressTransition(Activity.OVERRIDE_TRANSITION_OPEN);
+        suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
         Log.d(TAG, "onCreate");
 
         // 1. 解析参数
@@ -422,8 +423,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
             BlurWindowActivity.fadeOutIfAlive();
             sendRestoreBarBroadcast();
             Log.d(TAG, "onUserLeaveHint: finishing activity");
-            finish();
             suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+            finishAndRemoveTask();
         }
     }
 
@@ -440,8 +441,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
             BlurWindowActivity.fadeOutIfAlive();
             sendRestoreBarBroadcast();
             Log.d(TAG, "onStop: finishing activity");
-            finish();
             suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+            finishAndRemoveTask();
         }
     }
     
@@ -2047,8 +2048,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         pendingShortcutItem = null;
                     }
                     sendRestoreBarBroadcast();
-                    finish();
                     suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+                    finishAndRemoveTask();
                 }
             }
         });
