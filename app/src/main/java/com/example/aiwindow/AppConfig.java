@@ -21,6 +21,15 @@ public final class AppConfig {
      */
     public static final boolean AI_WINDOW_ENABLED = false;
 
+    /**
+     * 诊断日志开关
+     *
+     * true ：把关键状态（设置变更、横条触摸、光晕挂载/拆卸、服务生命周期、崩溃堆栈）
+     *        写入应用外部文件 diag.log。
+     * false（默认）：完全不写日志、不安装崩溃捕获，调用点仅一次布尔判断，零 I/O 开销。
+     */
+    public static final boolean DIAG_LOG_ENABLED = false;
+
     private AppConfig() {
     }
 }

@@ -1,7 +1,6 @@
 package com.example.aiwindow;
 
 import android.app.Notification;
-import android.app.PendingIntent;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
@@ -78,10 +77,6 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Random;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
-import java.nio.charset.StandardCharsets;
 
 import android.app.DownloadManager;
 import android.webkit.URLUtil;
@@ -290,9 +285,6 @@ public class FloatWindowService extends Service {
     // 按下样式预览自动隐藏（设置页调节按下样式时使用）
     private Handler pressedPreviewHandler = new Handler(Looper.getMainLooper());
 
-    // ===== 诊断包 =====
-    private Handler diagHandler = new Handler(Looper.getMainLooper());
-    private Runnable diagTick;
     private Runnable pressedPreviewTimeout = new Runnable() {
         @Override
         public void run() {
@@ -585,7 +577,6 @@ public class FloatWindowService extends Service {
             stopSelf(); // 启动失败则停止服务
         }
 
-        startDiagLoop();
         Log.d(TAG, "========================================");
     }
 
@@ -607,11 +598,6 @@ public class FloatWindowService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // 诊断包：通知栏按钮动作
-        if (intent != null && intent.getAction() != null && intent.getAction().startsWith("DIAG_")) {
-            handleDiagAction(intent.getAction());
-            return START_NOT_STICKY;
-        }
         if (intent != null) {
             DiagLog.log(this, "onStartCommand action=" + intent.getAction());
         }
@@ -902,143 +888,12 @@ public class FloatWindowService extends Service {
      * 创建前台通知
      */
     private Notification createNotification() {
-        String snap = buildDiagSnapshot();
-        boolean glowAttached = glowContainer != null && glowContainer.getWindowToken() != null;
-        boolean barTouchOn = barLayoutParams == null
-                || (barLayoutParams.flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) == 0;
-        NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("悬浮窗运行中·诊断")
-                .setContentText(snap.substring(0, Math.min(snap.length(), 50)).replace('\n', ' '))
-                .setStyle(new NotificationCompat.BigTextStyle().bigText(snap))
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("悬浮窗正在运行")
+                .setContentText("点击可关闭悬浮窗")
                 .setSmallIcon(android.R.drawable.ic_dialog_info) // 使用系统图标
-                .setOngoing(true); // 设置为持续通知，不可滑动删除
-        b.addAction(0, glowAttached ? "光晕:开" : "光晕:关", diagPendingIntent("DIAG_GLOW", 1));
-        b.addAction(0, barTouchOn ? "触摸:开" : "触摸:关", diagPendingIntent("DIAG_BAR_TOUCH", 2));
-        b.addAction(0, "导出日志", diagPendingIntent("DIAG_EXPORT", 3));
-        return b.build();
-    }
-
-    private PendingIntent diagPendingIntent(String action, int requestCode) {
-        Intent i = new Intent(this, FloatWindowService.class);
-        i.setAction(action);
-        return PendingIntent.getService(this, requestCode, i,
-                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-    }
-
-    /** 实时窗口状态快照（显示在通知栏，冻结时下拉通知栏截图取证） */
-    private String buildDiagSnapshot() {
-        StringBuilder sb = new StringBuilder();
-        if (barLayoutParams != null && barContainer != null) {
-            sb.append("bar ").append(barLayoutParams.width).append("x").append(barLayoutParams.height)
-                    .append(" @(").append(barLayoutParams.x).append(",").append(barLayoutParams.y).append(")")
-                    .append(" fl=0x").append(Integer.toHexString(barLayoutParams.flags))
-                    .append(" attached=").append(barContainer.getWindowToken() != null)
-                    .append(" view=").append(barContainer.getWidth()).append("x").append(barContainer.getHeight())
-                    .append(" child=").append(bottomBar != null ? bottomBar.getWidth() + "x" + bottomBar.getHeight() : "null");
-        } else {
-            sb.append("bar=null");
-        }
-        sb.append('\n');
-        if (glowLayoutParams != null && glowContainer != null) {
-            sb.append("glow ").append(glowLayoutParams.width).append("x").append(glowLayoutParams.height)
-                    .append(" fl=0x").append(Integer.toHexString(glowLayoutParams.flags))
-                    .append(" attached=").append(glowContainer.getWindowToken() != null)
-                    .append(" view=").append(glowContainer.getWidth()).append("x").append(glowContainer.getHeight());
-        } else {
-            sb.append("glow=null");
-        }
-        sb.append('\n');
-        sb.append("cfg w=").append(currentWidth).append(" h=").append(currentHeight).append("dp posY=").append(barPositionY)
-                .append(" pressed=").append(pressedBarWidth).append("x").append(pressedBarHeight).append("dp glowR=").append(pressedBarGlowRadius)
-                .append(" | expanded=").append(isShortcutWindowExpanded).append("/").append(isAiWindowExpanded);
-        return sb.toString();
-    }
-
-    /** 每 2 秒刷新通知栏窗口状态快照 */
-    private void startDiagLoop() {
-        diagTick = new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    NotificationManager nm = getSystemService(NotificationManager.class);
-                    if (nm != null) {
-                        nm.notify(NOTIFICATION_ID, createNotification());
-                    }
-                } catch (Exception e) {
-                    Log.w(TAG, "diag notify failed", e);
-                }
-                diagHandler.postDelayed(this, 2000);
-            }
-        };
-        diagHandler.postDelayed(diagTick, 2000);
-    }
-
-    /** 通知栏按钮：现场 A/B 实验（移除光晕 / 禁横条触摸 / 导出日志） */
-    private void handleDiagAction(String action) {
-        DiagLog.log(this, "diag action: " + action);
-        try {
-            if ("DIAG_GLOW".equals(action)) {
-                boolean attached = glowContainer != null && glowContainer.getWindowToken() != null;
-                if (attached) {
-                    windowManager.removeView(glowContainer);
-                    Toast.makeText(this, "光晕窗口已移除：请测试死区是否消失", Toast.LENGTH_SHORT).show();
-                } else if (glowContainer != null) {
-                    windowManager.addView(glowContainer, glowLayoutParams);
-                    Toast.makeText(this, "光晕窗口已恢复", Toast.LENGTH_SHORT).show();
-                }
-            } else if ("DIAG_BAR_TOUCH".equals(action)) {
-                boolean touchable = (barLayoutParams.flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) == 0;
-                if (touchable) {
-                    barLayoutParams.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                    Toast.makeText(this, "横条窗口已禁触摸：请测试死区是否消失（横条手势将失效）", Toast.LENGTH_SHORT).show();
-                } else {
-                    barLayoutParams.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                    Toast.makeText(this, "横条窗口已恢复可触摸", Toast.LENGTH_SHORT).show();
-                }
-                windowManager.updateViewLayout(barContainer, barLayoutParams);
-            } else if ("DIAG_EXPORT".equals(action)) {
-                exportDiagLog();
-                return;
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "diag action failed", e);
-            DiagLog.log(this, "diag action failed: " + e);
-        }
-        DiagLog.log(this, "state now: " + buildDiagSnapshot().replace('\n', ' '));
-        NotificationManager nm = getSystemService(NotificationManager.class);
-        if (nm != null) {
-            nm.notify(NOTIFICATION_ID, createNotification());
-        }
-    }
-
-    /** 把 diag.log 复制到系统下载目录（Android/data 目录手机上不好取，下载目录可直接发文件） */
-    private void exportDiagLog() {
-        try {
-            String content = DiagLog.readAll(this);
-            String name = "aiwindow_diag_" + new SimpleDateFormat("MMdd_HHmmss", Locale.US).format(new Date()) + ".log";
-            ContentValues v = new ContentValues();
-            v.put(MediaStore.Downloads.DISPLAY_NAME, name);
-            v.put(MediaStore.Downloads.MIME_TYPE, "text/plain");
-            v.put(MediaStore.Downloads.IS_PENDING, 1);
-            Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
-            if (uri == null) {
-                throw new IllegalStateException("MediaStore insert failed");
-            }
-            OutputStream os = getContentResolver().openOutputStream(uri);
-            if (os == null) {
-                throw new IllegalStateException("openOutputStream null");
-            }
-            os.write(content.getBytes(StandardCharsets.UTF_8));
-            os.close();
-            v.clear();
-            v.put(MediaStore.Downloads.IS_PENDING, 0);
-            getContentResolver().update(uri, v, null, null);
-            DiagLog.log(this, "exported to Downloads: " + name);
-            Toast.makeText(this, "日志已导出到下载目录: " + name, Toast.LENGTH_LONG).show();
-        } catch (Exception e) {
-            Log.e(TAG, "export diag failed", e);
-            Toast.makeText(this, "导出失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
+                .setOngoing(true) // 设置为持续通知，不可滑动删除
+                .build();
     }
 
     /**
@@ -7704,7 +7559,6 @@ public class FloatWindowService extends Service {
 
     @Override
     public void onDestroy() {
-        diagHandler.removeCallbacksAndMessages(null);
         DiagLog.log(this, "service onDestroy");
         if (rainbowAnimator != null) {
             rainbowAnimator.cancel();
