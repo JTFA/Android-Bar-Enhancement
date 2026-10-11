@@ -1787,6 +1787,25 @@
                 android:progress="100"
                 android:layout_marginBottom="16dp" />
 
+            <!-- 图标圆角（连续曲率 superellipse） -->
+            <TextView
+                android:id="@+id/text_shortcut_icon_corner"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="图标圆角: 12dp"
+                android:textSize="14sp"
+                android:textColor="?attr/textPrimary"
+                android:layout_marginBottom="8dp" />
+
+            <SeekBar
+                android:id="@+id/seek_shortcut_icon_corner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="0"
+                android:max="50"
+                android:progress="30"
+                android:layout_marginBottom="16dp" />
+
             <!-- 编辑快捷方式按钮 -->
             <Button
                 android:id="@+id/btn_edit_shortcuts"

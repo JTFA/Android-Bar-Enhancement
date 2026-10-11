@@ -172,6 +172,7 @@ public class FloatWindowService extends Service {
     private int shortcutCornerRadius = 24; // dp
     private String shortcutBgColor = "#FFFFFF";
     private int shortcutIconSize = 100; // 图标大小百分比 50-150，默认 100%
+    private int shortcutIconCorner = 12; // 图标圆角 dp，0=直角（连续曲率 superellipse）
 
     // 双击检测相关
     private static final int DOUBLE_TAP_TIMEOUT = 300; // ms
@@ -793,6 +794,7 @@ public class FloatWindowService extends Service {
             shortcutWindowPositionY = intent.getIntExtra("shortcut_window_position_y", shortcutWindowPositionY);
             shortcutCornerRadius = intent.getIntExtra("shortcut_corner_radius", shortcutCornerRadius);
             shortcutIconSize = intent.getIntExtra("shortcut_icon_size", shortcutIconSize);
+            shortcutIconCorner = intent.getIntExtra("shortcut_icon_corner", shortcutIconCorner);
             shortcutStyle = intent.getIntExtra("shortcut_style", shortcutStyle);
             shortcutBlurRadius = intent.getIntExtra("shortcut_blur_radius", shortcutBlurRadius);
             shortcutOverlayAlpha = intent.getIntExtra("shortcut_overlay_alpha", shortcutOverlayAlpha);
@@ -2640,6 +2642,7 @@ public class FloatWindowService extends Service {
         intent.putExtra(OverlayWindowActivity.EXTRA_CLOSE_ON_OUTSIDE, closeOnOutsideClick);
         intent.putExtra(OverlayWindowActivity.EXTRA_BACK_PRIORITIZE_WEBVIEW, backPrioritizeWebview);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_ICON_SIZE, shortcutIconSize);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_ICON_CORNER, shortcutIconCorner);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_STYLE, shortcutStyle);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_BLUR_RADIUS, shortcutBlurRadius);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_OVERLAY_ALPHA, shortcutOverlayAlpha);
@@ -7548,6 +7551,7 @@ public class FloatWindowService extends Service {
             shortcutWindowPositionY = prefs.getInt("shortcut_window_position_y", shortcutWindowPositionY);
             shortcutCornerRadius = prefs.getInt("shortcut_corner_radius", shortcutCornerRadius);
             shortcutIconSize = prefs.getInt("shortcut_icon_size", shortcutIconSize);
+            shortcutIconCorner = prefs.getInt("shortcut_icon_corner", shortcutIconCorner);
             shortcutStyle = prefs.getInt("shortcut_style", 0);
             shortcutBlurRadius = prefs.getInt("shortcut_blur_radius", 20);
             shortcutOverlayAlpha = prefs.getInt("shortcut_overlay_alpha", 180);

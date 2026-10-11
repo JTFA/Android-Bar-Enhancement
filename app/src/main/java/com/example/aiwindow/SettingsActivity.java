@@ -135,6 +135,7 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_SHORTCUT_WINDOW_POSITION_Y = "shortcut_window_position_y";
     private static final String KEY_SHORTCUT_CORNER_RADIUS = "shortcut_corner_radius";
     private static final String KEY_SHORTCUT_ICON_SIZE = "shortcut_icon_size";
+    private static final String KEY_SHORTCUT_ICON_CORNER = "shortcut_icon_corner";
     private static final String KEY_SHORTCUT_EDGE_BAND = "shortcut_edge_band_dp";
     private static final String KEY_SHORTCUT_EDGE_OPACITY = "shortcut_edge_opacity";
     // 手指光晕参数
@@ -263,6 +264,8 @@ public class SettingsActivity extends AppCompatActivity {
     private Button btnEditShortcuts;
     private SeekBar seekShortcutIconSize;
     private TextView textShortcutIconSize;
+    private SeekBar seekShortcutIconCorner;
+    private TextView textShortcutIconCorner;
 
     private Spinner spinnerShortcutStyle;
     private Spinner spinnerBlurSyncMode;
@@ -511,6 +514,8 @@ public class SettingsActivity extends AppCompatActivity {
         textShortcutCornerRadius = findViewById(R.id.text_shortcut_corner_radius);
         seekShortcutIconSize = findViewById(R.id.seek_shortcut_icon_size);
         textShortcutIconSize = findViewById(R.id.text_shortcut_icon_size);
+        seekShortcutIconCorner = findViewById(R.id.seek_shortcut_icon_corner);
+        textShortcutIconCorner = findViewById(R.id.text_shortcut_icon_corner);
         btnEditShortcuts = findViewById(R.id.btn_edit_shortcuts);
 
 
@@ -802,6 +807,9 @@ public class SettingsActivity extends AppCompatActivity {
         int shortcutIconSize = preferences.getInt(KEY_SHORTCUT_ICON_SIZE, 100);
         seekShortcutIconSize.setProgress(shortcutIconSize);
         textShortcutIconSize.setText("图标大小: " + shortcutIconSize + "%");
+        int shortcutIconCorner = preferences.getInt(KEY_SHORTCUT_ICON_CORNER, 12);
+        seekShortcutIconCorner.setProgress(shortcutIconCorner);
+        textShortcutIconCorner.setText("图标圆角: " + shortcutIconCorner + "dp");
 
         int style = preferences.getInt(KEY_SHORTCUT_STYLE, 0);
         spinnerShortcutStyle.setSelection(style);
@@ -999,6 +1007,7 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putInt(KEY_SHORTCUT_WINDOW_POSITION_Y, seekShortcutWindowPositionY.getProgress());
         editor.putInt(KEY_SHORTCUT_CORNER_RADIUS, seekShortcutCornerRadius.getProgress());
         editor.putInt(KEY_SHORTCUT_ICON_SIZE, seekShortcutIconSize.getProgress());
+        editor.putInt(KEY_SHORTCUT_ICON_CORNER, seekShortcutIconCorner.getProgress());
 
         editor.putInt(KEY_SHORTCUT_STYLE, spinnerShortcutStyle.getSelectedItemPosition());
         editor.putInt(KEY_BLUR_SYNC_MODE, spinnerBlurSyncMode.getSelectedItemPosition());
@@ -1170,6 +1179,7 @@ public class SettingsActivity extends AppCompatActivity {
         shortcutIntent.putExtra("shortcut_window_position_y", seekShortcutWindowPositionY.getProgress());
         shortcutIntent.putExtra("shortcut_corner_radius", seekShortcutCornerRadius.getProgress());
         shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
+        shortcutIntent.putExtra("shortcut_icon_corner", seekShortcutIconCorner.getProgress());
         shortcutIntent.putExtra("shortcut_style", spinnerShortcutStyle.getSelectedItemPosition());
         shortcutIntent.putExtra("shortcut_blur_radius", seekShortcutBlurRadius.getProgress());
         shortcutIntent.putExtra("shortcut_overlay_alpha", seekShortcutOverlayAlpha.getProgress());
@@ -1588,6 +1598,17 @@ public class SettingsActivity extends AppCompatActivity {
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
 
+        // 快捷方式图标圆角 - 实时更新
+        seekShortcutIconCorner.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textShortcutIconCorner.setText("图标圆角: " + progress + "dp");
+                applyCurrentSettings();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
         // 边缘光参数 - 仅更新文案（保存后下次开窗生效）
         seekShortcutEdgeBand.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -1961,6 +1982,7 @@ public class SettingsActivity extends AppCompatActivity {
         shortcutIntent.putExtra("shortcut_window_position_y", seekShortcutWindowPositionY.getProgress());
         shortcutIntent.putExtra("shortcut_corner_radius", seekShortcutCornerRadius.getProgress());
         shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
+        shortcutIntent.putExtra("shortcut_icon_corner", seekShortcutIconCorner.getProgress());
         shortcutIntent.putExtra("shortcut_style", spinnerShortcutStyle.getSelectedItemPosition());
         shortcutIntent.putExtra("shortcut_blur_radius", seekShortcutBlurRadius.getProgress());
         shortcutIntent.putExtra("shortcut_overlay_alpha", seekShortcutOverlayAlpha.getProgress());

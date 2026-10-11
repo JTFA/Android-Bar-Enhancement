@@ -118,6 +118,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     public static final String EXTRA_AI_OVERLAY_ALPHA = "ai_overlay_alpha";
     // 快捷方式
     public static final String EXTRA_SHORTCUT_ICON_SIZE = "shortcut_icon_size";
+    public static final String EXTRA_SHORTCUT_ICON_CORNER = "shortcut_icon_corner";
     public static final String EXTRA_SHORTCUT_STYLE = "shortcut_style";
     public static final String EXTRA_SHORTCUT_BLUR_RADIUS = "shortcut_blur_radius";
     public static final String EXTRA_SHORTCUT_OVERLAY_ALPHA = "shortcut_overlay_alpha";
@@ -158,6 +159,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private boolean closeOnOutside, backPrioritizeWebview;
     private String aiUrl;
     private int shortcutIconSize, shortcutStyle, shortcutBlurRadius, shortcutOverlayAlpha;
+    private int shortcutIconCorner = 12; // 图标圆角 dp，0=直角（连续曲率 superellipse）
 
     // ─── ColorOS 风格效果开关（默认开启，下次打开窗口生效） ───
     private boolean shortcutEdgeRefraction = true;   // 边缘折射光
@@ -653,6 +655,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             loadWebpageBgTransparentSetting();
         } else {
             shortcutIconSize = intent.getIntExtra(EXTRA_SHORTCUT_ICON_SIZE, 100);
+            shortcutIconCorner = intent.getIntExtra(EXTRA_SHORTCUT_ICON_CORNER, 12);
             shortcutStyle = intent.getIntExtra(EXTRA_SHORTCUT_STYLE, 0);
             shortcutBlurRadius = intent.getIntExtra(EXTRA_SHORTCUT_BLUR_RADIUS, 20);
             shortcutOverlayAlpha = intent.getIntExtra(EXTRA_SHORTCUT_OVERLAY_ALPHA, 180);
@@ -1162,49 +1165,27 @@ public class OverlayWindowActivity extends AppCompatActivity {
         int iconSize = Math.round((cellWidth - dpToPx(16)) * iconScale);
 
         if ("image".equals(item.getIconType())) {
-            // ===== 图片图标（圆角矩形） =====
-            FrameLayout iconContainer = new FrameLayout(this);
-            FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(iconSize, iconSize);
-            iconParams.gravity = Gravity.CENTER;
-            iconContainer.setLayoutParams(iconParams);
-
-            // 圆角矩形背景
-            GradientDrawable iconBg = new GradientDrawable();
-            iconBg.setShape(GradientDrawable.RECTANGLE);
-            iconBg.setCornerRadius(dpToPx(12));
-
-            // 尝试加载自定义图片
+            // ===== 图片图标（连续曲率 superellipse 圆角，自绘替代 clipToOutline 圆弧拼接） =====
+            float cornerPx = dpToPx(shortcutIconCorner);
+            SquircleIconView iconView;
             Bitmap bitmap = loadShortcutIcon(item);
             if (bitmap != null) {
-                ImageView imageView = new ImageView(this);
-                imageView.setLayoutParams(new FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT));
-                imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                imageView.setImageBitmap(bitmap);
-                iconContainer.setBackground(iconBg);
-                iconContainer.setClipToOutline(true);
-                iconContainer.addView(imageView);
+                iconView = new SquircleIconView(this, bitmap, 0, null, cornerPx, 0f);
             } else {
-                // 无自定义图片 → 显示纯色占位图
-                iconBg.setColor(getShortcutPlaceholderColor(item.getId()));
-                iconContainer.setBackground(iconBg);
-                iconContainer.setClipToOutline(true);
-
-                // 在占位图上显示名称首字符
-                TextView placeholderText = new TextView(this);
-                placeholderText.setLayoutParams(new FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT));
-                placeholderText.setGravity(Gravity.CENTER);
+                // 无自定义图片 → 纯色占位 + 名称首字符
                 String firstChar = item.getName() != null && item.getName().length() > 0
                         ? item.getName().substring(0, 1) : "?";
-                placeholderText.setText(firstChar);
-                placeholderText.setTextColor(0xFFFFFFFF);
-                placeholderText.setTextSize(Math.round(22 * iconScale));
-                iconContainer.addView(placeholderText);
+                float textPx = android.util.TypedValue.applyDimension(
+                        android.util.TypedValue.COMPLEX_UNIT_SP,
+                        Math.round(22 * iconScale),
+                        getResources().getDisplayMetrics());
+                iconView = new SquircleIconView(this, null, getShortcutPlaceholderColor(item.getId()),
+                        firstChar, cornerPx, textPx);
             }
-            cell.addView(iconContainer);
+            FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(iconSize, iconSize);
+            iconParams.gravity = Gravity.CENTER;
+            iconView.setLayoutParams(iconParams);
+            cell.addView(iconView);
         } else {
             // ===== Emoji 图标 =====
             TextView iconView = new TextView(this);
@@ -1295,6 +1276,135 @@ public class OverlayWindowActivity extends AppCompatActivity {
             Log.e(TAG, "加载快捷方式图标失败: " + item.getName(), e);
         }
         return null;
+    }
+
+    /**
+     * 连续曲率圆角图标视图（superellipse 超椭圆，n=5）
+     * 曲率沿边缘连续变化，替代 GradientDrawable/Outline 圆弧与直线的生硬拼接；
+     * 支持位图图标（CENTER_CROP 等效）与纯色占位 + 首字符两种绘制
+     */
+    private class SquircleIconView extends View {
+        private final Path squirclePath = new Path();
+        private final Paint shapePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint textPaint;
+        private final Bitmap iconBitmap;
+        private final int placeholderColor;
+        private final String placeholderText;
+        private final float cornerRadiusPx;
+        private final float textPx;
+
+        SquircleIconView(Context context, Bitmap icon, int color, String text,
+                         float radiusPx, float textSizePx) {
+            super(context);
+            this.iconBitmap = icon;
+            this.placeholderColor = color;
+            this.placeholderText = text;
+            this.cornerRadiusPx = radiusPx;
+            this.textPx = textSizePx;
+            shapePaint.setStyle(Paint.Style.FILL);
+            if (text != null) {
+                textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                textPaint.setColor(0xFFFFFFFF);
+                textPaint.setTextAlign(Paint.Align.CENTER);
+                textPaint.setTextSize(textSizePx);
+            } else {
+                textPaint = null;
+            }
+        }
+
+        @Override
+        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+            super.onSizeChanged(w, h, oldw, oldh);
+            rebuild();
+        }
+
+        private void rebuild() {
+            int w = getWidth(), h = getHeight();
+            if (w <= 0 || h <= 0) return;
+            float r = Math.max(0f, Math.min(cornerRadiusPx, Math.min(w, h) / 2f));
+            squirclePath.reset();
+            buildSquirclePath(squirclePath, w, h, r);
+            if (iconBitmap != null) {
+                android.graphics.BitmapShader shader = new android.graphics.BitmapShader(
+                        iconBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+                android.graphics.Matrix m = new android.graphics.Matrix();
+                float scale = Math.max((float) w / iconBitmap.getWidth(),
+                        (float) h / iconBitmap.getHeight());
+                float dx = (w - iconBitmap.getWidth() * scale) / 2f;
+                float dy = (h - iconBitmap.getHeight() * scale) / 2f;
+                m.setScale(scale, scale);
+                m.postTranslate(dx, dy);
+                shader.setLocalMatrix(m);
+                shapePaint.setShader(shader);
+            } else {
+                shapePaint.setShader(null);
+                shapePaint.setColor(placeholderColor);
+            }
+        }
+
+        /**
+         * 超椭圆采样：|x/a|^n + |y/b|^n = 1（n=5），每角 1/4 弧多点采样，
+         * 边缘切线与直边严格衔接、曲率连续变化（G∞），无圆弧拼接折痕；r=0 时退化为直角矩形
+         */
+        private void buildSquirclePath(Path p, int w, int h, float r) {
+            if (r < 0.5f) {
+                p.addRect(0, 0, w, h, Path.Direction.CW);
+                return;
+            }
+            final float n = 5f;
+            final int segments = 24;
+            p.moveTo(r, 0);
+            p.lineTo(w - r, 0);
+            // 右上角：(w-r,0) 水平切线 → (w,r) 竖直切线
+            for (int i = 1; i <= segments; i++) {
+                double u = Math.sin(Math.PI / 2 * i / segments);
+                float px = (float) (r * u);
+                float py = (float) (r - r * Math.pow(1 - Math.pow(u, n), 1 / n));
+                p.lineTo(w - r + px, py);
+            }
+            p.lineTo(w, h - r);
+            // 右下角（右上角旋转 90°）
+            for (int i = 1; i <= segments; i++) {
+                double u = Math.sin(Math.PI / 2 * i / segments);
+                float px = (float) (r * u);
+                float py = (float) (r - r * Math.pow(1 - Math.pow(u, n), 1 / n));
+                p.lineTo(w - py, h - r + px);
+            }
+            p.lineTo(r, h);
+            // 左下角（旋转 180°）
+            for (int i = 1; i <= segments; i++) {
+                double u = Math.sin(Math.PI / 2 * i / segments);
+                float px = (float) (r * u);
+                float py = (float) (r - r * Math.pow(1 - Math.pow(u, n), 1 / n));
+                p.lineTo(r - px, h - py);
+            }
+            p.lineTo(0, r);
+            // 左上角（旋转 270°）
+            for (int i = 1; i <= segments; i++) {
+                double u = Math.sin(Math.PI / 2 * i / segments);
+                float px = (float) (r * u);
+                float py = (float) (r - r * Math.pow(1 - Math.pow(u, n), 1 / n));
+                p.lineTo(py, r - px);
+            }
+            p.close();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            if (squirclePath.isEmpty()) return;
+            canvas.drawPath(squirclePath, shapePaint);
+            if (placeholderText != null && textPaint != null) {
+                Paint.FontMetricsInt fm = textPaint.getFontMetricsInt();
+                float x = getWidth() / 2f;
+                float y = (getHeight() - (fm.top + fm.bottom)) / 2f;
+                canvas.drawText(placeholderText, x, y, textPaint);
+            }
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            return false;
+        }
     }
 
     private int getShortcutPlaceholderColor(String id) {
