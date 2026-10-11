@@ -373,8 +373,33 @@ public class OverlayWindowActivity extends AppCompatActivity {
     }
 
     @Override
+    public void onMultiWindowModeChanged(boolean isInMultiWindowMode, Configuration newConfig) {
+        super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig);
+        // 小窗/分屏兜底：manifest 已声明 resizeableActivity=false，个别 ROM 手势仍强拆时立即收回
+        if (isInMultiWindowMode) {
+            exitMultiWindowUnsupported();
+        }
+    }
+
+    /** 进入多窗口 = 手势强拆成功 → 提示并按现有收起流程关闭窗口 */
+    private void exitMultiWindowUnsupported() {
+        if (isFinishing()) return;
+        Log.d(TAG, "entered multi-window mode, closing window");
+        Toast.makeText(this, "不支持小窗/分屏模式", Toast.LENGTH_SHORT).show();
+        if (rootLayout != null) rootLayout.setVisibility(View.GONE);
+        BlurWindowActivity.fadeOutIfAlive();
+        sendRestoreBarBroadcast();
+        suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+        finishAndRemoveTask();
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
+        // 兜底：回调丢失时在 Resume 检测多窗口并收回
+        if (isInMultiWindowMode()) {
+            exitMultiWindowUnsupported();
+        }
         Log.d(TAG, "onResume: sPendingUploadCallback=" + (sPendingUploadCallback != null ? "SET" : "null")
                 + ", mIsStartingFileChooser was=" + mIsStartingFileChooser);
         mIsStartingFileChooser = false;

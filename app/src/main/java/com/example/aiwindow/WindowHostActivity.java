@@ -137,6 +137,17 @@ public class WindowHostActivity extends AppCompatActivity {
     }
 
     @Override
+    public void onMultiWindowModeChanged(boolean isInMultiWindowMode, android.content.res.Configuration newConfig) {
+        super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig);
+        // 小窗/分屏兜底：manifest 已声明 resizeableActivity=false，个别 ROM 手势仍强拆时立即收回
+        if (isInMultiWindowMode && !isFinishing()) {
+            Log.d(TAG, "entered multi-window mode, finishing host");
+            suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+            finish();
+        }
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
         Log.d(TAG, "onResume - hasWindowFocus=" + hasWindowFocus()

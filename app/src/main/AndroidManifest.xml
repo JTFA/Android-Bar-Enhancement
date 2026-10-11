@@ -114,6 +114,7 @@
             android:name=".WindowHostActivity"
             android:theme="@style/Theme.TransparentHost"
             android:exported="false"
+            android:resizeableActivity="false"
             android:excludeFromRecents="true"
             android:taskAffinity="com.example.aiwindow.floating"
             android:launchMode="singleTask" />
@@ -130,6 +131,7 @@
             android:theme="@style/Theme.BlurNoAnim"
             android:excludeFromRecents="true"
             android:exported="false"
+            android:resizeableActivity="false"
             android:taskAffinity="com.example.aiwindow.floating" />
 
         <activity
@@ -137,6 +139,7 @@
             android:theme="@style/Theme.TransparentNoAnimation"
             android:excludeFromRecents="true"
             android:exported="false"
+            android:resizeableActivity="false"
             android:taskAffinity="com.example.aiwindow.floating"
             android:configChanges="orientation|keyboardHidden|screenSize" />
 

@@ -335,8 +335,25 @@ public class BlurWindowActivity extends Activity {
     }
 
     @Override
+    public void onMultiWindowModeChanged(boolean isInMultiWindowMode, android.content.res.Configuration newConfig) {
+        super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig);
+        // 小窗/分屏兜底：manifest 已声明 resizeableActivity=false，个别 ROM 手势仍强拆时立即收回模糊层
+        if (isInMultiWindowMode && !isFinishing()) {
+            Log.d(TAG, "entered multi-window mode, finishing blur layer");
+            suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+            finish();
+        }
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
+        // 兜底：回调丢失时在 Resume 检测多窗口并收回
+        if (isInMultiWindowMode() && !isFinishing()) {
+            Log.d(TAG, "onResume: multi-window detected, finishing blur layer");
+            suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+            finish();
+        }
         // 兜底清理：当快捷方式点击启动外部应用后进程被冻结
         // 导致 fadeOutAndFinish 的 Handler 渐变动画未执行，
         // 进程恢复后 BlurWindowActivity 回到前台时在此处检测并自清理。
