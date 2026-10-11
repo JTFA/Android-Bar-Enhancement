@@ -138,7 +138,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // 总时长 = animDuration × expandSpringTotal；调节动画速度设置时整个时间轴
     // （含弹簧段）按 animDuration 等比缩放，即为纯速度缩放。
     private static final float EXPAND_SPRING_TA = 0.54f;     // 弹簧接管点（原曲线时间轴）
-    private static final float EXPAND_SPRING_ZETA = 0.52f;   // 阻尼比
+    private static final float EXPAND_SPRING_ZETA = 0.70f;   // 阻尼比
     private static final float EXPAND_SPRING_OMEGA = 5.2f;   // 归一化角频率（单位 = 1/animDuration）
     private boolean expandSpringReady = false;
     private float expandSpringA, expandSpringB, expandSpringWd, expandSpringTotal;
@@ -733,7 +733,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             overlayAlpha = prefs.getInt("overlay_alpha", 50);
             overlayColor = prefs.getString("overlay_color", "#000000");
             overlayAnimDuration = prefs.getInt("overlay_anim_duration", 100);
-            blurSyncMode = prefs.getInt("blur_sync_mode", 0);
+            // 模糊层同步模式：强制「均衡」档时忽略用户存储值（存储值不覆写，恢复开关后原档位生效）
+            // blur_sync_entries：0 精确同步 / 1 均衡 / 2 性能优先
+            blurSyncMode = AppConfig.BLUR_SYNC_FORCE_BALANCED ? 1 : prefs.getInt("blur_sync_mode", 0);
             Log.d(TAG, "已加载遮罩设置 - 透明度: " + overlayAlpha + "%, 颜色: " + overlayColor + ", 动画时长: " + overlayAnimDuration + "ms");
         } catch (Exception e) {
             Log.e(TAG, "加载遮罩设置失败", e);

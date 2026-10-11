@@ -30,6 +30,17 @@ public final class AppConfig {
      */
     public static final boolean DIAG_LOG_ENABLED = false;
 
+    /**
+     * 模糊层同步模式固定为「均衡」档
+     *
+     * true（默认）：
+     *  - 设置页隐藏「模糊层同步模式」整节（标题/说明/下拉框）
+     *  - 运行时强制使用「均衡」档（忽略已保存的 blur_sync_mode；
+     *    存储值不覆写，恢复开关后原保存档位原样生效）
+     * false：设置页显示该项，按用户所选档位运行（0 精确同步 / 1 均衡 / 2 性能优先）
+     */
+    public static final boolean BLUR_SYNC_FORCE_BALANCED = true;
+
     private AppConfig() {
     }
 }

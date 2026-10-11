@@ -263,6 +263,7 @@ public class SettingsActivity extends AppCompatActivity {
 
     private Spinner spinnerShortcutStyle;
     private Spinner spinnerBlurSyncMode;
+    private LinearLayout layoutBlurSyncMode;
     private SeekBar seekShortcutBlurRadius, seekShortcutOverlayAlpha;
     private TextView textShortcutBlurRadius, textShortcutOverlayAlpha;
     
@@ -311,6 +312,11 @@ public class SettingsActivity extends AppCompatActivity {
      * 功能代码未删除：把配置项改为 true 后重新编译即可恢复。
      */
     private void applyFeatureFlagVisibility() {
+        // 模糊层同步模式固定「均衡」档时隐藏整节（与 AI 总开关无关）
+        if (AppConfig.BLUR_SYNC_FORCE_BALANCED) {
+            layoutBlurSyncMode.setVisibility(View.GONE);
+        }
+
         if (AppConfig.AI_WINDOW_ENABLED) {
             return;
         }
@@ -503,6 +509,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         spinnerShortcutStyle = findViewById(R.id.spinner_shortcut_style);
         spinnerBlurSyncMode = findViewById(R.id.spinner_blur_sync_mode);
+        layoutBlurSyncMode = findViewById(R.id.layout_blur_sync_mode);
         seekShortcutBlurRadius = findViewById(R.id.seek_shortcut_blur_radius);
         seekShortcutOverlayAlpha = findViewById(R.id.seek_shortcut_overlay_alpha);
         textShortcutBlurRadius = findViewById(R.id.text_shortcut_blur_radius);

@@ -1960,32 +1960,40 @@
 
             </LinearLayout>
 
-            <!-- 模糊层同步模式：掉帧时按性能取舍同步精度 -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="模糊层同步模式"
-                android:textSize="14sp"
-                android:textColor="?attr/textPrimary"
-                android:layout_marginTop="8dp"
-                android:layout_marginBottom="4dp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="掉帧时切换：均衡档只在动画中段渲染模糊层（展开/收起 40%-60% 淡入淡出），性能优先档渲染时间最短（展开 60%-90% 按最终尺寸淡入、收起 5%-40% 淡出，模糊层不跟随缩放），带外完全不渲染"
-                android:textSize="12sp"
-                android:textColor="?attr/textHint"
-                android:layout_marginBottom="8dp" />
-
-            <Spinner
-                android:id="@+id/spinner_blur_sync_mode"
+            <!-- 模糊层同步模式：掉帧时按性能取舍同步精度（BLUR_SYNC_FORCE_BALANCED=true 时整节隐藏） -->
+            <LinearLayout
+                android:id="@+id/layout_blur_sync_mode"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:entries="@array/blur_sync_entries"
-                android:background="@drawable/spinner_background"
-                android:paddingHorizontal="12dp"
-                android:layout_marginBottom="8dp" />
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="模糊层同步模式"
+                    android:textSize="14sp"
+                    android:textColor="?attr/textPrimary"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="掉帧时切换：均衡档只在动画中段渲染模糊层（展开/收起 40%-60% 淡入淡出），性能优先档渲染时间最短（展开 60%-90% 按最终尺寸淡入、收起 5%-40% 淡出，模糊层不跟随缩放），带外完全不渲染"
+                    android:textSize="12sp"
+                    android:textColor="?attr/textHint"
+                    android:layout_marginBottom="8dp" />
+
+                <Spinner
+                    android:id="@+id/spinner_blur_sync_mode"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:entries="@array/blur_sync_entries"
+                    android:background="@drawable/spinner_background"
+                    android:paddingHorizontal="12dp"
+                    android:layout_marginBottom="8dp" />
+
+            </LinearLayout>
 
         </LinearLayout>
 
