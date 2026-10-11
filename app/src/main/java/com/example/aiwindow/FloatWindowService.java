@@ -234,6 +234,10 @@ public class FloatWindowService extends Service {
     private boolean clickOpenInWindow = false;
     private boolean doubleClickOpenInWindow = false;
     private boolean longPressOpenInWindow = false;
+    // 触发时振动开关
+    private boolean clickVibrate = false;
+    private boolean doubleClickVibrate = false;
+    private boolean longPressVibrate = false;
 
     // 点击窗口外关闭窗口设置
     private boolean closeOnOutsideClick = true; // 默认开启
@@ -765,6 +769,11 @@ public class FloatWindowService extends Service {
                 doubleClickOpenInWindow = intent.getBooleanExtra("double_click_open_in_window", false);
                 longPressOpenInWindow = intent.getBooleanExtra("long_press_open_in_window", false);
             }
+            if (intent.hasExtra("click_vibrate")) {
+                clickVibrate = intent.getBooleanExtra("click_vibrate", clickVibrate);
+                doubleClickVibrate = intent.getBooleanExtra("double_click_vibrate", doubleClickVibrate);
+                longPressVibrate = intent.getBooleanExtra("long_press_vibrate", longPressVibrate);
+            }
         }
         // 处理输入法避让设置更新
         else if (intent != null && "UPDATE_KEYBOARD_SETTINGS".equals(intent.getAction())) {
@@ -859,6 +868,10 @@ public class FloatWindowService extends Service {
                 clickOpenInWindow = intent.getBooleanExtra("click_open_in_window", clickOpenInWindow);
                 doubleClickOpenInWindow = intent.getBooleanExtra("double_click_open_in_window", doubleClickOpenInWindow);
                 longPressOpenInWindow = intent.getBooleanExtra("long_press_open_in_window", longPressOpenInWindow);
+
+                clickVibrate = intent.getBooleanExtra("click_vibrate", clickVibrate);
+                doubleClickVibrate = intent.getBooleanExtra("double_click_vibrate", doubleClickVibrate);
+                longPressVibrate = intent.getBooleanExtra("long_press_vibrate", longPressVibrate);
 
                 Log.d(TAG, "触发行为配置已更新: click=" + clickAction + " double=" + doubleClickAction + " long=" + longPressAction);
             }
@@ -1911,6 +1924,11 @@ public class FloatWindowService extends Service {
             return;
         }
 
+        // 触发振动：行为非「无」即振（与具体动作类型解耦，后续新增动作无需适配）
+        if (!ACTION_NONE.equals(action) && !TextUtils.isEmpty(action) && getGestureVibrate(gesture)) {
+            triggerShortVibrate();
+        }
+
         if (ACTION_NONE.equals(action)) {
             Log.d(TAG, gesture + " 行为：无");
             return;
@@ -1991,6 +2009,32 @@ public class FloatWindowService extends Service {
         else if ("double_click".equals(gesture)) return doubleClickOpenInWindow;
         else if ("long_press".equals(gesture)) return longPressOpenInWindow;
         return false;
+    }
+
+    /**
+     * 获取指定手势的「触发时振动」开关
+     */
+    private boolean getGestureVibrate(String gesture) {
+        if ("click".equals(gesture)) return clickVibrate;
+        else if ("double_click".equals(gesture)) return doubleClickVibrate;
+        else if ("long_press".equals(gesture)) return longPressVibrate;
+        return false;
+    }
+
+    /**
+     * 触发瞬间短促振动一下
+     */
+    private void triggerShortVibrate() {
+        try {
+            android.os.VibratorManager vm = (android.os.VibratorManager)
+                    getSystemService(VIBRATOR_MANAGER_SERVICE);
+            if (vm != null) {
+                vm.getDefaultVibrator().vibrate(
+                        android.os.VibrationEffect.createOneShot(30, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "vibrate failed: " + e);
+        }
     }
 
     /**
@@ -7469,6 +7513,11 @@ public class FloatWindowService extends Service {
             clickOpenInWindow = prefs.getBoolean("click_open_in_window", false);
             doubleClickOpenInWindow = prefs.getBoolean("double_click_open_in_window", false);
             longPressOpenInWindow = prefs.getBoolean("long_press_open_in_window", false);
+
+            // 加载触发时振动开关
+            clickVibrate = prefs.getBoolean("click_vibrate_enabled", false);
+            doubleClickVibrate = prefs.getBoolean("double_click_vibrate_enabled", false);
+            longPressVibrate = prefs.getBoolean("long_press_vibrate_enabled", false);
 
             // 加载动画速度
             animationDuration = prefs.getInt("anim_duration", animationDuration);

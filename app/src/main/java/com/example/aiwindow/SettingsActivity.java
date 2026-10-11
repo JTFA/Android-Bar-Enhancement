@@ -93,6 +93,11 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_DOUBLE_CLICK_OPEN_IN_WINDOW = "double_click_open_in_window";
     private static final String KEY_LONG_PRESS_OPEN_IN_WINDOW = "long_press_open_in_window";
     
+    // 触发时振动开关
+    private static final String KEY_CLICK_VIBRATE = "click_vibrate_enabled";
+    private static final String KEY_DOUBLE_CLICK_VIBRATE = "double_click_vibrate_enabled";
+    private static final String KEY_LONG_PRESS_VIBRATE = "long_press_vibrate_enabled";
+    
     // 行为类型常量
     private static final String ACTION_NONE = "none";
     private static final String ACTION_APP = "app";
@@ -200,6 +205,9 @@ public class SettingsActivity extends AppCompatActivity {
     private String longPressAppClass = "";
     private LinearLayout layoutClickOpenInWindow, layoutDoubleClickOpenInWindow, layoutLongPressOpenInWindow;
     private Switch switchClickOpenInWindow, switchDoubleClickOpenInWindow, switchLongPressOpenInWindow;
+    // 触发时振动开关
+    private LinearLayout layoutClickVibrate, layoutDoubleClickVibrate, layoutLongPressVibrate;
+    private Switch switchClickVibrate, switchDoubleClickVibrate, switchLongPressVibrate;
     // 启动配置行（URL Scheme / Intent Extra / 显式组件）
     private LinearLayout layoutClickLaunch, layoutDoubleClickLaunch, layoutLongPressLaunch;
     private TextView textClickLaunchSummary, textDoubleClickLaunchSummary, textLongPressLaunchSummary;
@@ -418,6 +426,14 @@ public class SettingsActivity extends AppCompatActivity {
         switchDoubleClickOpenInWindow = findViewById(R.id.switch_double_click_open_in_window);
         layoutLongPressOpenInWindow = findViewById(R.id.layout_long_press_open_in_window);
         switchLongPressOpenInWindow = findViewById(R.id.switch_long_press_open_in_window);
+        
+        // 触发时振动开关
+        layoutClickVibrate = findViewById(R.id.layout_click_vibrate);
+        switchClickVibrate = findViewById(R.id.switch_click_vibrate);
+        layoutDoubleClickVibrate = findViewById(R.id.layout_double_click_vibrate);
+        switchDoubleClickVibrate = findViewById(R.id.switch_double_click_vibrate);
+        layoutLongPressVibrate = findViewById(R.id.layout_long_press_vibrate);
+        switchLongPressVibrate = findViewById(R.id.switch_long_press_vibrate);
         
         // 启动配置行
         layoutClickLaunch = findViewById(R.id.layout_click_launch);
@@ -666,6 +682,11 @@ public class SettingsActivity extends AppCompatActivity {
         switchDoubleClickOpenInWindow.setChecked(preferences.getBoolean(KEY_DOUBLE_CLICK_OPEN_IN_WINDOW, false));
         switchLongPressOpenInWindow.setChecked(preferences.getBoolean(KEY_LONG_PRESS_OPEN_IN_WINDOW, false));
         
+        // 加载触发时振动开关
+        switchClickVibrate.setChecked(preferences.getBoolean(KEY_CLICK_VIBRATE, false));
+        switchDoubleClickVibrate.setChecked(preferences.getBoolean(KEY_DOUBLE_CLICK_VIBRATE, false));
+        switchLongPressVibrate.setChecked(preferences.getBoolean(KEY_LONG_PRESS_VIBRATE, false));
+        
         // 加载启动配置摘要
         updateLaunchConfigSummaries();
         
@@ -900,6 +921,11 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putBoolean(KEY_DOUBLE_CLICK_OPEN_IN_WINDOW, switchDoubleClickOpenInWindow.isChecked());
         editor.putBoolean(KEY_LONG_PRESS_OPEN_IN_WINDOW, switchLongPressOpenInWindow.isChecked());
         
+        // 保存触发时振动开关
+        editor.putBoolean(KEY_CLICK_VIBRATE, switchClickVibrate.isChecked());
+        editor.putBoolean(KEY_DOUBLE_CLICK_VIBRATE, switchDoubleClickVibrate.isChecked());
+        editor.putBoolean(KEY_LONG_PRESS_VIBRATE, switchLongPressVibrate.isChecked());
+        
         // 保存输入法避让设置
         editor.putInt(KEY_KEYBOARD_OFFSET, seekKeyboardOffset.getProgress());
         editor.putInt(KEY_KEYBOARD_ANIM_DURATION, seekKeyboardAnimDuration.getProgress());
@@ -1062,6 +1088,9 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("click_open_in_window", switchClickOpenInWindow.isChecked());
         sizeIntent.putExtra("double_click_open_in_window", switchDoubleClickOpenInWindow.isChecked());
         sizeIntent.putExtra("long_press_open_in_window", switchLongPressOpenInWindow.isChecked());
+        sizeIntent.putExtra("click_vibrate", switchClickVibrate.isChecked());
+        sizeIntent.putExtra("double_click_vibrate", switchDoubleClickVibrate.isChecked());
+        sizeIntent.putExtra("long_press_vibrate", switchLongPressVibrate.isChecked());
         sizeIntent.putExtra("use_expand_directly", switchUseExpandDirectly.isChecked());
         startService(sizeIntent);
         
@@ -1591,6 +1620,11 @@ public class SettingsActivity extends AppCompatActivity {
         spinnerDoubleClickAction.setOnItemSelectedListener(actionListener);
         spinnerLongPressAction.setOnItemSelectedListener(actionListener);
         
+        // 触发时振动开关 - 实时下发
+        switchClickVibrate.setOnCheckedChangeListener((buttonView, isChecked) -> applyCurrentSettings());
+        switchDoubleClickVibrate.setOnCheckedChangeListener((buttonView, isChecked) -> applyCurrentSettings());
+        switchLongPressVibrate.setOnCheckedChangeListener((buttonView, isChecked) -> applyCurrentSettings());
+        
         // 单击应用选择
         layoutClickApp.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -1823,6 +1857,9 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("click_open_in_window", switchClickOpenInWindow.isChecked());
         sizeIntent.putExtra("double_click_open_in_window", switchDoubleClickOpenInWindow.isChecked());
         sizeIntent.putExtra("long_press_open_in_window", switchLongPressOpenInWindow.isChecked());
+        sizeIntent.putExtra("click_vibrate", switchClickVibrate.isChecked());
+        sizeIntent.putExtra("double_click_vibrate", switchDoubleClickVibrate.isChecked());
+        sizeIntent.putExtra("long_press_vibrate", switchLongPressVibrate.isChecked());
         sizeIntent.putExtra("use_expand_directly", switchUseExpandDirectly.isChecked());
         startService(sizeIntent);
         
@@ -2311,6 +2348,9 @@ public class SettingsActivity extends AppCompatActivity {
         intent.putExtra("click_open_in_window", switchClickOpenInWindow.isChecked());
         intent.putExtra("double_click_open_in_window", switchDoubleClickOpenInWindow.isChecked());
         intent.putExtra("long_press_open_in_window", switchLongPressOpenInWindow.isChecked());
+        intent.putExtra("click_vibrate", switchClickVibrate.isChecked());
+        intent.putExtra("double_click_vibrate", switchDoubleClickVibrate.isChecked());
+        intent.putExtra("long_press_vibrate", switchLongPressVibrate.isChecked());
         startService(intent);
     }
     
@@ -2484,6 +2524,10 @@ public class SettingsActivity extends AppCompatActivity {
         layoutClickOpenInWindow.setVisibility(ACTION_APP.equals(clickAction) ? View.VISIBLE : View.GONE);
         layoutDoubleClickOpenInWindow.setVisibility(ACTION_APP.equals(doubleClickAction) ? View.VISIBLE : View.GONE);
         layoutLongPressOpenInWindow.setVisibility(ACTION_APP.equals(longPressAction) ? View.VISIBLE : View.GONE);
+        // 触发时振动开关：行为为「无」时隐藏（其余行为均显示；服务端对所有非「无」行为统一振动，新增动作无需适配）
+        layoutClickVibrate.setVisibility(ACTION_NONE.equals(clickAction) ? View.GONE : View.VISIBLE);
+        layoutDoubleClickVibrate.setVisibility(ACTION_NONE.equals(doubleClickAction) ? View.GONE : View.VISIBLE);
+        layoutLongPressVibrate.setVisibility(ACTION_NONE.equals(longPressAction) ? View.GONE : View.VISIBLE);
     }
 
     /**
