@@ -283,6 +283,18 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 初始隐藏根布局，避免系统默认的 Activity 转场淡入动画导致窗口透明度渐变
         rootLayout.setVisibility(View.INVISIBLE);
 
+        // 小窗检测（vivo 小窗不走标准多窗口回调，isInMultiWindowMode 恒为 false）：
+        // 本 Activity 恒全屏，窗口 bounds 变小即被拖入小窗/分屏 → 立即收回
+        getWindow().getDecorView().getViewTreeObserver().addOnGlobalLayoutListener(
+                new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+                    @Override
+                    public void onGlobalLayout() {
+                        if (isShrunkenWindow()) {
+                            exitMultiWindowUnsupported();
+                        }
+                    }
+                });
+
         // 5. 创建内容视图
         createContent();
 
@@ -381,16 +393,33 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
     }
 
+    private boolean multiWindowExitTriggered = false;
+
     /** 进入多窗口 = 手势强拆成功 → 提示并按现有收起流程关闭窗口 */
     private void exitMultiWindowUnsupported() {
         if (isFinishing()) return;
-        Log.d(TAG, "entered multi-window mode, closing window");
-        Toast.makeText(this, "不支持小窗/分屏模式", Toast.LENGTH_SHORT).show();
-        if (rootLayout != null) rootLayout.setVisibility(View.GONE);
-        BlurWindowActivity.fadeOutIfAlive();
-        sendRestoreBarBroadcast();
+        if (!multiWindowExitTriggered) {
+            multiWindowExitTriggered = true;
+            Log.d(TAG, "entered multi-window mode, closing window");
+            // 用 Application Context：Activity Context 的 Toast 会锚定在小窗内，而非屏幕底部
+            Toast.makeText(getApplicationContext(), "不支持小窗/分屏模式", Toast.LENGTH_SHORT).show();
+            if (rootLayout != null) rootLayout.setVisibility(View.GONE);
+            BlurWindowActivity.fadeOutIfAlive();
+            sendRestoreBarBroadcast();
+        }
+        // 关闭动作不被 multiWindowExitTriggered 屏蔽：分屏切换瞬间首次调用可能被 ROM 丢弃，
+        // 后续布局回调重试直至 isFinishing（Toast/收起视觉只播一次）
         suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+        // vivo 分屏下 finishAndRemoveTask 可能被忽略：先退到后台（同时退出分屏）再移除任务
+        moveTaskToBack(true);
         finishAndRemoveTask();
+    }
+
+    /** vivo 小窗不走标准多窗口回调（isInMultiWindowMode=false），用窗口尺寸识别：本窗口恒全屏，变小即小窗/分屏 */
+    private boolean isShrunkenWindow() {
+        android.graphics.Rect win = getWindowManager().getCurrentWindowMetrics().getBounds();
+        android.graphics.Rect max = getWindowManager().getMaximumWindowMetrics().getBounds();
+        return win.width() < max.width() * 0.92f || win.height() < max.height() * 0.92f;
     }
 
     @Override

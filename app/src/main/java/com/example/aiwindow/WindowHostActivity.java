@@ -75,6 +75,20 @@ public class WindowHostActivity extends AppCompatActivity {
         v.setBackgroundColor(Color.TRANSPARENT);
         setContentView(v);
 
+        // 小窗检测（vivo 小窗不走标准多窗口回调，isInMultiWindowMode 恒为 false）：
+        // 本 Activity 恒全屏，窗口 bounds 变小即被拖入小窗/分屏 → 立即收回
+        getWindow().getDecorView().getViewTreeObserver().addOnGlobalLayoutListener(
+                new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+                    @Override
+                    public void onGlobalLayout() {
+                        if (isShrunkenWindow() && !isFinishing()) {
+                            Log.d(TAG, "shrunken window detected (freeform?), finishing host");
+                            suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+                            finish();
+                        }
+                    }
+                });
+
         // Register back callback via OnBackPressedDispatcher (handles both button and gesture)
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -90,6 +104,13 @@ public class WindowHostActivity extends AppCompatActivity {
             suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
             finish();
         }
+    }
+
+    /** vivo 小窗不走标准多窗口回调（isInMultiWindowMode=false），用窗口尺寸识别：本窗口恒全屏，变小即小窗/分屏 */
+    private boolean isShrunkenWindow() {
+        android.graphics.Rect win = getWindowManager().getCurrentWindowMetrics().getBounds();
+        android.graphics.Rect max = getWindowManager().getMaximumWindowMetrics().getBounds();
+        return win.width() < max.width() * 0.92f || win.height() < max.height() * 0.92f;
     }
 
     private void handleBack() {
