@@ -2026,6 +2026,45 @@
 
             </LinearLayout>
 
+            <!-- 尝试消除第三方应用授权弹窗（隐藏 API windowingMode=1，可能被 ROM 静默拒绝） -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="尝试消除打开第三方应用授权弹窗"
+                        android:textSize="14sp"
+                        android:textColor="?attr/textPrimary" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="可能失败，若无法打开应用请关闭该开关"
+                        android:textSize="12sp"
+                        android:textColor="#9E9E9E" />
+
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/switch_try_fullscreen_windowing"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:thumbTint="?attr/colorPrimaryBrand"
+                    android:trackTint="#BDBDBD" />
+
+            </LinearLayout>
+
             <!-- 模糊层同步模式：掉帧时按性能取舍同步精度（BLUR_SYNC_FORCE_BALANCED=true 时整节隐藏） -->
             <LinearLayout
                 android:id="@+id/layout_blur_sync_mode"

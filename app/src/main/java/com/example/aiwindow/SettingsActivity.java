@@ -190,6 +190,7 @@ public class SettingsActivity extends AppCompatActivity {
     private Switch switchBackPrioritizeWebview; // 侧边返回手势行为
 
     private Switch switchUseExpandDirectly;
+    private Switch switchTryFullscreenWindowing;
     
     // 提示条触发行为配置
     private Spinner spinnerClickAction, spinnerDoubleClickAction, spinnerLongPressAction;
@@ -554,6 +555,7 @@ public class SettingsActivity extends AppCompatActivity {
         editCustomCss = findViewById(R.id.edit_custom_css);
         switchWebpageBgTransparent = findViewById(R.id.switch_webpage_bg_transparent);
         switchUseExpandDirectly = findViewById(R.id.switch_use_expand_directly);
+        switchTryFullscreenWindowing = findViewById(R.id.switch_try_fullscreen_windowing);
         
         // 顶部小横条透明度控件
         seekTopBarTransparency = findViewById(R.id.seek_top_bar_transparency);
@@ -873,6 +875,8 @@ public class SettingsActivity extends AppCompatActivity {
 
         boolean useExpand = preferences.getBoolean("use_expand_directly", false);
         switchUseExpandDirectly.setChecked(useExpand);
+        switchTryFullscreenWindowing.setChecked(
+                preferences.getBoolean("try_fullscreen_windowing", false));
         
         // 加载顶部小横条透明度
         int topBarTransparency = preferences.getInt(KEY_TOP_BAR_TRANSPARENCY, 40);
@@ -1049,6 +1053,7 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putInt(KEY_TOP_BAR_TRANSPARENCY, seekTopBarTransparency.getProgress());
 
         editor.putBoolean("use_expand_directly", switchUseExpandDirectly.isChecked());
+        editor.putBoolean("try_fullscreen_windowing", switchTryFullscreenWindowing.isChecked());
         
         // 提交保存
         editor.apply();
@@ -1180,6 +1185,7 @@ public class SettingsActivity extends AppCompatActivity {
         shortcutIntent.putExtra("shortcut_corner_radius", seekShortcutCornerRadius.getProgress());
         shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
         shortcutIntent.putExtra("shortcut_icon_corner", seekShortcutIconCorner.getProgress());
+        shortcutIntent.putExtra("try_fullscreen_windowing", switchTryFullscreenWindowing.isChecked());
         shortcutIntent.putExtra("shortcut_style", spinnerShortcutStyle.getSelectedItemPosition());
         shortcutIntent.putExtra("shortcut_blur_radius", seekShortcutBlurRadius.getProgress());
         shortcutIntent.putExtra("shortcut_overlay_alpha", seekShortcutOverlayAlpha.getProgress());
@@ -1696,6 +1702,8 @@ public class SettingsActivity extends AppCompatActivity {
         switchClickVibrate.setOnCheckedChangeListener((buttonView, isChecked) -> applyCurrentSettings());
         switchDoubleClickVibrate.setOnCheckedChangeListener((buttonView, isChecked) -> applyCurrentSettings());
         switchLongPressVibrate.setOnCheckedChangeListener((buttonView, isChecked) -> applyCurrentSettings());
+        // 尝试消除授权弹窗开关 - 实时下发（手势路径）
+        switchTryFullscreenWindowing.setOnCheckedChangeListener((buttonView, isChecked) -> applyCurrentSettings());
         
         // 单击应用选择
         layoutClickApp.setOnClickListener(new View.OnClickListener() {
@@ -1983,6 +1991,7 @@ public class SettingsActivity extends AppCompatActivity {
         shortcutIntent.putExtra("shortcut_corner_radius", seekShortcutCornerRadius.getProgress());
         shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
         shortcutIntent.putExtra("shortcut_icon_corner", seekShortcutIconCorner.getProgress());
+        shortcutIntent.putExtra("try_fullscreen_windowing", switchTryFullscreenWindowing.isChecked());
         shortcutIntent.putExtra("shortcut_style", spinnerShortcutStyle.getSelectedItemPosition());
         shortcutIntent.putExtra("shortcut_blur_radius", seekShortcutBlurRadius.getProgress());
         shortcutIntent.putExtra("shortcut_overlay_alpha", seekShortcutOverlayAlpha.getProgress());

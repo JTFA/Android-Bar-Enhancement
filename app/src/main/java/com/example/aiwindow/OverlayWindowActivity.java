@@ -1409,14 +1409,17 @@ public class OverlayWindowActivity extends AppCompatActivity {
             // 检查是否使用系统小窗打开
             SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
             ShortcutLaunchConfig config = ShortcutLaunchConfig.load(prefs, item.getId());
+            boolean tryFullscreen = prefs.getBoolean("try_fullscreen_windowing", false);
             if (config.openInWindow) {
                 Bundle bundle = new Bundle();
                 bundle.putInt("android.activity.windowingMode", 100);
                 startActivity(launchIntent, bundle);
-            } else {
+            } else if (tryFullscreen) {
                 Bundle bundle = new Bundle();
                 bundle.putInt("android.activity.windowingMode", 1);
                 startActivity(launchIntent, bundle);
+            } else {
+                startActivity(launchIntent);
             }
             Log.d(TAG, "已打开快捷方式: " + item.getName());
         } catch (android.content.ActivityNotFoundException e) {

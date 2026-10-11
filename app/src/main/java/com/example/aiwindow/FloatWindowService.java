@@ -173,6 +173,7 @@ public class FloatWindowService extends Service {
     private String shortcutBgColor = "#FFFFFF";
     private int shortcutIconSize = 100; // 图标大小百分比 50-150，默认 100%
     private int shortcutIconCorner = 16; // 图标圆角（图标边长百分比 0-50，连续曲率 superellipse）
+    private boolean tryFullscreenWindowing = false; // 尝试消除授权弹窗（windowingMode=1）
 
     // 双击检测相关
     private static final int DOUBLE_TAP_TIMEOUT = 300; // ms
@@ -795,6 +796,7 @@ public class FloatWindowService extends Service {
             shortcutCornerRadius = intent.getIntExtra("shortcut_corner_radius", shortcutCornerRadius);
             shortcutIconSize = intent.getIntExtra("shortcut_icon_size", shortcutIconSize);
             shortcutIconCorner = intent.getIntExtra("shortcut_icon_corner", shortcutIconCorner);
+        tryFullscreenWindowing = intent.getBooleanExtra("try_fullscreen_windowing", tryFullscreenWindowing);
             shortcutStyle = intent.getIntExtra("shortcut_style", shortcutStyle);
             shortcutBlurRadius = intent.getIntExtra("shortcut_blur_radius", shortcutBlurRadius);
             shortcutOverlayAlpha = intent.getIntExtra("shortcut_overlay_alpha", shortcutOverlayAlpha);
@@ -2050,7 +2052,7 @@ public class FloatWindowService extends Service {
 
         if (configIntent != null) {
             try {
-                startActivity(configIntent, windowingBundle(openInWindow));
+                startWithWindowing(configIntent, openInWindow);
                 Log.d(TAG, "已按启动配置打开 " + appName + " [" + ShortcutLaunchConfig.getModeDisplayName(config.launchMode) + "]");
                 return;
             } catch (Exception e) {
@@ -2068,7 +2070,7 @@ public class FloatWindowService extends Service {
                 fallback.setPackage(appPackage);
             }
             fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(fallback, windowingBundle(openInWindow));
+            startWithWindowing(fallback, openInWindow);
             Log.d(TAG, "已回退打开应用启动页: " + appName);
         } catch (Exception e) {
             Log.e(TAG, "打开应用失败: " + appName, e);
@@ -2076,11 +2078,24 @@ public class FloatWindowService extends Service {
         }
     }
 
-    /** 构建窗口模式 Bundle（100=系统小窗，5=全屏） */
-    private Bundle windowingBundle(boolean openInWindow) {
-        Bundle bundle = new Bundle();
-        bundle.putInt("android.activity.windowingMode", openInWindow ? 100 : 1);
-        return bundle;
+    /**
+     * 窗口模式启动应用：小窗=windowingMode 100；「尝试消除授权弹窗」开=mode 1（隐藏 API，可能被
+     * ROM 静默拒绝）；否则普通 startActivity（默认路径）
+     */
+    private void startWithWindowing(Intent intent, boolean openInWindow) {
+        Bundle bundle = null;
+        if (openInWindow) {
+            bundle = new Bundle();
+            bundle.putInt("android.activity.windowingMode", 100);
+        } else if (tryFullscreenWindowing) {
+            bundle = new Bundle();
+            bundle.putInt("android.activity.windowingMode", 1);
+        }
+        if (bundle != null) {
+            startActivity(intent, bundle);
+        } else {
+            startActivity(intent);
+        }
     }
 
     /**
@@ -2097,15 +2112,7 @@ public class FloatWindowService extends Service {
             launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
             launchIntent.setClassName(appPackage, appClass);
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-            if (openInWindow) {
-                Bundle bundle = new Bundle();
-                bundle.putInt("android.activity.windowingMode", 100);
-                startActivity(launchIntent, bundle);
-            } else {
-                Bundle bundle = new Bundle();
-                bundle.putInt("android.activity.windowingMode", 1);
-                startActivity(launchIntent, bundle);
-            }
+            startWithWindowing(launchIntent, openInWindow);
             Log.d(TAG, "已打开应用: " + appName + (openInWindow ? " (小窗)" : ""));
         } catch (Exception e) {
             Log.e(TAG, "打开应用失败: " + appName, e);
@@ -7552,6 +7559,7 @@ public class FloatWindowService extends Service {
             shortcutCornerRadius = prefs.getInt("shortcut_corner_radius", shortcutCornerRadius);
             shortcutIconSize = prefs.getInt("shortcut_icon_size", shortcutIconSize);
             shortcutIconCorner = prefs.getInt("shortcut_icon_corner", shortcutIconCorner);
+        tryFullscreenWindowing = prefs.getBoolean("try_fullscreen_windowing", tryFullscreenWindowing);
             shortcutStyle = prefs.getInt("shortcut_style", 0);
             shortcutBlurRadius = prefs.getInt("shortcut_blur_radius", 20);
             shortcutOverlayAlpha = prefs.getInt("shortcut_overlay_alpha", 180);
