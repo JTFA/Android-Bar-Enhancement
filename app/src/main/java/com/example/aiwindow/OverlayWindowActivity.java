@@ -418,7 +418,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
         Log.d(TAG, "onUserLeaveHint: mIsStartingFileChooser=" + mIsStartingFileChooser
                 + ", isFinishing=" + isFinishing());
         // 用户主动离开（Home键/最近任务/底部上滑手势）→ 销毁窗口
-        if (!mIsStartingFileChooser && !isFinishing()) {
+        // isCollapsing 时不自毁：收起动画收尾会统一 finish；中途自毁会在 OriginOS
+        // 留下映射到 MainActivity 的残留任务卡片
+        if (!mIsStartingFileChooser && !isFinishing() && !isCollapsing) {
             if (rootLayout != null) rootLayout.setVisibility(View.GONE);
             BlurWindowActivity.fadeOutIfAlive();
             sendRestoreBarBroadcast();
@@ -436,7 +438,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         Log.d(TAG, "onStop: mIsStartingFileChooser=" + mIsStartingFileChooser
                 + ", isFinishing=" + isFinishing()
                 + ", sPendingUploadCallback=" + (sPendingUploadCallback != null ? "SET" : "null"));
-        if (!mIsStartingFileChooser && !isFinishing()) {
+        if (!mIsStartingFileChooser && !isFinishing() && !isCollapsing) {
             if (rootLayout != null) rootLayout.setVisibility(View.GONE);
             BlurWindowActivity.fadeOutIfAlive();
             sendRestoreBarBroadcast();
