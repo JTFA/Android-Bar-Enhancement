@@ -234,6 +234,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private float initTranslationX, initTranslationY;
 
 
+    // ─── 待启动快捷方式（收起并销毁任务后由服务启动，对齐手势通道：启动瞬间无可见 Activity） ───
+    private ShortcutItem pendingShortcutItem = null;
+
     // ─── 屏幕尺寸（解析度无关像素，但 getRealMetrics 是 px） ───
     private int screenWidth, screenHeight;
 
@@ -1224,7 +1227,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 BlurWindowActivity.sShortcutLaunched = true;
                 BlurWindowActivity.fadeOutIfAlive();
             }
-            launchShortcutApp(item);
+            pendingShortcutItem = item;
             collapseAndFinish();
         });
 
@@ -2221,6 +2224,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     sendRestoreBarBroadcast();
                     suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
                     finishAndRemoveTask();
+                    // 任务销毁后由服务启动目标应用（与手势同通道，避免关联启动弹窗）；
+                    // 延迟一小段时间确保本任务已真正移除
+                    if (pendingShortcutItem != null) {
+                        final ShortcutItem toLaunch = pendingShortcutItem;
+                        pendingShortcutItem = null;
+                        new Handler(getMainLooper()).postDelayed(
+                                () -> launchShortcutApp(toLaunch), 150);
+                    }
                 }
             }
         });
