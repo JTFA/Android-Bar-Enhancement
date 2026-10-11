@@ -1063,7 +1063,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private void addShortcutContent(FrameLayout container) {
         ArrayList<ShortcutItem> shortcuts = loadShortcutList();
         if (shortcuts.isEmpty()) {
-            shortcuts = ShortcutItem.getDefaultShortcuts();
+            shortcuts = loadDefaultShortcuts();
         }
 
         int gridPadding = dpToPx(12);
@@ -1390,7 +1390,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
             String jsonStr = prefs.getString("shortcut_list", "");
             if (jsonStr.isEmpty()) {
-                return ShortcutItem.getDefaultShortcuts();
+                return loadDefaultShortcuts();
             }
             ArrayList<ShortcutItem> list = new ArrayList<>();
             JSONArray jsonArray = new JSONArray(jsonStr);
@@ -1400,9 +1400,57 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     list.add(item);
                 }
             }
-            return list.isEmpty() ? ShortcutItem.getDefaultShortcuts() : list;
+            return list.isEmpty() ? loadDefaultShortcuts() : list;
         } catch (Exception e) {
-            return ShortcutItem.getDefaultShortcuts();
+            return loadDefaultShortcuts();
+        }
+    }
+
+    /**
+     * 默认快捷方式 + 图标初始化。
+     * 默认项 iconType=image 但 iconPath 为空，必须先从 res/drawable 拷贝到内部存储并回填路径，
+     * 否则窗口占位渲染只会显示名称首字符（首次安装、未编辑过快捷方式时的现象）
+     */
+    private ArrayList<ShortcutItem> loadDefaultShortcuts() {
+        ArrayList<ShortcutItem> defaults = ShortcutItem.getDefaultShortcuts();
+        copyDefaultIconsToStorage(defaults);
+        return defaults;
+    }
+
+    /**
+     * 首次运行时，将 res/drawable/ 中的默认图标复制到内部存储（同 ShortcutEditActivity 实现）
+     */
+    private void copyDefaultIconsToStorage(ArrayList<ShortcutItem> list) {
+        File iconsDir = new File(getFilesDir(), "shortcut_icons");
+        if (!iconsDir.exists()) {
+            iconsDir.mkdirs();
+        }
+        for (ShortcutItem item : list) {
+            if (!"image".equals(item.getIconType())) continue;
+            if (!TextUtils.isEmpty(item.getIconPath())) continue;
+
+            int resId = getResources().getIdentifier(item.getId(), "drawable", getPackageName());
+            if (resId == 0) continue;
+
+            try {
+                File destFile = new File(iconsDir, item.getId() + ".png");
+                if (destFile.exists()) {
+                    item.setIconPath(destFile.getAbsolutePath());
+                    continue;
+                }
+                InputStream in = getResources().openRawResource(resId);
+                FileOutputStream out = new FileOutputStream(destFile);
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, bytesRead);
+                }
+                out.close();
+                in.close();
+                item.setIconPath(destFile.getAbsolutePath());
+            } catch (Exception e) {
+                Log.e(TAG, "复制默认图标失败: " + item.getId(), e);
+            }
         }
     }
 
