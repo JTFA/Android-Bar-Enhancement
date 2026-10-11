@@ -1792,7 +1792,7 @@
                 android:id="@+id/text_shortcut_icon_corner"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="图标圆角: 12dp"
+                android:text="图标圆角: 16%"
                 android:textSize="14sp"
                 android:textColor="?attr/textPrimary"
                 android:layout_marginBottom="8dp" />
@@ -1803,7 +1803,7 @@
                 android:layout_height="wrap_content"
                 android:min="0"
                 android:max="50"
-                android:progress="30"
+                android:progress="16"
                 android:layout_marginBottom="16dp" />
 
             <!-- 编辑快捷方式按钮 -->

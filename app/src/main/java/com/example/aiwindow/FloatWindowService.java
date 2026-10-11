@@ -172,7 +172,7 @@ public class FloatWindowService extends Service {
     private int shortcutCornerRadius = 24; // dp
     private String shortcutBgColor = "#FFFFFF";
     private int shortcutIconSize = 100; // 图标大小百分比 50-150，默认 100%
-    private int shortcutIconCorner = 12; // 图标圆角 dp，0=直角（连续曲率 superellipse）
+    private int shortcutIconCorner = 16; // 图标圆角（图标边长百分比 0-50，连续曲率 superellipse）
 
     // 双击检测相关
     private static final int DOUBLE_TAP_TIMEOUT = 300; // ms

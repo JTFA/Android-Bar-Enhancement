@@ -807,9 +807,9 @@ public class SettingsActivity extends AppCompatActivity {
         int shortcutIconSize = preferences.getInt(KEY_SHORTCUT_ICON_SIZE, 100);
         seekShortcutIconSize.setProgress(shortcutIconSize);
         textShortcutIconSize.setText("图标大小: " + shortcutIconSize + "%");
-        int shortcutIconCorner = preferences.getInt(KEY_SHORTCUT_ICON_CORNER, 12);
+        int shortcutIconCorner = preferences.getInt(KEY_SHORTCUT_ICON_CORNER, 16);
         seekShortcutIconCorner.setProgress(shortcutIconCorner);
-        textShortcutIconCorner.setText("图标圆角: " + shortcutIconCorner + "dp");
+        textShortcutIconCorner.setText("图标圆角: " + shortcutIconCorner + "%");
 
         int style = preferences.getInt(KEY_SHORTCUT_STYLE, 0);
         spinnerShortcutStyle.setSelection(style);
@@ -1602,7 +1602,7 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutIconCorner.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                textShortcutIconCorner.setText("图标圆角: " + progress + "dp");
+                textShortcutIconCorner.setText("图标圆角: " + progress + "%");
                 applyCurrentSettings();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}

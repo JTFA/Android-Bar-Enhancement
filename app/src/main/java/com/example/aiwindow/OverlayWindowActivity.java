@@ -159,7 +159,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private boolean closeOnOutside, backPrioritizeWebview;
     private String aiUrl;
     private int shortcutIconSize, shortcutStyle, shortcutBlurRadius, shortcutOverlayAlpha;
-    private int shortcutIconCorner = 12; // 图标圆角 dp，0=直角（连续曲率 superellipse）
+    private int shortcutIconCorner = 16; // 图标圆角（图标边长的百分比 0-50，连续曲率 superellipse）
 
     // ─── ColorOS 风格效果开关（默认开启，下次打开窗口生效） ───
     private boolean shortcutEdgeRefraction = true;   // 边缘折射光
@@ -655,7 +655,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             loadWebpageBgTransparentSetting();
         } else {
             shortcutIconSize = intent.getIntExtra(EXTRA_SHORTCUT_ICON_SIZE, 100);
-            shortcutIconCorner = intent.getIntExtra(EXTRA_SHORTCUT_ICON_CORNER, 12);
+            shortcutIconCorner = intent.getIntExtra(EXTRA_SHORTCUT_ICON_CORNER, 16);
             shortcutStyle = intent.getIntExtra(EXTRA_SHORTCUT_STYLE, 0);
             shortcutBlurRadius = intent.getIntExtra(EXTRA_SHORTCUT_BLUR_RADIUS, 20);
             shortcutOverlayAlpha = intent.getIntExtra(EXTRA_SHORTCUT_OVERLAY_ALPHA, 180);
@@ -1166,11 +1166,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         if ("image".equals(item.getIconType())) {
             // ===== 图片图标（连续曲率 superellipse 圆角，自绘替代 clipToOutline 圆弧拼接） =====
-            float cornerPx = dpToPx(shortcutIconCorner);
             SquircleIconView iconView;
             Bitmap bitmap = loadShortcutIcon(item);
             if (bitmap != null) {
-                iconView = new SquircleIconView(this, bitmap, 0, null, cornerPx, 0f);
+                iconView = new SquircleIconView(this, bitmap, 0, null, shortcutIconCorner, 0f);
             } else {
                 // 无自定义图片 → 纯色占位 + 名称首字符
                 String firstChar = item.getName() != null && item.getName().length() > 0
@@ -1180,7 +1179,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         Math.round(22 * iconScale),
                         getResources().getDisplayMetrics());
                 iconView = new SquircleIconView(this, null, getShortcutPlaceholderColor(item.getId()),
-                        firstChar, cornerPx, textPx);
+                        firstChar, shortcutIconCorner, textPx);
             }
             FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(iconSize, iconSize);
             iconParams.gravity = Gravity.CENTER;
@@ -1279,8 +1278,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
     }
 
     /**
-     * 连续曲率圆角图标视图（superellipse 超椭圆，n=5）
-     * 曲率沿边缘连续变化，替代 GradientDrawable/Outline 圆弧与直线的生硬拼接；
+     * 连续曲率圆角图标视图（全程 superellipse 超椭圆）
+     * 指数 n 随「圆角百分比」连续变化：0%→16（直角感）、25%→~5.5（squircle）、50%→2（正圆）；
+     * 曲线 C∞ 连续曲率，无直边-圆弧拼接；
      * 支持位图图标（CENTER_CROP 等效）与纯色占位 + 首字符两种绘制
      */
     private class SquircleIconView extends View {
@@ -1290,16 +1290,16 @@ public class OverlayWindowActivity extends AppCompatActivity {
         private final Bitmap iconBitmap;
         private final int placeholderColor;
         private final String placeholderText;
-        private final float cornerRadiusPx;
+        private final float cornerPercent;
         private final float textPx;
 
         SquircleIconView(Context context, Bitmap icon, int color, String text,
-                         float radiusPx, float textSizePx) {
+                         float percent, float textSizePx) {
             super(context);
             this.iconBitmap = icon;
             this.placeholderColor = color;
             this.placeholderText = text;
-            this.cornerRadiusPx = radiusPx;
+            this.cornerPercent = percent;
             this.textPx = textSizePx;
             shapePaint.setStyle(Paint.Style.FILL);
             if (text != null) {
@@ -1321,9 +1321,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         private void rebuild() {
             int w = getWidth(), h = getHeight();
             if (w <= 0 || h <= 0) return;
-            float r = Math.max(0f, Math.min(cornerRadiusPx, Math.min(w, h) / 2f));
-            squirclePath.reset();
-            buildSquirclePath(squirclePath, w, h, r);
+            buildSquirclePath(squirclePath, w, h, cornerPercent);
             if (iconBitmap != null) {
                 android.graphics.BitmapShader shader = new android.graphics.BitmapShader(
                         iconBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
@@ -1343,48 +1341,23 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
 
         /**
-         * 超椭圆采样：|x/a|^n + |y/b|^n = 1（n=5），每角 1/4 弧多点采样，
-         * 边缘切线与直边严格衔接、曲率连续变化（G∞），无圆弧拼接折痕；r=0 时退化为直角矩形
+         * 全程 superellipse 采样：|2x/w-1|^n + |2y/h-1|^n = 1
+         * n = 2 + 14×(1-t)²（t=百分比/50）：0%→16 直角感，25%→~5.5 squircle，50%→2 正圆；
+         * 曲线 C∞ 连续曲率，无拼接接缝
          */
-        private void buildSquirclePath(Path p, int w, int h, float r) {
-            if (r < 0.5f) {
-                p.addRect(0, 0, w, h, Path.Direction.CW);
-                return;
-            }
-            final float n = 5f;
-            final int segments = 24;
-            p.moveTo(r, 0);
-            p.lineTo(w - r, 0);
-            // 右上角：(w-r,0) 水平切线 → (w,r) 竖直切线
-            for (int i = 1; i <= segments; i++) {
-                double u = Math.sin(Math.PI / 2 * i / segments);
-                float px = (float) (r * u);
-                float py = (float) (r - r * Math.pow(1 - Math.pow(u, n), 1 / n));
-                p.lineTo(w - r + px, py);
-            }
-            p.lineTo(w, h - r);
-            // 右下角（右上角旋转 90°）
-            for (int i = 1; i <= segments; i++) {
-                double u = Math.sin(Math.PI / 2 * i / segments);
-                float px = (float) (r * u);
-                float py = (float) (r - r * Math.pow(1 - Math.pow(u, n), 1 / n));
-                p.lineTo(w - py, h - r + px);
-            }
-            p.lineTo(r, h);
-            // 左下角（旋转 180°）
-            for (int i = 1; i <= segments; i++) {
-                double u = Math.sin(Math.PI / 2 * i / segments);
-                float px = (float) (r * u);
-                float py = (float) (r - r * Math.pow(1 - Math.pow(u, n), 1 / n));
-                p.lineTo(r - px, h - py);
-            }
-            p.lineTo(0, r);
-            // 左上角（旋转 270°）
-            for (int i = 1; i <= segments; i++) {
-                double u = Math.sin(Math.PI / 2 * i / segments);
-                float px = (float) (r * u);
-                float py = (float) (r - r * Math.pow(1 - Math.pow(u, n), 1 / n));
-                p.lineTo(py, r - px);
+        private void buildSquirclePath(Path p, int w, int h, float percent) {
+            float t = Math.max(0f, Math.min(percent / 50f, 1f));
+            float n = 2f + 14f * (1f - t) * (1f - t);
+            float exp = 2f / n;
+            float cx = w / 2f, cy = h / 2f;
+            final int segments = 96;
+            p.reset();
+            for (int i = 0; i < segments; i++) {
+                double theta = 2 * Math.PI * i / segments;
+                double c = Math.cos(theta), s = Math.sin(theta);
+                float x = (float) (cx + Math.signum(c) * Math.pow(Math.abs(c), exp) * cx);
+                float y = (float) (cy + Math.signum(s) * Math.pow(Math.abs(s), exp) * cy);
+                if (i == 0) p.moveTo(x, y); else p.lineTo(x, y);
             }
             p.close();
         }
