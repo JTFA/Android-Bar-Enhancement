@@ -796,7 +796,7 @@ public class FloatWindowService extends Service {
             shortcutCornerRadius = intent.getIntExtra("shortcut_corner_radius", shortcutCornerRadius);
             shortcutIconSize = intent.getIntExtra("shortcut_icon_size", shortcutIconSize);
             shortcutIconCorner = intent.getIntExtra("shortcut_icon_corner", shortcutIconCorner);
-        tryFullscreenWindowing = intent.getBooleanExtra("try_fullscreen_windowing", tryFullscreenWindowing);
+            tryFullscreenWindowing = intent.getBooleanExtra("try_fullscreen_windowing", tryFullscreenWindowing);
             shortcutStyle = intent.getIntExtra("shortcut_style", shortcutStyle);
             shortcutBlurRadius = intent.getIntExtra("shortcut_blur_radius", shortcutBlurRadius);
             shortcutOverlayAlpha = intent.getIntExtra("shortcut_overlay_alpha", shortcutOverlayAlpha);
@@ -810,6 +810,25 @@ public class FloatWindowService extends Service {
                         collapseShortcutWindowInternal();
                     }
                 });
+            }
+        }
+        // 快捷窗口格子点击请求：由服务上下文启动应用（Overlay 即将 finish 时直接
+        // startActivity 会被 OEM 静默拦截，不弹窗不抛异常）
+        else if (intent != null && "LAUNCH_APP".equals(intent.getAction())) {
+            Intent launchIntent = intent.getParcelableExtra("launch_intent");
+            boolean openInWindow = intent.getBooleanExtra("open_in_window", false);
+            String appName = intent.getStringExtra("app_name");
+            if (launchIntent == null) {
+                Log.e(TAG, "LAUNCH_APP 缺少 launch_intent");
+            } else {
+                try {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startWithWindowing(launchIntent, openInWindow);
+                    Log.d(TAG, "格子点击已启动: " + appName);
+                } catch (Exception e) {
+                    Log.e(TAG, "格子点击打开应用失败: " + appName, e);
+                    Toast.makeText(this, "打开 " + appName + " 失败", Toast.LENGTH_SHORT).show();
+                }
             }
         }
         // 处理 AI URL 更新请求
@@ -5523,20 +5542,12 @@ public class FloatWindowService extends Service {
             return;
         }
 
+        android.content.SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
+        ShortcutLaunchConfig config = ShortcutLaunchConfig.load(prefs, item.getId());
         try {
             Intent launchIntent = createShortcutLaunchIntent(item);
-            // 检查是否使用系统小窗打开
-            android.content.SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
-            ShortcutLaunchConfig config = ShortcutLaunchConfig.load(prefs, item.getId());
-            if (config.openInWindow) {
-                Bundle bundle = new Bundle();
-                bundle.putInt("android.activity.windowingMode", 100);
-                startActivity(launchIntent, bundle);
-            } else {
-                Bundle bundle = new Bundle();
-                bundle.putInt("android.activity.windowingMode", 1);
-                startActivity(launchIntent, bundle);
-            }
+            // 与手势路径共用 startWithWindowing：小窗=mode100 / 开关开=mode1 / 默认普通启动
+            startWithWindowing(launchIntent, config.openInWindow);
             Log.d(TAG, "已打开快捷方式: " + item.getName());
 
             // 打开应用后收起快捷方式窗口
@@ -5549,7 +5560,7 @@ public class FloatWindowService extends Service {
                 fallbackIntent.addCategory(Intent.CATEGORY_LAUNCHER);
                 fallbackIntent.setPackage(item.getPackageName());
                 fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(fallbackIntent);
+                startWithWindowing(fallbackIntent, config.openInWindow);
                 Log.d(TAG, "已打开应用主界面: " + item.getName());
                 collapseToBottomBar();
             } catch (Exception e2) {

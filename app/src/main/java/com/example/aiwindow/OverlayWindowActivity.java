@@ -234,9 +234,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private float initTranslationX, initTranslationY;
 
 
-    // ─── 待启动快捷方式（收起动画完成后启动，避免 startActivity 立即触发 onUserLeaveHint 中断动画） ───
-    private ShortcutItem pendingShortcutItem = null;
-
     // ─── 屏幕尺寸（解析度无关像素，但 getRealMetrics 是 px） ───
     private int screenWidth, screenHeight;
 
@@ -1216,7 +1213,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
         cell.addView(nameView);
 
         // 点击事件（使用 ShortcutLaunchConfig 启动，与服务行为一致）
-        // 注意：将应用启动延迟到收起动画完成后，避免 startActivity 立即触发 onUserLeaveHint 中断动画
+        // 注意：点击瞬间立即发服务启动应用（服务上下文不被 OEM 拦截），收起动画在其上方继续，
+        // 结束后直接露出目标应用，避免先回桌面再打开导致的闪屏
         cell.setOnClickListener(v -> {
             // 拖动过窗口则抑制本次点击，避免拖动松手时误启动应用
             if (gestureController != null && gestureController.dragMoved) return;
@@ -1226,7 +1224,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 BlurWindowActivity.sShortcutLaunched = true;
                 BlurWindowActivity.fadeOutIfAlive();
             }
-            pendingShortcutItem = item;
+            launchShortcutApp(item);
             collapseAndFinish();
         });
 
@@ -1406,35 +1404,16 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
         try {
             Intent launchIntent = createShortcutLaunchIntent(item);
-            // 检查是否使用系统小窗打开
             SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
             ShortcutLaunchConfig config = ShortcutLaunchConfig.load(prefs, item.getId());
-            boolean tryFullscreen = prefs.getBoolean("try_fullscreen_windowing", false);
-            if (config.openInWindow) {
-                Bundle bundle = new Bundle();
-                bundle.putInt("android.activity.windowingMode", 100);
-                startActivity(launchIntent, bundle);
-            } else if (tryFullscreen) {
-                Bundle bundle = new Bundle();
-                bundle.putInt("android.activity.windowingMode", 1);
-                startActivity(launchIntent, bundle);
-            } else {
-                startActivity(launchIntent);
-            }
-            Log.d(TAG, "已打开快捷方式: " + item.getName());
-        } catch (android.content.ActivityNotFoundException e) {
-            Log.w(TAG, "URL Scheme 打开失败，尝试打开应用主界面: " + item.getName(), e);
-            try {
-                Intent fallbackIntent = new Intent(Intent.ACTION_MAIN);
-                fallbackIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-                fallbackIntent.setPackage(item.getPackageName());
-                fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(fallbackIntent);
-                Log.d(TAG, "已打开应用主界面: " + item.getName());
-            } catch (Exception e2) {
-                Log.e(TAG, "打开快捷方式失败: " + item.getName(), e2);
-                Toast.makeText(this, "打开 " + item.getName() + " 失败", Toast.LENGTH_SHORT).show();
-            }
+            // 交给服务启动：与手势路径共用 startWithWindowing（小窗/开关/普通启动逻辑统一）
+            Intent svc = new Intent(this, FloatWindowService.class);
+            svc.setAction("LAUNCH_APP");
+            svc.putExtra("launch_intent", launchIntent);
+            svc.putExtra("open_in_window", config.openInWindow);
+            svc.putExtra("app_name", item.getName());
+            startService(svc);
+            Log.d(TAG, "已请求服务打开快捷方式: " + item.getName());
         } catch (Exception e) {
             Log.e(TAG, "打开快捷方式失败: " + item.getName(), e);
             Toast.makeText(this, "打开 " + item.getName() + " 失败", Toast.LENGTH_SHORT).show();
@@ -2239,10 +2218,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         webView.setAlpha(0f);
                     }
                     // 如果有待启动的快捷方式，在此启动
-                    if (pendingShortcutItem != null) {
-                        launchShortcutApp(pendingShortcutItem);
-                        pendingShortcutItem = null;
-                    }
                     sendRestoreBarBroadcast();
                     suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
                     finishAndRemoveTask();
