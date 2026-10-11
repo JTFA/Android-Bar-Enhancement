@@ -162,6 +162,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
     // ─── ColorOS 风格效果开关（默认开启，下次打开窗口生效） ───
     private boolean shortcutEdgeRefraction = true;   // 边缘折射光
     private boolean shortcutFingerGlow = true;       // 手指光晕跟随
+    private int fingerGlowBrightness = 27;           // 光晕亮度（中心 alpha 百分比，27 ≈ 原固定值 70/255）
+    private int fingerGlowSize = 100;                // 光晕范围（相对基础半径的百分比缩放）
     private boolean shortcutDragStretch = true;      // 拖动灵动拉伸回弹
     private int shortcutEdgeBandDp = 4;              // 边缘光可见带宽 (dp)
     private int shortcutEdgeOpacity = 48;            // 边缘光透明度 (%)
@@ -677,6 +679,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
             shortcutDragStretch = prefs.getBoolean("shortcut_drag_stretch", true);
             shortcutEdgeBandDp = prefs.getInt("shortcut_edge_band_dp", 4);
             shortcutEdgeOpacity = prefs.getInt("shortcut_edge_opacity", 48);
+            fingerGlowBrightness = prefs.getInt("finger_glow_brightness", 27);
+            fingerGlowSize = prefs.getInt("finger_glow_size", 100);
         } catch (Exception e) {
             Log.e(TAG, "加载快捷方式效果开关失败", e);
         }
@@ -2857,11 +2861,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
         @Override
         protected void onSizeChanged(int w, int h, int oldw, int oldh) {
             super.onSizeChanged(w, h, oldw, oldh);
-            glowRadius = Math.round(Math.max(dpToPx(100),
+            // 基础半径按窗口尺寸自适应，再乘以「光晕范围」百分比缩放（默认 100% = 原行为）
+            float baseRadius = Math.round(Math.max(dpToPx(100),
                     Math.min(dpToPx(140), Math.min(w, h) * 0.6f)));
+            glowRadius = baseRadius * fingerGlowSize / 100f;
+            // 中心 alpha 由「光晕亮度」百分比决定（默认 27% ≈ 原固定值 70）
+            int centerAlpha = Math.round(255 * fingerGlowBrightness / 100f);
             // 以 (0,0) 为圆心创建 shader，绘制时平移到指针位置，避免每次移动都分配对象
             glowPaint.setShader(new RadialGradient(0, 0, glowRadius,
-                    Color.argb(70, 255, 255, 255),
+                    Color.argb(centerAlpha, 255, 255, 255),
                     Color.argb(0, 255, 255, 255),
                     Shader.TileMode.CLAMP));
         }

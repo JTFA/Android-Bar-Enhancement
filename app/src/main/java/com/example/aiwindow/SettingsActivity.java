@@ -137,6 +137,9 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_SHORTCUT_ICON_SIZE = "shortcut_icon_size";
     private static final String KEY_SHORTCUT_EDGE_BAND = "shortcut_edge_band_dp";
     private static final String KEY_SHORTCUT_EDGE_OPACITY = "shortcut_edge_opacity";
+    // 手指光晕参数
+    private static final String KEY_FINGER_GLOW_BRIGHTNESS = "finger_glow_brightness";
+    private static final String KEY_FINGER_GLOW_SIZE = "finger_glow_size";
 
     private static final String KEY_SHORTCUT_STYLE = "shortcut_style";
     private static final String KEY_BLUR_SYNC_MODE = "blur_sync_mode";
@@ -282,6 +285,10 @@ public class SettingsActivity extends AppCompatActivity {
     private LinearLayout containerShortcutEdgeSettings;
     private SeekBar seekShortcutEdgeBand, seekShortcutEdgeOpacity;
     private TextView textShortcutEdgeBand, textShortcutEdgeOpacity;
+    // 手指光晕参数
+    private LinearLayout containerFingerGlowSettings;
+    private SeekBar seekFingerGlowBrightness, seekFingerGlowSize;
+    private TextView textFingerGlowBrightness, textFingerGlowSize;
     
     // 顶部小横条透明度控件
     private SeekBar seekTopBarTransparency;
@@ -526,6 +533,12 @@ public class SettingsActivity extends AppCompatActivity {
         textShortcutEdgeBand = findViewById(R.id.text_shortcut_edge_band);
         seekShortcutEdgeOpacity = findViewById(R.id.seek_shortcut_edge_opacity);
         textShortcutEdgeOpacity = findViewById(R.id.text_shortcut_edge_opacity);
+        // 手指光晕参数
+        containerFingerGlowSettings = findViewById(R.id.container_finger_glow_settings);
+        seekFingerGlowBrightness = findViewById(R.id.seek_finger_glow_brightness);
+        textFingerGlowBrightness = findViewById(R.id.text_finger_glow_brightness);
+        seekFingerGlowSize = findViewById(R.id.seek_finger_glow_size);
+        textFingerGlowSize = findViewById(R.id.text_finger_glow_size);
 
         // AI 窗口模糊效果控件
         spinnerAiStyle = findViewById(R.id.spinner_ai_style);
@@ -814,6 +827,14 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutEdgeOpacity.setProgress(edgeOpacity);
         textShortcutEdgeOpacity.setText("边缘光透明度: " + edgeOpacity + "%");
         updateEdgeSettingsVisibility(switchShortcutEdgeRefraction.isChecked());
+        // 加载手指光晕参数
+        int glowBrightness = preferences.getInt(KEY_FINGER_GLOW_BRIGHTNESS, 27);
+        seekFingerGlowBrightness.setProgress(glowBrightness);
+        textFingerGlowBrightness.setText("光晕亮度: " + glowBrightness + "%");
+        int glowSize = preferences.getInt(KEY_FINGER_GLOW_SIZE, 100);
+        seekFingerGlowSize.setProgress(glowSize);
+        textFingerGlowSize.setText("光晕范围: " + glowSize + "%");
+        updateFingerGlowSettingsVisibility(switchShortcutFingerGlow.isChecked());
         
         // 加载 AI 窗口模糊效果设置
         int aiStyle = preferences.getInt(KEY_AI_STYLE, 0);
@@ -992,6 +1013,9 @@ public class SettingsActivity extends AppCompatActivity {
         // 保存边缘光参数
         editor.putInt(KEY_SHORTCUT_EDGE_BAND, seekShortcutEdgeBand.getProgress());
         editor.putInt(KEY_SHORTCUT_EDGE_OPACITY, seekShortcutEdgeOpacity.getProgress());
+        // 保存手指光晕参数
+        editor.putInt(KEY_FINGER_GLOW_BRIGHTNESS, seekFingerGlowBrightness.getProgress());
+        editor.putInt(KEY_FINGER_GLOW_SIZE, seekFingerGlowSize.getProgress());
         
         // 保存 AI 窗口模糊效果设置
         editor.putInt(KEY_AI_STYLE, spinnerAiStyle.getSelectedItemPosition());
@@ -1581,9 +1605,29 @@ public class SettingsActivity extends AppCompatActivity {
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
+        // 手指光晕参数 - 仅更新文案（保存后下次开窗生效）
+        seekFingerGlowBrightness.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textFingerGlowBrightness.setText("光晕亮度: " + progress + "%");
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        seekFingerGlowSize.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textFingerGlowSize.setText("光晕范围: " + progress + "%");
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
         // 边缘折射光开关控制边缘光参数显隐
         switchShortcutEdgeRefraction.setOnCheckedChangeListener((buttonView, isChecked) ->
                 updateEdgeSettingsVisibility(isChecked));
+        // 手指光晕开关控制光晕参数显隐
+        switchShortcutFingerGlow.setOnCheckedChangeListener((buttonView, isChecked) ->
+                updateFingerGlowSettingsVisibility(isChecked));
 
         // 编辑快捷方式内容按钮
         btnEditShortcuts.setOnClickListener(new View.OnClickListener() {
@@ -1777,6 +1821,15 @@ public class SettingsActivity extends AppCompatActivity {
     private void updateEdgeSettingsVisibility(boolean enabled) {
         if (containerShortcutEdgeSettings != null) {
             containerShortcutEdgeSettings.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    /**
+     * 手指光晕参数仅在手指光晕开启时显示
+     */
+    private void updateFingerGlowSettingsVisibility(boolean enabled) {
+        if (containerFingerGlowSettings != null) {
+            containerFingerGlowSettings.setVisibility(enabled ? View.VISIBLE : View.GONE);
         }
     }
     
