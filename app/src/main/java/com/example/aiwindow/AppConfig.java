@@ -51,6 +51,17 @@ public final class AppConfig {
      */
     public static final boolean CUSTOM_WINDOWING_MODE_ENABLED = true;
 
+    /**
+     * 快捷窗口「位置Y」底边锚定高度（dp，等于最大高度设置的默认值 350）
+     *
+     * 快捷窗口底边位置 = 屏幕中心 + 2×positionY + 本常数/2，
+     * 只依赖 positionY 与本常数，不随「快捷窗口最大高度」设置变化：
+     *  - 调节最大高度 → 窗口不再上下移动（仅改变可增长上限/滚动阈值）
+     *  - 图标行数增多 → 窗口向上增长、底边不动；超高后转滚动
+     * 默认设置（350dp）下与历史行为完全一致。
+     */
+    public static final int DEFAULT_SHORTCUT_WINDOW_HEIGHT_DP = 350;
+
     private AppConfig() {
     }
 }

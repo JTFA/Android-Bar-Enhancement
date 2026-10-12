@@ -4795,7 +4795,13 @@ public class FloatWindowService extends Service {
                     | WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED;
 
             int requiredWidth = Math.max(screenWidth, 4 * Math.abs(0) + dpToPx(shortcutWindowWidth));
-            int requiredHeight = Math.max(screenHeight, 4 * Math.abs(shortcutWindowPositionY) + dpToPx(shortcutWindowHeight));
+            // 底边锚定公式（topMargin = posY + (锚定K - 实际高h)/4）下父容器需容纳
+            // 顶部越界项 2h-K，故表面高度 = 4*|posY| + max(K, 2*maxH-K)
+            // （K=默认高度350dp；maxH=350 时与旧值 4*|posY|+maxH 完全相同，仅增不减）
+            int anchorHeightPx = dpToPx(AppConfig.DEFAULT_SHORTCUT_WINDOW_HEIGHT_DP);
+            int requiredHeight = Math.max(screenHeight,
+                    4 * Math.abs(shortcutWindowPositionY)
+                            + Math.max(anchorHeightPx, 2 * dpToPx(shortcutWindowHeight) - anchorHeightPx));
 
             barLayoutParams.x = 0;
             barLayoutParams.y = 0;
@@ -5124,8 +5130,10 @@ public class FloatWindowService extends Service {
         int maxHeight = dpToPx(shortcutWindowHeight);
         int actualHeight = Math.min(contentHeight, maxHeight);
 
-        // 计算调整后的Y位置，使窗口下边缘不随内容行数变化
-        int adjustedTopMargin = shortcutWindowPositionY + (maxHeight - actualHeight) / 4;
+        // 计算调整后的Y位置，使窗口下边缘不随内容行数及「最大高度」设置变化
+        // （只由 positionY + 锚定常数 350dp 决定，见 AppConfig.DEFAULT_SHORTCUT_WINDOW_HEIGHT_DP）
+        int adjustedTopMargin = shortcutWindowPositionY
+                + (dpToPx(AppConfig.DEFAULT_SHORTCUT_WINDOW_HEIGHT_DP) - actualHeight) / 4;
 
         // ===== 2. 最外层内容容器 =====
         FrameLayout contentContainer = new FrameLayout(this);

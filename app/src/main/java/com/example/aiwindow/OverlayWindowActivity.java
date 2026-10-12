@@ -1139,11 +1139,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         // 调整容器高度为实际内容高度
         FrameLayout.LayoutParams containerLp = (FrameLayout.LayoutParams) container.getLayoutParams();
-        int originalTargetHeight = this.targetHeight;
         this.targetHeight = actualHeight;
         containerLp.height = actualHeight;
-        // 底部位置固定：当高度缩小时，将窗口向上偏移 (originalMaxHeight - actualHeight) / 4
-        int adjustedTopMargin = targetPosY + (originalTargetHeight - actualHeight) / 4;
+        // 底部位置固定：只由 positionY + 锚定常数（默认最大高度 350dp）决定，
+        // 不随「快捷窗口最大高度」设置变化；高度缩小时向上偏移 (锚定 - actualHeight)/4
+        int adjustedTopMargin = targetPosY
+                + (dpToPx(AppConfig.DEFAULT_SHORTCUT_WINDOW_HEIGHT_DP) - actualHeight) / 4;
         containerLp.topMargin = adjustedTopMargin;
         containerLp.bottomMargin = -adjustedTopMargin;
         container.setLayoutParams(containerLp);
