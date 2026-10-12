@@ -2108,7 +2108,7 @@ public class FloatWindowService extends Service {
             bundle.putInt("android.activity.windowingMode", 100);
         } else if (tryFullscreenWindowing) {
             bundle = new Bundle();
-            bundle.putInt("android.activity.windowingMode", 1);
+            bundle.putInt("android.activity.windowingMode", 6);
         }
         if (bundle != null) {
             startActivity(intent, bundle);
