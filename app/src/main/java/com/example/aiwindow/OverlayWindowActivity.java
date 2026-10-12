@@ -1110,8 +1110,12 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 View.MeasureSpec.makeMeasureSpec(containerWidth, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         int contentHeight = grid.getMeasuredHeight();
-        // actualHeight 以内容高度为准，超过 maxHeight 则锁定 maxHeight
-        int actualHeight = Math.min(contentHeight + gridPadding, maxHeight);
+        // 滚动判定只看内容是否真实超过 maxHeight（contentHeight 已含 grid 上下 padding，
+        // 此前 +gridPadding 双重计数导致临界区误入滚动路径：contentRange=0 的幻影滚动/间距突变）
+        boolean needScroll = contentHeight > maxHeight;
+        // 未超限：内容高 + 额外呼吸空间；超限：锁定最大高度
+        int actualHeight = needScroll ? maxHeight
+                : Math.min(contentHeight + gridPadding, maxHeight);
 
         // 调整容器高度为实际内容高度
         FrameLayout.LayoutParams containerLp = (FrameLayout.LayoutParams) container.getLayoutParams();
@@ -1142,9 +1146,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             }
         });
 
-        // 添加内容视图（超出最大高度时允许滚动）
+        // 添加内容视图（内容真实超过最大高度时才允许滚动）
         View contentView;
-        if (contentHeight + gridPadding > maxHeight) {
+        if (needScroll) {
             BounceScrollView scrollView = new BounceScrollView(this);
             scrollView.setLayoutParams(new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
