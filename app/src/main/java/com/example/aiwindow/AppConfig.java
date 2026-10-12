@@ -41,6 +41,16 @@ public final class AppConfig {
      */
     public static final boolean BLUR_SYNC_FORCE_BALANCED = true;
 
+    /**
+     * 「自定义 android.activity.windowingMode」输入框开关
+     *
+     * true ：在「尝试消除打开第三方应用授权弹窗」开关下方显示输入框，
+     *        用户可输入整数 windowingMode（不输入默认 6），打开失败时
+     *        自动回退普通 startActivity 并弹 toast 提示。
+     * false（默认）：不显示该输入框，行为与不填该项相同（固定默认值 6）。
+     */
+    public static final boolean CUSTOM_WINDOWING_MODE_ENABLED = true;
+
     private AppConfig() {
     }
 }

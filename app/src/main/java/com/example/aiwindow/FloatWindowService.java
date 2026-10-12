@@ -173,7 +173,8 @@ public class FloatWindowService extends Service {
     private String shortcutBgColor = "#FFFFFF";
     private int shortcutIconSize = 100; // 图标大小百分比 50-150，默认 100%
     private int shortcutIconCorner = 16; // 图标圆角（图标边长百分比 0-50，连续曲率 superellipse）
-    private boolean tryFullscreenWindowing = false; // 尝试消除授权弹窗（windowingMode=1）
+    private boolean tryFullscreenWindowing = false; // 尝试消除授权弹窗（windowingMode 自定义）
+    private int customWindowingMode = 6; // 自定义 windowingMode，不输入时默认 6
 
     // 双击检测相关
     private static final int DOUBLE_TAP_TIMEOUT = 300; // ms
@@ -797,6 +798,7 @@ public class FloatWindowService extends Service {
             shortcutIconSize = intent.getIntExtra("shortcut_icon_size", shortcutIconSize);
             shortcutIconCorner = intent.getIntExtra("shortcut_icon_corner", shortcutIconCorner);
             tryFullscreenWindowing = intent.getBooleanExtra("try_fullscreen_windowing", tryFullscreenWindowing);
+            customWindowingMode = intent.getIntExtra("custom_windowing_mode", customWindowingMode);
             shortcutStyle = intent.getIntExtra("shortcut_style", shortcutStyle);
             shortcutBlurRadius = intent.getIntExtra("shortcut_blur_radius", shortcutBlurRadius);
             shortcutOverlayAlpha = intent.getIntExtra("shortcut_overlay_alpha", shortcutOverlayAlpha);
@@ -2098,23 +2100,30 @@ public class FloatWindowService extends Service {
     }
 
     /**
-     * 窗口模式启动应用：小窗=windowingMode 100；「尝试消除授权弹窗」开=mode 1（隐藏 API，可能被
-     * ROM 静默拒绝）；否则普通 startActivity（默认路径）
+     * 窗口模式启动应用：小窗=windowingMode 100；「尝试消除授权弹窗」开=自定义
+     * windowingMode（默认 6，隐藏 API 可能被 ROM 拒绝，失败回退普通 startActivity）；
+     * 否则普通 startActivity（默认路径）
      */
     private void startWithWindowing(Intent intent, boolean openInWindow) {
-        Bundle bundle = null;
         if (openInWindow) {
-            bundle = new Bundle();
+            Bundle bundle = new Bundle();
             bundle.putInt("android.activity.windowingMode", 100);
-        } else if (tryFullscreenWindowing) {
-            bundle = new Bundle();
-            bundle.putInt("android.activity.windowingMode", 6);
-        }
-        if (bundle != null) {
             startActivity(intent, bundle);
-        } else {
-            startActivity(intent);
+            return;
         }
+        if (tryFullscreenWindowing) {
+            Bundle bundle = new Bundle();
+            bundle.putInt("android.activity.windowingMode", customWindowingMode);
+            try {
+                startActivity(intent, bundle);
+                return;
+            } catch (Exception e) {
+                Log.w(TAG, "windowingMode=" + customWindowingMode + " 打开失败，回退默认方式: " + e);
+                Toast.makeText(this, "该windowingMode参数无法使用，已使用默认方式打开",
+                        Toast.LENGTH_SHORT).show();
+            }
+        }
+        startActivity(intent);
     }
 
     /**
@@ -7571,6 +7580,15 @@ public class FloatWindowService extends Service {
             shortcutIconSize = prefs.getInt("shortcut_icon_size", shortcutIconSize);
             shortcutIconCorner = prefs.getInt("shortcut_icon_corner", shortcutIconCorner);
         tryFullscreenWindowing = prefs.getBoolean("try_fullscreen_windowing", tryFullscreenWindowing);
+            // 自定义 windowingMode：留空/非法 → 默认 6
+            String customWm = prefs.getString("custom_windowing_mode", "");
+            if (!TextUtils.isEmpty(customWm)) {
+                try {
+                    customWindowingMode = Integer.parseInt(customWm.trim());
+                } catch (NumberFormatException ignored) {
+                    customWindowingMode = 6;
+                }
+            }
             shortcutStyle = prefs.getInt("shortcut_style", 0);
             shortcutBlurRadius = prefs.getInt("shortcut_blur_radius", 20);
             shortcutOverlayAlpha = prefs.getInt("shortcut_overlay_alpha", 180);

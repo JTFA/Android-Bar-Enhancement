@@ -2065,6 +2065,43 @@
 
             </LinearLayout>
 
+            <!-- 自定义 android.activity.windowingMode（AppConfig.CUSTOM_WINDOWING_MODE_ENABLED=true 且开关开启时显示） -->
+            <LinearLayout
+                android:id="@+id/layout_custom_windowing_mode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:paddingBottom="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="自定义android.activity.windowingMode"
+                    android:textSize="14sp"
+                    android:textColor="?attr/textPrimary"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="输入整数，不同机型表现可能不同，可自行测试不同数字的打开效果"
+                    android:textSize="12sp"
+                    android:textColor="#9E9E9E"
+                    android:layout_marginBottom="8dp" />
+
+                <EditText
+                    android:id="@+id/edit_custom_windowing_mode"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:hint="留空默认 6"
+                    android:inputType="number"
+                    android:paddingHorizontal="12dp"
+                    android:background="@drawable/input_background"
+                    android:textSize="14sp" />
+
+            </LinearLayout>
+
             <!-- 模糊层同步模式：掉帧时按性能取舍同步精度（BLUR_SYNC_FORCE_BALANCED=true 时整节隐藏） -->
             <LinearLayout
                 android:id="@+id/layout_blur_sync_mode"

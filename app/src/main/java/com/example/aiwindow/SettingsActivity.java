@@ -191,6 +191,8 @@ public class SettingsActivity extends AppCompatActivity {
 
     private Switch switchUseExpandDirectly;
     private Switch switchTryFullscreenWindowing;
+    private LinearLayout layoutCustomWindowingMode;
+    private EditText editCustomWindowingMode;
     
     // 提示条触发行为配置
     private Spinner spinnerClickAction, spinnerDoubleClickAction, spinnerLongPressAction;
@@ -319,6 +321,28 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     /**
+     * 自定义 windowingMode 输入框：仅配置开启且「尝试消除授权弹窗」开关打开时显示。
+     */
+    private void updateCustomWindowingModeVisibility() {
+        if (AppConfig.CUSTOM_WINDOWING_MODE_ENABLED && switchTryFullscreenWindowing.isChecked()) {
+            layoutCustomWindowingMode.setVisibility(View.VISIBLE);
+        } else {
+            layoutCustomWindowingMode.setVisibility(View.GONE);
+        }
+    }
+
+    /** 解析输入框：留空/非法 → 默认 6 */
+    private int parseCustomWindowingMode() {
+        String s = editCustomWindowingMode.getText().toString().trim();
+        if (s.isEmpty()) return 6;
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            return 6;
+        }
+    }
+
+    /**
      * 按总配置 AppConfig.AI_WINDOW_ENABLED 隐藏 AI 窗口相关设置。
      * 功能代码未删除：把配置项改为 true 后重新编译即可恢复。
      */
@@ -326,6 +350,13 @@ public class SettingsActivity extends AppCompatActivity {
         // 模糊层同步模式固定「均衡」档时隐藏整节（与 AI 总开关无关）
         if (AppConfig.BLUR_SYNC_FORCE_BALANCED) {
             layoutBlurSyncMode.setVisibility(View.GONE);
+        }
+
+        // 自定义 windowingMode 输入框：配置关闭时始终隐藏
+        if (!AppConfig.CUSTOM_WINDOWING_MODE_ENABLED) {
+            layoutCustomWindowingMode.setVisibility(View.GONE);
+        } else {
+            updateCustomWindowingModeVisibility();
         }
 
         if (AppConfig.AI_WINDOW_ENABLED) {
@@ -556,6 +587,8 @@ public class SettingsActivity extends AppCompatActivity {
         switchWebpageBgTransparent = findViewById(R.id.switch_webpage_bg_transparent);
         switchUseExpandDirectly = findViewById(R.id.switch_use_expand_directly);
         switchTryFullscreenWindowing = findViewById(R.id.switch_try_fullscreen_windowing);
+        layoutCustomWindowingMode = findViewById(R.id.layout_custom_windowing_mode);
+        editCustomWindowingMode = findViewById(R.id.edit_custom_windowing_mode);
         
         // 顶部小横条透明度控件
         seekTopBarTransparency = findViewById(R.id.seek_top_bar_transparency);
@@ -877,6 +910,10 @@ public class SettingsActivity extends AppCompatActivity {
         switchUseExpandDirectly.setChecked(useExpand);
         switchTryFullscreenWindowing.setChecked(
                 preferences.getBoolean("try_fullscreen_windowing", false));
+        // 自定义 windowingMode（留空 = 默认 6）
+        editCustomWindowingMode.setText(preferences.getString("custom_windowing_mode", ""));
+        // 开关状态加载后刷新输入框可见性（applyFeatureFlagVisibility 执行时开关尚未加载）
+        updateCustomWindowingModeVisibility();
         
         // 加载顶部小横条透明度
         int topBarTransparency = preferences.getInt(KEY_TOP_BAR_TRANSPARENCY, 40);
@@ -1054,6 +1091,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         editor.putBoolean("use_expand_directly", switchUseExpandDirectly.isChecked());
         editor.putBoolean("try_fullscreen_windowing", switchTryFullscreenWindowing.isChecked());
+        editor.putString("custom_windowing_mode", editCustomWindowingMode.getText().toString().trim());
         
         // 提交保存
         editor.apply();
@@ -1186,6 +1224,7 @@ public class SettingsActivity extends AppCompatActivity {
         shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
         shortcutIntent.putExtra("shortcut_icon_corner", seekShortcutIconCorner.getProgress());
         shortcutIntent.putExtra("try_fullscreen_windowing", switchTryFullscreenWindowing.isChecked());
+        shortcutIntent.putExtra("custom_windowing_mode", parseCustomWindowingMode());
         shortcutIntent.putExtra("shortcut_style", spinnerShortcutStyle.getSelectedItemPosition());
         shortcutIntent.putExtra("shortcut_blur_radius", seekShortcutBlurRadius.getProgress());
         shortcutIntent.putExtra("shortcut_overlay_alpha", seekShortcutOverlayAlpha.getProgress());
@@ -1703,7 +1742,10 @@ public class SettingsActivity extends AppCompatActivity {
         switchDoubleClickVibrate.setOnCheckedChangeListener((buttonView, isChecked) -> applyCurrentSettings());
         switchLongPressVibrate.setOnCheckedChangeListener((buttonView, isChecked) -> applyCurrentSettings());
         // 尝试消除授权弹窗开关 - 实时下发（手势路径）
-        switchTryFullscreenWindowing.setOnCheckedChangeListener((buttonView, isChecked) -> applyCurrentSettings());
+        switchTryFullscreenWindowing.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            updateCustomWindowingModeVisibility(); // 开关开启时显示自定义 windowingMode 输入框
+            applyCurrentSettings();
+        });
         
         // 单击应用选择
         layoutClickApp.setOnClickListener(new View.OnClickListener() {
@@ -1992,6 +2034,7 @@ public class SettingsActivity extends AppCompatActivity {
         shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
         shortcutIntent.putExtra("shortcut_icon_corner", seekShortcutIconCorner.getProgress());
         shortcutIntent.putExtra("try_fullscreen_windowing", switchTryFullscreenWindowing.isChecked());
+        shortcutIntent.putExtra("custom_windowing_mode", parseCustomWindowingMode());
         shortcutIntent.putExtra("shortcut_style", spinnerShortcutStyle.getSelectedItemPosition());
         shortcutIntent.putExtra("shortcut_blur_radius", seekShortcutBlurRadius.getProgress());
         shortcutIntent.putExtra("shortcut_overlay_alpha", seekShortcutOverlayAlpha.getProgress());
