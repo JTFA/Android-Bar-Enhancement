@@ -1181,12 +1181,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
         private static final float OVERSCROLL_MAX_DP = 48f;
         private static final float OVERSCROLL_DAMPING = 0.5f;
         // fling 惯性超调：limit(px) = FACTOR × 撞边速度(px/s)，钳制在 [MIN, MAX]
-        private static final float FLING_OVERSHOOT_FACTOR = 0.0045f;
+        private static final float FLING_OVERSHOOT_FACTOR = 0.005f;
         private static final float FLING_OVERSHOOT_MIN_DP = 10f;
         private static final float FLING_OVERSHOOT_MAX_DP = 48f;
         // 超调速度指数衰减时间常数（s）：行程 ≈ v0 × τ，时长 ≈ τ × ln(v0/stop)
         private static final float OVERSHOOT_TIME_CONSTANT = 0.06f;
         private static final float OVERSHOOT_STOP_VEL_DP = 60f;
+        // fling 起步速度放大（不改拖动跟手）
+        private static final float FLING_VELOCITY_SCALE = 1.4f;
 
         private final OverScroller flingScroller;
         private final int touchSlop;
@@ -1206,6 +1208,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
             // 越界内容裁剪到自身边界（等价原 ScrollView 视口裁剪）
             setClipChildren(true);
             flingScroller = new OverScroller(context);
+            // 降低摩擦让 fling 中段更快更冲（约默认 0.015 的一半）
+            flingScroller.setFriction(0.008f);
             touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         }
 
@@ -1384,7 +1388,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     .getScaledMinimumFlingVelocity();
             if (Math.abs(fingerVy) > minFling && r > 0) {
                 // 手指上滑（vy<0）→ 内容继续向下滚（scrollPos 增大），取反
-                flingScroller.fling(0, Math.round(scrollPos), 0, (int) -fingerVy,
+                float flingVy = fingerVy * FLING_VELOCITY_SCALE;
+                float maxFling = ViewConfiguration.get(getContext())
+                        .getScaledMaximumFlingVelocity();
+                flingVy = Math.max(-maxFling, Math.min(maxFling, flingVy));
+                flingScroller.fling(0, Math.round(scrollPos), 0, (int) -flingVy,
                         0, 0, 0, r);
                 postInvalidateOnAnimation();
             }
