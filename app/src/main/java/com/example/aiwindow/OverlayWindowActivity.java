@@ -1173,14 +1173,20 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
     /**
      * 超出最大高度时的滚动容器：FrameLayout 自绘滚动（子 View translationY），
-     * 彻底不依赖 ScrollView——此前多次"撞墙"无法排除 ScrollView 内部行为干扰，
-     * 本类零 ScrollView 参与。越界拖动走 tanh 橡胶阻尼可继续跟手，松手用
-     * 无过冲单调曲线回弹到边缘；界内拖动 1:1、fling 惯性与普通列表一致。
-     * 滚动偏移动画与窗口拖拽弹簧（WindowGestureController）完全独立。
+     * 彻底不依赖 ScrollView。越界拖动走 tanh 橡胶阻尼可继续跟手，松手用
+     * 无过冲单调曲线回弹到边缘；界内 fling 惯性撞边时按撞边速度惯性超调
+     * （速度越快超调越大）再回弹贴边。滚动偏移与窗口拖拽弹簧完全独立。
      */
     private class BounceScrollView extends FrameLayout {
         private static final float OVERSCROLL_MAX_DP = 48f;
         private static final float OVERSCROLL_DAMPING = 0.5f;
+        // fling 惯性超调：limit(px) = FACTOR × 撞边速度(px/s)，钳制在 [MIN, MAX]
+        private static final float FLING_OVERSHOOT_FACTOR = 0.0045f;
+        private static final float FLING_OVERSHOOT_MIN_DP = 10f;
+        private static final float FLING_OVERSHOOT_MAX_DP = 48f;
+        // 超调速度指数衰减时间常数（s）：行程 ≈ v0 × τ，时长 ≈ τ × ln(v0/stop)
+        private static final float OVERSHOOT_TIME_CONSTANT = 0.06f;
+        private static final float OVERSHOOT_STOP_VEL_DP = 60f;
 
         private final OverScroller flingScroller;
         private final int touchSlop;
@@ -1189,6 +1195,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
         private boolean dragging;
         private float scrollPos;     // 虚拟浮点滚动位置（可 <0 或 >range）
         private ValueAnimator bounceAnim;
+        private boolean overshooting;
+        private float overshootVel;  // px/s，符号=滚动方向
+        private float overshootLimit;// 本次超调视觉上限（px）
+        private float displayMax = OVERSCROLL_MAX_DP; // 当前橡胶曲线 max（dp）
+        private long overshootLastNanos;
 
         BounceScrollView(Context context) {
             super(context);
@@ -1226,18 +1237,18 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
 
         /** 橡胶阻尼：|x| 越大越接近 max，单调无回折 */
-        private float rubber(float x) {
-            float max = dpToPxF(OVERSCROLL_MAX_DP);
-            return Math.signum(x) * max
-                    * (float) Math.tanh(Math.abs(x) * OVERSCROLL_DAMPING / max);
+        private float rubber(float x, float maxPx) {
+            return Math.signum(x) * maxPx
+                    * (float) Math.tanh(Math.abs(x) * OVERSCROLL_DAMPING / maxPx);
         }
 
-        /** scrollPos → 子 View 实际位移：界内原样，越界走橡胶曲线 */
+        /** scrollPos → 子 View 实际位移：界内原样，越界走橡胶曲线（max 随 displayMax 变化） */
         private void render(float pos) {
             int r = contentRange();
+            float maxPx = dpToPxF(displayMax);
             float displayed;
-            if (pos < 0f) displayed = rubber(pos);
-            else if (pos > r) displayed = r + rubber(pos - r);
+            if (pos < 0f) displayed = rubber(pos, maxPx);
+            else if (pos > r) displayed = r + rubber(pos - r, maxPx);
             else displayed = pos;
             View child = getChildAt(0);
             if (child != null) {
@@ -1251,9 +1262,18 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
 
         private void cancelBounce() {
+            cancelOvershoot();
             if (bounceAnim != null) {
                 bounceAnim.cancel();
                 bounceAnim = null;
+            }
+        }
+
+        /** 仅停止超调动画；displayMax 由 DOWN 显式复位（bounce-back 期间保持超调 limit 平滑回落） */
+        private void cancelOvershoot() {
+            if (overshooting) {
+                overshooting = false;
+                Choreographer.getInstance().removeFrameCallback(overshootCallback);
             }
         }
 
@@ -1283,6 +1303,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 case MotionEvent.ACTION_DOWN:
                     cancelBounce();
                     abortFling();
+                    displayMax = OVERSCROLL_MAX_DP;
                     lastY = ev.getY();
                     dragging = false;
                     break;
@@ -1305,6 +1326,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 case MotionEvent.ACTION_DOWN: {
                     cancelBounce();
                     abortFling();
+                    displayMax = OVERSCROLL_MAX_DP;
                     lastY = ev.getY();
                     dragging = true;
                     scrollPos = currentScrollY();
@@ -1371,11 +1393,95 @@ public class OverlayWindowActivity extends AppCompatActivity {
         @Override
         public void computeScroll() {
             if (flingScroller.computeScrollOffset()) {
+                float prev = scrollPos;
                 scrollPos = flingScroller.getCurrY();
+                int r = contentRange();
+                boolean hitBottom = prev < r && scrollPos >= r;
+                boolean hitTop = prev > 0f && scrollPos <= 0f;
+                if (hitBottom || hitTop) {
+                    float speed = flingScroller.getCurrVelocity();
+                    flingScroller.forceFinished(true);
+                    float minFling = ViewConfiguration.get(getContext())
+                            .getScaledMinimumFlingVelocity();
+                    // 撞边残余速度足够大 → 惯性超调；否则钳回边缘
+                    if (speed > minFling) {
+                        // 方向由撞边侧决定：撞底=正（继续向下冲），撞顶=负
+                        float intoEdge = hitBottom ? speed : -speed;
+                        scrollPos = hitBottom ? r : 0f;
+                        render(scrollPos);
+                        startFlingOvershoot(intoEdge);
+                    } else {
+                        scrollPos = hitBottom ? r : 0f;
+                        render(scrollPos);
+                    }
+                    return;
+                }
                 render(scrollPos);
                 postInvalidateOnAnimation();
             }
         }
+
+        /**
+         * fling 撞边惯性超调：虚拟位置以撞边速度越过边缘指数衰减，
+         * 视觉超调量 ∝ 撞边速度（tanh 橡胶上限 = 本次 limit）；速度耗尽后回弹贴边。
+         */
+        private void startFlingOvershoot(float velocity) {
+            cancelBounce(); // 清 bounce，保留 displayMax 设置权
+            float speed = Math.abs(velocity);
+            float limitPx = speed * FLING_OVERSHOOT_FACTOR;
+            float minPx = dpToPxF(FLING_OVERSHOOT_MIN_DP);
+            float maxPx = dpToPxF(FLING_OVERSHOOT_MAX_DP);
+            overshootLimit = Math.max(minPx, Math.min(maxPx, limitPx));
+            displayMax = overshootLimit / getResources().getDisplayMetrics().density;
+            overshootVel = velocity;
+            overshooting = true;
+            overshootLastNanos = 0L;
+            Choreographer.getInstance().postFrameCallback(overshootCallback);
+        }
+
+        private final Choreographer.FrameCallback overshootCallback = new Choreographer.FrameCallback() {
+            @Override
+            public void doFrame(long frameTimeNanos) {
+                if (!overshooting) return;
+                float dt;
+                if (overshootLastNanos == 0L) {
+                    dt = 0.016f;
+                } else {
+                    dt = (frameTimeNanos - overshootLastNanos) / 1_000_000_000f;
+                    dt = Math.min(dt, 0.05f);
+                }
+                overshootLastNanos = frameTimeNanos;
+
+                // 指数衰减：v(t) = v0 · e^(-t/τ)
+                overshootVel *= (float) Math.exp(-dt / OVERSHOOT_TIME_CONSTANT);
+                scrollPos += overshootVel * dt;
+
+                int r = contentRange();
+                // 虚拟位置钳制（tanh 约 4×limit 已饱和），防极端速度飞太远
+                float maxVirtual = overshootLimit * 4f;
+                if (scrollPos > r + maxVirtual) {
+                    scrollPos = r + maxVirtual;
+                    overshootVel = 0f;
+                } else if (scrollPos < -maxVirtual) {
+                    scrollPos = -maxVirtual;
+                    overshootVel = 0f;
+                }
+                render(scrollPos);
+
+                if (Math.abs(overshootVel) < dpToPxF(OVERSHOOT_STOP_VEL_DP)) {
+                    overshooting = false;
+                    if (scrollPos < 0f || scrollPos > r) {
+                        // 保持 displayMax=超调 limit，bounce-back 从视觉峰值平滑回落
+                        boolean top = scrollPos < 0f;
+                        startBounceBack(top ? scrollPos : scrollPos - r, top ? 0 : r);
+                    } else {
+                        displayMax = OVERSCROLL_MAX_DP;
+                    }
+                    return;
+                }
+                Choreographer.getInstance().postFrameCallback(this);
+            }
+        };
 
         private void startBounceBack(float fromExcess, final int edge) {
             abortFling();
