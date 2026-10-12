@@ -1181,11 +1181,11 @@ public class OverlayWindowActivity extends AppCompatActivity {
         private static final float OVERSCROLL_MAX_DP = 48f;
         private static final float OVERSCROLL_DAMPING = 0.5f;
         // fling 惯性超调：limit(px) = FACTOR × 撞边速度(px/s)，钳制在 [MIN, MAX]
-        private static final float FLING_OVERSHOOT_FACTOR = 0.005f;
+        private static final float FLING_OVERSHOOT_FACTOR = 0.03f;
         private static final float FLING_OVERSHOOT_MIN_DP = 10f;
         private static final float FLING_OVERSHOOT_MAX_DP = 48f;
         // 超调速度指数衰减时间常数（s）：行程 ≈ v0 × τ，时长 ≈ τ × ln(v0/stop)
-        private static final float OVERSHOOT_TIME_CONSTANT = 0.06f;
+        private static final float OVERSHOOT_TIME_CONSTANT = 0.03f;
         private static final float OVERSHOOT_STOP_VEL_DP = 60f;
         // fling 起步速度放大（不改拖动跟手）
         private static final float FLING_VELOCITY_SCALE = 1.4f;
