@@ -67,7 +67,6 @@ import android.widget.GridLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.OverScroller;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -1150,8 +1149,6 @@ public class OverlayWindowActivity extends AppCompatActivity {
             scrollView.setLayoutParams(new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
-            scrollView.setOverScrollMode(View.OVER_SCROLL_NEVER);
-            scrollView.setVerticalScrollBarEnabled(false);
             FrameLayout.LayoutParams scrollGridParams = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -1171,13 +1168,13 @@ public class OverlayWindowActivity extends AppCompatActivity {
     }
 
     /**
-     * 超出最大高度时的滚动容器：完全自管触摸（不再依赖/委托 ScrollView
-     * 内部拖动状态，此前多次"撞墙"均因其拦截/事件时序与我们的状态机
-     * 冲突）。越界拖动走 tanh 橡胶阻尼可继续跟手，松手用无过冲单调
-     * 曲线回弹到边缘；界内拖动 1:1、fling 惯性与普通 ScrollView 一致。
+     * 超出最大高度时的滚动容器：FrameLayout 自绘滚动（子 View translationY），
+     * 彻底不依赖 ScrollView——此前多次"撞墙"无法排除 ScrollView 内部行为干扰，
+     * 本类零 ScrollView 参与。越界拖动走 tanh 橡胶阻尼可继续跟手，松手用
+     * 无过冲单调曲线回弹到边缘；界内拖动 1:1、fling 惯性与普通列表一致。
      * 滚动偏移动画与窗口拖拽弹簧（WindowGestureController）完全独立。
      */
-    private class BounceScrollView extends ScrollView {
+    private class BounceScrollView extends FrameLayout {
         private static final float OVERSCROLL_MAX_DP = 48f;
         private static final float OVERSCROLL_DAMPING = 0.5f;
 
@@ -1191,6 +1188,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         BounceScrollView(Context context) {
             super(context);
+            // 越界内容裁剪到自身边界（等价原 ScrollView 视口裁剪）
+            setClipChildren(true);
             flingScroller = new OverScroller(context);
             touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         }
@@ -1201,6 +1200,27 @@ public class OverlayWindowActivity extends AppCompatActivity {
             return Math.max(0, child.getHeight() - getHeight());
         }
 
+        /**
+         * 同 ScrollView：子 View 用 UNSPECIFIED 高度测量，允许高于自身（否则
+         * FrameLayout 默认 AT_MOST 会把超高内容钳到容器高度，contentRange 恒 0）。
+         */
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            View child = getChildAt(0);
+            if (child != null) {
+                int width = MeasureSpec.getSize(widthMeasureSpec)
+                        - getPaddingLeft() - getPaddingRight();
+                child.measure(
+                        MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+                        MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+                setMeasuredDimension(
+                        getDefaultSize(getSuggestedMinimumWidth(), widthMeasureSpec),
+                        getDefaultSize(getSuggestedMinimumHeight(), heightMeasureSpec));
+            } else {
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            }
+        }
+
         /** 橡胶阻尼：|x| 越大越接近 max，单调无回折 */
         private float rubber(float x) {
             float max = dpToPxF(OVERSCROLL_MAX_DP);
@@ -1208,14 +1228,22 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     * (float) Math.tanh(Math.abs(x) * OVERSCROLL_DAMPING / max);
         }
 
-        /** scrollPos → 实际 scrollTo：界内原样，越界走橡胶曲线 */
+        /** scrollPos → 子 View 实际位移：界内原样，越界走橡胶曲线 */
         private void render(float pos) {
             int r = contentRange();
             float displayed;
             if (pos < 0f) displayed = rubber(pos);
             else if (pos > r) displayed = r + rubber(pos - r);
             else displayed = pos;
-            scrollTo(0, Math.round(displayed));
+            View child = getChildAt(0);
+            if (child != null) {
+                child.setTranslationY(-displayed);
+            }
+        }
+
+        private float currentScrollY() {
+            View child = getChildAt(0);
+            return child != null ? -child.getTranslationY() : 0f;
         }
 
         private void cancelBounce() {
@@ -1242,8 +1270,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
 
         /**
-         * 自行决定拦截（超过 touch slop 且内容可滚动），不调用 super，
-         * 避免 ScrollView 内部拖动状态与自管滚动互相干扰。
+         * 自行决定拦截（超过 touch slop 且内容可滚动），不调用 super。
          * 拦截前事件仍发给子 View（cell 点击/按压动画不受影响）。
          */
         @Override
@@ -1276,7 +1303,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     abortFling();
                     lastY = ev.getY();
                     dragging = true;
-                    scrollPos = getScrollY();
+                    scrollPos = currentScrollY();
                     obtainTracker();
                     velocityTracker.addMovement(ev);
                     return true;
@@ -1286,7 +1313,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         // 拦截生效收到的首个 MOVE（无 DOWN）：起步同步，不计入位移
                         dragging = true;
                         lastY = ev.getY();
-                        scrollPos = getScrollY();
+                        scrollPos = currentScrollY();
                         obtainTracker();
                     }
                     velocityTracker.addMovement(ev);
