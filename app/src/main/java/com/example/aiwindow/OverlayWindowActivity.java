@@ -809,8 +809,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
             contentContainer.setOutlineProvider(new ViewOutlineProvider() {
                 @Override
                 public void getOutline(View v, android.graphics.Outline outline) {
-                    outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(),
-                            dpToPx(cornerRadius));
+                    // 连续曲率 path 与 AcrylicRoundRectDrawable 背景同源，
+                    // 若用 setRoundRect 圆弧裁剪会在四角缩进，露出模糊层圆角并切断边缘光
+                    outline.setConvexPath(buildContinuousRoundRectPath(
+                            v.getWidth(), v.getHeight(), dpToPx(cornerRadius)));
                 }
             });
             contentContainer.setClipToOutline(true);
@@ -3358,8 +3360,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             setOutlineProvider(new ViewOutlineProvider() {
                 @Override
                 public void getOutline(View v, android.graphics.Outline outline) {
-                    outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(),
-                            dpToPx(cornerRadius));
+                    // 与窗口背景一致的连续曲率轮廓，避免四角被圆弧提前切断
+                    outline.setConvexPath(buildContinuousRoundRectPath(
+                            v.getWidth(), v.getHeight(), dpToPx(cornerRadius)));
                 }
             });
             setClipToOutline(true);
