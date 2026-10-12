@@ -45,6 +45,7 @@ import android.util.Log;
 import android.view.Choreographer;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewConfiguration;
@@ -65,6 +66,7 @@ import android.widget.FrameLayout;
 import android.widget.GridLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.OverScroller;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -1144,7 +1146,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 添加内容视图（超出最大高度时允许滚动）
         View contentView;
         if (contentHeight + gridPadding > maxHeight) {
-            ScrollView scrollView = new ScrollView(this);
+            BounceScrollView scrollView = new BounceScrollView(this);
             scrollView.setLayoutParams(new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
@@ -1166,6 +1168,207 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
         contentView.setBackgroundColor(Color.TRANSPARENT);
         container.addView(contentView);
+    }
+
+    /**
+     * 超出最大高度时的滚动容器：完全自管触摸（不再依赖/委托 ScrollView
+     * 内部拖动状态，此前多次"撞墙"均因其拦截/事件时序与我们的状态机
+     * 冲突）。越界拖动走 tanh 橡胶阻尼可继续跟手，松手用无过冲单调
+     * 曲线回弹到边缘；界内拖动 1:1、fling 惯性与普通 ScrollView 一致。
+     * 滚动偏移动画与窗口拖拽弹簧（WindowGestureController）完全独立。
+     */
+    private class BounceScrollView extends ScrollView {
+        private static final float OVERSCROLL_MAX_DP = 48f;
+        private static final float OVERSCROLL_DAMPING = 0.5f;
+
+        private final OverScroller flingScroller;
+        private final int touchSlop;
+        private VelocityTracker velocityTracker;
+        private float lastY;
+        private boolean dragging;
+        private float scrollPos;     // 虚拟浮点滚动位置（可 <0 或 >range）
+        private ValueAnimator bounceAnim;
+
+        BounceScrollView(Context context) {
+            super(context);
+            flingScroller = new OverScroller(context);
+            touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        }
+
+        private int contentRange() {
+            View child = getChildAt(0);
+            if (child == null) return 0;
+            return Math.max(0, child.getHeight() - getHeight());
+        }
+
+        /** 橡胶阻尼：|x| 越大越接近 max，单调无回折 */
+        private float rubber(float x) {
+            float max = dpToPxF(OVERSCROLL_MAX_DP);
+            return Math.signum(x) * max
+                    * (float) Math.tanh(Math.abs(x) * OVERSCROLL_DAMPING / max);
+        }
+
+        /** scrollPos → 实际 scrollTo：界内原样，越界走橡胶曲线 */
+        private void render(float pos) {
+            int r = contentRange();
+            float displayed;
+            if (pos < 0f) displayed = rubber(pos);
+            else if (pos > r) displayed = r + rubber(pos - r);
+            else displayed = pos;
+            scrollTo(0, Math.round(displayed));
+        }
+
+        private void cancelBounce() {
+            if (bounceAnim != null) {
+                bounceAnim.cancel();
+                bounceAnim = null;
+            }
+        }
+
+        private void abortFling() {
+            flingScroller.forceFinished(true);
+        }
+
+        private void obtainTracker() {
+            if (velocityTracker == null) velocityTracker = VelocityTracker.obtain();
+            else velocityTracker.clear();
+        }
+
+        private void recycleTracker() {
+            if (velocityTracker != null) {
+                velocityTracker.recycle();
+                velocityTracker = null;
+            }
+        }
+
+        /**
+         * 自行决定拦截（超过 touch slop 且内容可滚动），不调用 super，
+         * 避免 ScrollView 内部拖动状态与自管滚动互相干扰。
+         * 拦截前事件仍发给子 View（cell 点击/按压动画不受影响）。
+         */
+        @Override
+        public boolean onInterceptTouchEvent(MotionEvent ev) {
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    cancelBounce();
+                    abortFling();
+                    lastY = ev.getY();
+                    dragging = false;
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (!dragging
+                            && Math.abs(ev.getY() - lastY) > touchSlop
+                            && contentRange() > 0) {
+                        return true;
+                    }
+                    break;
+                default:
+                    break;
+            }
+            return false;
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent ev) {
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN: {
+                    cancelBounce();
+                    abortFling();
+                    lastY = ev.getY();
+                    dragging = true;
+                    scrollPos = getScrollY();
+                    obtainTracker();
+                    velocityTracker.addMovement(ev);
+                    return true;
+                }
+                case MotionEvent.ACTION_MOVE: {
+                    if (!dragging) {
+                        // 拦截生效收到的首个 MOVE（无 DOWN）：起步同步，不计入位移
+                        dragging = true;
+                        lastY = ev.getY();
+                        scrollPos = getScrollY();
+                        obtainTracker();
+                    }
+                    velocityTracker.addMovement(ev);
+                    float y = ev.getY();
+                    float dy = y - lastY;
+                    lastY = y;
+                    scrollPos -= dy;
+                    render(scrollPos);
+                    return true;
+                }
+                case MotionEvent.ACTION_UP: {
+                    if (!dragging) return true;
+                    dragging = false;
+                    velocityTracker.addMovement(ev);
+                    velocityTracker.computeCurrentVelocity(1000);
+                    float vy = velocityTracker.getYVelocity();
+                    recycleTracker();
+                    onGestureEnd(vy);
+                    return true;
+                }
+                case MotionEvent.ACTION_CANCEL: {
+                    if (!dragging) return true;
+                    dragging = false;
+                    recycleTracker();
+                    onGestureEnd(0f);
+                    return true;
+                }
+                default:
+                    return true;
+            }
+        }
+
+        private void onGestureEnd(float fingerVy) {
+            int r = contentRange();
+            if (scrollPos < 0f || scrollPos > r) {
+                // 越界松手：无过冲回弹到边缘
+                boolean top = scrollPos < 0f;
+                startBounceBack(top ? scrollPos : scrollPos - r, top ? 0 : r);
+                return;
+            }
+            float minFling = ViewConfiguration.get(getContext())
+                    .getScaledMinimumFlingVelocity();
+            if (Math.abs(fingerVy) > minFling && r > 0) {
+                // 手指上滑（vy<0）→ 内容继续向下滚（scrollPos 增大），取反
+                flingScroller.fling(0, Math.round(scrollPos), 0, (int) -fingerVy,
+                        0, 0, 0, r);
+                postInvalidateOnAnimation();
+            }
+        }
+
+        @Override
+        public void computeScroll() {
+            if (flingScroller.computeScrollOffset()) {
+                scrollPos = flingScroller.getCurrY();
+                render(scrollPos);
+                postInvalidateOnAnimation();
+            }
+        }
+
+        private void startBounceBack(float fromExcess, final int edge) {
+            abortFling();
+            final boolean top = edge == 0;
+            long duration = (long) (180 + 120
+                    * Math.min(1f, Math.abs(fromExcess) / dpToPxF(OVERSCROLL_MAX_DP)));
+            cancelBounce();
+            bounceAnim = ValueAnimator.ofFloat(fromExcess, 0f);
+            bounceAnim.setDuration(duration);
+            // DecelerateInterpolator 单调衰减到 0，数学上不可能过冲
+            bounceAnim.setInterpolator(new DecelerateInterpolator());
+            bounceAnim.addUpdateListener(a -> {
+                float o = (float) a.getAnimatedValue();
+                scrollPos = top ? o : edge + o;
+                render(scrollPos);
+            });
+            bounceAnim.addListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    bounceAnim = null;
+                }
+            });
+            bounceAnim.start();
+        }
     }
 
     private View createShortcutCell(final ShortcutItem item, int cellWidth) {
