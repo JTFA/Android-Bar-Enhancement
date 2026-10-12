@@ -763,7 +763,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
         params.rightMargin = -targetPosX;
         params.bottomMargin = -targetPosY;
         contentContainer.setLayoutParams(params);
-        contentContainer.setClipChildren(false);
+        // 快捷窗口：裁剪子 View 到容器边界。clipChildren(false) 会让超高内容
+        // 画到圆角窗口外（静止时直接可见，拖动时被硬件层隐藏，表现为"松手后又出现"）。
+        // 悬浮窗模式无此问题是因为窗口表面本身裁剪；Activity 全屏无该保护。
+        contentContainer.setClipChildren(windowType != WINDOW_TYPE_SHORTCUT);
 
         // 设置连续圆角 + 半透明亚克力背景
         final float density = getResources().getDisplayMetrics().density;
@@ -779,6 +782,20 @@ public class OverlayWindowActivity extends AppCompatActivity {
             bg.setStroke(dpToPx(borderWidth), borderColorWithAlpha);
         }
         contentContainer.setBackground(bg);
+
+        // 快捷窗口：裁剪到圆角轮廓，硬保证任何子 View（含滚动内容/光晕）不画出窗口
+        // （clipChildren(false) + 松手后 LAYER_TYPE_NONE 会让溢出内容显示在窗口外，
+        //  拖动期间硬件层按 View bounds 栅格化又会把它隐藏，表现为"松手后又出现"）
+        if (windowType == WINDOW_TYPE_SHORTCUT) {
+            contentContainer.setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View v, android.graphics.Outline outline) {
+                    outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(),
+                            dpToPx(cornerRadius));
+                }
+            });
+            contentContainer.setClipToOutline(true);
+        }
 
         // 禁止点击穿透到外部
         contentContainer.setOnClickListener(v -> { /* consume */ });
@@ -1087,9 +1104,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
             grid.addView(cell);
         }
 
-        // 测量 grid 自然高度
+        // 测量 grid 自然高度（宽度与最终布局一致：MATCH_PARENT = containerWidth）
         grid.measure(
-                View.MeasureSpec.makeMeasureSpec(containerWidth - gridPadding * 2, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(containerWidth, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         int contentHeight = grid.getMeasuredHeight();
         // actualHeight 以内容高度为准，超过 maxHeight 则锁定 maxHeight
@@ -1133,6 +1150,10 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     ViewGroup.LayoutParams.MATCH_PARENT));
             scrollView.setOverScrollMode(View.OVER_SCROLL_NEVER);
             scrollView.setVerticalScrollBarEnabled(false);
+            FrameLayout.LayoutParams scrollGridParams = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+            grid.setLayoutParams(scrollGridParams);
             scrollView.addView(grid);
             contentView = scrollView;
         } else {
