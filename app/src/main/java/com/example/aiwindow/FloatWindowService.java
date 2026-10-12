@@ -812,8 +812,8 @@ public class FloatWindowService extends Service {
                 });
             }
         }
-        // 快捷窗口格子点击请求：由服务上下文启动应用（Overlay 即将 finish 时直接
-        // startActivity 会被 OEM 静默拦截，不弹窗不抛异常）
+        // 快捷窗口格子点击请求：由服务上下文启动应用（app 前台时立即启动，
+        // 避免退后台后被 OEM 静默拦截）
         else if (intent != null && "LAUNCH_APP".equals(intent.getAction())) {
             Intent launchIntent = intent.getParcelableExtra("launch_intent");
             boolean openInWindow = intent.getBooleanExtra("open_in_window", false);

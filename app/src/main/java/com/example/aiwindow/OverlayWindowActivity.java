@@ -235,8 +235,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private float initTranslationX, initTranslationY;
 
 
-    // ─── 待启动快捷方式（收起并销毁任务后由服务启动，对齐手势通道：启动瞬间无可见 Activity） ───
-    private ShortcutItem pendingShortcutItem = null;
+    // ─── 格子启动应用：动画结束后等权限弹窗交互，点取消则窗口重获焦点时立即退出 ───
+    private boolean awaitingLaunchResult = false;
 
     // ─── 屏幕尺寸（解析度无关像素，但 getRealMetrics 是 px） ───
     private int screenWidth, screenHeight;
@@ -492,6 +492,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
+        awaitingLaunchResult = false; // 目标应用已拉起或 Activity 停止，无需再等焦点
         // 窗口不再可见 → 恢复提示条手势
         FloatWindowService.setOverlayWindowOpen(false);
         Log.d(TAG, "onStop: mIsStartingFileChooser=" + mIsStartingFileChooser
@@ -502,6 +503,23 @@ public class OverlayWindowActivity extends AppCompatActivity {
             BlurWindowActivity.fadeOutIfAlive();
             sendRestoreBarBroadcast();
             Log.d(TAG, "onStop: finishing activity");
+            suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+            finishAndRemoveTask();
+        }
+    }
+
+    /**
+     * 格子启动应用后：点允许 → 目标应用拉到前台 → onStop 清理；
+     * 点取消 → 权限弹窗消失 → 窗口重获焦点 → 立即退出。
+     */
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && awaitingLaunchResult && !isFinishing() && !isCollapsing) {
+            awaitingLaunchResult = false;
+            if (rootLayout != null) rootLayout.setVisibility(View.GONE);
+            BlurWindowActivity.fadeOutIfAlive();
+            sendRestoreBarBroadcast();
             suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
             finishAndRemoveTask();
         }
@@ -1585,8 +1603,8 @@ public class OverlayWindowActivity extends AppCompatActivity {
         cell.addView(nameView);
 
         // 点击事件（使用 ShortcutLaunchConfig 启动，与服务行为一致）
-        // 注意：点击瞬间立即发服务启动应用（服务上下文不被 OEM 拦截），收起动画在其上方继续，
-        // 结束后直接露出目标应用，避免先回桌面再打开导致的闪屏
+        // 点击瞬间立即发服务启动应用（app 还在前台，服务上下文不被 OEM 静默拦截），
+        // 收起动画在其上方继续；动画结束后等权限弹窗交互，点取消则窗口重获焦点时立即退出
         cell.setOnClickListener(v -> {
             // 拖动过窗口则抑制本次点击，避免拖动松手时误启动应用
             if (gestureController != null && gestureController.dragMoved) return;
@@ -1596,7 +1614,9 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 BlurWindowActivity.sShortcutLaunched = true;
                 BlurWindowActivity.fadeOutIfAlive();
             }
-            pendingShortcutItem = item;
+            // 立即启动（app 前台时 startActivity，避免退后台后被 OriginOS 静默拦截）
+            launchShortcutApp(item);
+            awaitingLaunchResult = true;
             collapseAndFinish();
         });
 
@@ -2589,17 +2609,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     if (webView != null) {
                         webView.setAlpha(0f);
                     }
-                    // 如果有待启动的快捷方式，在此启动
                     sendRestoreBarBroadcast();
                     suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
-                    finishAndRemoveTask();
-                    // 任务销毁后由服务启动目标应用（与手势同通道，避免关联启动弹窗）；
-                    // 延迟一小段时间确保本任务已真正移除
-                    if (pendingShortcutItem != null) {
-                        final ShortcutItem toLaunch = pendingShortcutItem;
-                        pendingShortcutItem = null;
-                        new Handler(getMainLooper()).postDelayed(
-                                () -> launchShortcutApp(toLaunch), 150);
+                    // 格子启动应用：不主动 finish（finishAndRemoveTask 会杀掉 OriginOS 权限弹窗），
+                    // 解除 isCollapsing 让 onStop 在目标应用拉到前台后清理；
+                    // 点取消则窗口重获焦点 → onWindowFocusChanged 立即退出
+                    if (awaitingLaunchResult) {
+                        isCollapsing = false;
+                    } else {
+                        finishAndRemoveTask();
                     }
                 }
             }
