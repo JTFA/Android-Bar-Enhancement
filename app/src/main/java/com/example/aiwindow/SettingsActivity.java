@@ -17,6 +17,7 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RadioGroup;
@@ -302,7 +303,10 @@ public class SettingsActivity extends AppCompatActivity {
     
     // 保存按钮
     private Button btnSave;
-    
+
+    // 快捷窗口轮廓实时预览层（触摸穿透，不影响操作）
+    private WindowOutlineOverlay windowOutlineOverlay;
+
     // SharedPreferences
     private SharedPreferences preferences;
 
@@ -318,6 +322,28 @@ public class SettingsActivity extends AppCompatActivity {
         applyFeatureFlagVisibility(); // 按总配置隐藏 AI 窗口相关设置
         loadSettings(); // 加载已保存的设置
         setupListeners();
+
+        // 快捷窗口轮廓实时预览层：叠加在内容顶层，触摸穿透不阻挡设置操作
+        windowOutlineOverlay = new WindowOutlineOverlay(this);
+        ((FrameLayout) findViewById(android.R.id.content)).addView(windowOutlineOverlay,
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    /** 读取四个滑块当前值，刷新并显示轮廓预览层 */
+    private void refreshWindowOutlinePreview() {
+        if (windowOutlineOverlay == null) return;
+        windowOutlineOverlay.update(
+                seekShortcutWindowWidth.getProgress(),
+                seekShortcutWindowHeight.getProgress(),
+                seekShortcutWindowPositionY.getProgress(),
+                seekShortcutCornerRadius.getProgress());
+        windowOutlineOverlay.show();
+    }
+
+    /** 松手后延迟渐隐轮廓预览层 */
+    private void scheduleHideWindowOutlinePreview() {
+        if (windowOutlineOverlay != null) windowOutlineOverlay.scheduleHide();
     }
 
     /**
@@ -1594,9 +1620,10 @@ public class SettingsActivity extends AppCompatActivity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutWindowWidth.setText("快捷窗口宽度: " + progress + "dp");
                 applyCurrentSettings();
+                if (fromUser) refreshWindowOutlinePreview();
             }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStartTrackingTouch(SeekBar seekBar) { refreshWindowOutlinePreview(); }
+            @Override public void onStopTrackingTouch(SeekBar seekBar) { scheduleHideWindowOutlinePreview(); }
         });
         
         // 快捷方式窗口高度 - 实时更新
@@ -1605,9 +1632,10 @@ public class SettingsActivity extends AppCompatActivity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutWindowHeight.setText("快捷窗口最大高度: " + progress + "dp");
                 applyCurrentSettings();
+                if (fromUser) refreshWindowOutlinePreview();
             }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStartTrackingTouch(SeekBar seekBar) { refreshWindowOutlinePreview(); }
+            @Override public void onStopTrackingTouch(SeekBar seekBar) { scheduleHideWindowOutlinePreview(); }
         });
         
         // 快捷方式窗口位置 Y - 实时更新
@@ -1616,9 +1644,10 @@ public class SettingsActivity extends AppCompatActivity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutWindowPositionY.setText("快捷窗口位置 Y: " + progress + " (居中)");
                 applyCurrentSettings();
+                if (fromUser) refreshWindowOutlinePreview();
             }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStartTrackingTouch(SeekBar seekBar) { refreshWindowOutlinePreview(); }
+            @Override public void onStopTrackingTouch(SeekBar seekBar) { scheduleHideWindowOutlinePreview(); }
         });
         
         // 快捷窗口圆角 - 实时更新
@@ -1627,9 +1656,10 @@ public class SettingsActivity extends AppCompatActivity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutCornerRadius.setText("快捷窗口圆角: " + progress + "dp");
                 applyCurrentSettings();
+                if (fromUser) refreshWindowOutlinePreview();
             }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStartTrackingTouch(SeekBar seekBar) { refreshWindowOutlinePreview(); }
+            @Override public void onStopTrackingTouch(SeekBar seekBar) { scheduleHideWindowOutlinePreview(); }
         });
         
         // 快捷方式图标大小 - 实时更新
@@ -2749,6 +2779,8 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        // 离开设置页时立即隐藏快捷窗口轮廓预览，避免残留
+        if (windowOutlineOverlay != null) windowOutlineOverlay.hideNow();
         // 离开设置页面时，将底部提示条透明度设为0
         Intent intent = new Intent(this, FloatWindowService.class);
         intent.setAction("UPDATE_STYLE");
