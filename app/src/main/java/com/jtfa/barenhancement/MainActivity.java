@@ -21,11 +21,17 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int REQUEST_CODE_OVERLAY_PERMISSION = 1001;
     private static final int REQUEST_CODE_RUNTIME_PERMISSIONS = 1002;
+
+    // 用户对悬浮窗服务开关的意图（持久化，覆盖安装/进程被杀后据此自动恢复）
+    private static final String KEY_SERVICE_ENABLED = "service_enabled";
     
     private Switch switchService;
     private Switch switchBootStart;
     private Switch switchExcludeRecents;
     private SharedPreferences prefs;
+
+    // 代码里 setChecked() 会同步触发监听器，刷新状态时用它屏蔽
+    private boolean suppressServiceSwitchCallback = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -51,6 +57,9 @@ public class MainActivity extends AppCompatActivity {
         // 悬浮窗服务开关
         updateServiceSwitchState();
         switchService.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (suppressServiceSwitchCallback) return;
+            // 先记录用户意图：覆盖安装/进程被系统杀掉后据此自动恢复
+            prefs.edit().putBoolean(KEY_SERVICE_ENABLED, isChecked).apply();
             if (isChecked) {
                 // 开启服务
                 if (hasOverlayPermission()) {
@@ -58,7 +67,8 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     Toast.makeText(this, "请先授予悬浮窗权限", Toast.LENGTH_SHORT).show();
                     checkOverlayPermission();
-                    switchService.setChecked(false); // 恢复开关状态
+                    prefs.edit().putBoolean(KEY_SERVICE_ENABLED, false).apply();
+                    setServiceSwitchSilently(false); // 恢复开关状态（不回调）
                 }
             } else {
                 // 关闭服务
@@ -190,12 +200,46 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 更新服务开关状态
+     * 更新服务开关状态（纯读取，不触发启动/停止）
      */
     private void updateServiceSwitchState() {
         boolean isRunning = isServiceRunning(FloatWindowService.class);
-        switchService.setChecked(isRunning);
+        // 迁移：老版本没有持久化标志，服务在跑就视为用户开启过
+        if (isRunning && !prefs.contains(KEY_SERVICE_ENABLED)) {
+            prefs.edit().putBoolean(KEY_SERVICE_ENABLED, true).apply();
+        }
+        setServiceSwitchSilently(isRunning);
         Log.d("MainActivity", "悬浮窗服务状态: " + (isRunning ? "运行中" : "未运行"));
+    }
+
+    /**
+     * 静默设置开关（不触发 OnCheckedChangeListener）
+     */
+    private void setServiceSwitchSilently(boolean checked) {
+        suppressServiceSwitchCallback = true;
+        switchService.setChecked(checked);
+        suppressServiceSwitchCallback = false;
+    }
+
+    /**
+     * 按用户意图对账服务状态：意图为开、权限还在、服务没跑 → 自动拉起。
+     * 覆盖安装（进程被杀）或服务被系统回收后，重新打开应用即可恢复。
+     */
+    private void refreshServiceState() {
+        boolean enabled = prefs.getBoolean(KEY_SERVICE_ENABLED, false);
+        boolean isRunning = isServiceRunning(FloatWindowService.class);
+
+        if (isRunning && !prefs.contains(KEY_SERVICE_ENABLED)) {
+            prefs.edit().putBoolean(KEY_SERVICE_ENABLED, true).apply();
+            enabled = true;
+        }
+        if (!isRunning && enabled && hasOverlayPermission()) {
+            Log.d("MainActivity", "按已保存的开关意图自动恢复悬浮窗服务");
+            isRunning = startFloatWindowService();
+        }
+        setServiceSwitchSilently(isRunning);
+        Log.d("MainActivity", "悬浮窗服务状态: " + (isRunning ? "运行中" : "未运行")
+                + "，用户意图: " + (enabled ? "开" : "关"));
     }
     
     /**
@@ -225,17 +269,25 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * 启动悬浮窗前台服务
+     *
+     * @return 启动命令是否发送成功
      */
-    private void startFloatWindowService() {
+    private boolean startFloatWindowService() {
         Log.d("MainActivity", "准备启动 FloatWindowService");
         Intent serviceIntent = new Intent(this, FloatWindowService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent);
-        } else {
-            startService(serviceIntent);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent);
+            } else {
+                startService(serviceIntent);
+            }
+            Toast.makeText(this, "悬浮窗服务已启动", Toast.LENGTH_SHORT).show();
+            return true;
+        } catch (Exception e) {
+            Log.e("MainActivity", "启动悬浮窗服务失败", e);
+            Toast.makeText(this, "悬浮窗服务启动失败，请检查自启动/后台运行权限", Toast.LENGTH_SHORT).show();
+            return false;
         }
-        Toast.makeText(this, "悬浮窗服务已启动", Toast.LENGTH_SHORT).show();
-//        finish(); // 关闭Activity，让悬浮窗在后台运行
     }
     
     /**
@@ -271,7 +323,7 @@ public class MainActivity extends AppCompatActivity {
         if (hasOverlayPermission()) {
             Toast.makeText(this, "当前已拥有悬浮窗权限", Toast.LENGTH_SHORT).show();
         }
-        // 更新服务开关状态
-        updateServiceSwitchState();
+        // 更新服务开关状态：若用户上次开着且服务没跑（覆盖安装/被系统回收），自动恢复
+        refreshServiceState();
     }
 }
