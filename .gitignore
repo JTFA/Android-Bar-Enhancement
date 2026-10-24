@@ -13,3 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# 签名密钥与口令（不要入库）
+/keystore
+keystore.properties
+# 本地分享用的 release 产物
+/release
