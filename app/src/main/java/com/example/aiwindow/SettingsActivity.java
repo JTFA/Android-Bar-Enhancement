@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -27,8 +28,12 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+
+import org.json.JSONObject;
 
 import java.text.Collator;
 import java.util.ArrayList;
@@ -303,6 +308,19 @@ public class SettingsActivity extends AppCompatActivity {
     
     // 保存按钮
     private Button btnSave;
+
+    // 备份与恢复按钮
+    private Button btnExportSettings, btnImportSettings;
+
+    // 备份文件选择器（SAF，无需存储权限）
+    private final ActivityResultLauncher<String> exportSettingsLauncher =
+            registerForActivityResult(new ActivityResultContracts.CreateDocument("application/json"), uri -> {
+                if (uri != null) exportSettingsTo(uri);
+            });
+    private final ActivityResultLauncher<String[]> importSettingsLauncher =
+            registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
+                if (uri != null) importSettingsFrom(uri);
+            });
 
     // 快捷窗口轮廓实时预览层（触摸穿透，不影响操作）
     private WindowOutlineOverlay windowOutlineOverlay;
@@ -622,6 +640,10 @@ public class SettingsActivity extends AppCompatActivity {
         
         // 保存按钮
         btnSave = findViewById(R.id.btn_save_apply);
+
+        // 备份与恢复按钮
+        btnExportSettings = findViewById(R.id.btn_export_settings);
+        btnImportSettings = findViewById(R.id.btn_import_settings);
     }
     
     /**
@@ -1741,6 +1763,20 @@ public class SettingsActivity extends AppCompatActivity {
                 saveSettings();
             }
         });
+
+        // 导出设置（SAF 选择保存位置）
+        btnExportSettings.setOnClickListener(v -> {
+            if (exportSettingsLauncher != null) {
+                exportSettingsLauncher.launch(SettingsBackup.suggestedFileName());
+            }
+        });
+
+        // 导入设置（SAF 选择备份文件）
+        btnImportSettings.setOnClickListener(v -> {
+            if (importSettingsLauncher != null) {
+                importSettingsLauncher.launch(new String[]{"application/json", "application/octet-stream", "*/*"});
+            }
+        });
         
         // ===== 提示条触发行为Spinner监听器 =====
         final String[] actionKeys = {ACTION_NONE, ACTION_APP, ACTION_SHORTCUT, ACTION_AI};
@@ -2801,6 +2837,79 @@ public class SettingsActivity extends AppCompatActivity {
         intent.putExtra("pressed_bar_glow_radius", seekPressedBarGlowRadius.getProgress());
         intent.putExtra("pressed_bar_color_mode", getPressedColorMode());
         startService(intent);
+    }
+
+    /**
+     * 导出设置到指定 Uri（后台线程生成 JSON，图标以 base64 内嵌）
+     */
+    private void exportSettingsTo(Uri uri) {
+        Toast.makeText(this, "正在导出设置…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                JSONObject backup = SettingsBackup.buildBackup(this);
+                SettingsBackup.writeBackupTo(this, uri, backup);
+                runOnUiThread(() -> Toast.makeText(this, "设置已导出", Toast.LENGTH_SHORT).show());
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this, "导出失败：" + e.getMessage(),
+                        Toast.LENGTH_LONG).show());
+            }
+        }, "settings-export").start();
+    }
+
+    /**
+     * 从指定 Uri 读取备份，校验格式后弹确认框
+     */
+    private void importSettingsFrom(Uri uri) {
+        Toast.makeText(this, "正在读取备份…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                JSONObject backup = SettingsBackup.readBackupFrom(this, uri);
+                if (!SettingsBackup.looksLikeBackup(backup)) {
+                    runOnUiThread(() -> Toast.makeText(this, "无法识别的备份文件",
+                            Toast.LENGTH_LONG).show());
+                    return;
+                }
+                String desc = SettingsBackup.describe(backup);
+                runOnUiThread(() -> showImportConfirmDialog(backup, desc));
+            } catch (org.json.JSONException e) {
+                runOnUiThread(() -> Toast.makeText(this, "无法识别的备份文件",
+                        Toast.LENGTH_LONG).show());
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this, "读取备份失败：" + e.getMessage(),
+                        Toast.LENGTH_LONG).show());
+            }
+        }, "settings-import-read").start();
+    }
+
+    /** 导入前确认：说明会覆盖当前全部设置与快捷方式 */
+    private void showImportConfirmDialog(JSONObject backup, String desc) {
+        if (isFinishing() || isDestroyed()) return;
+        String message = (desc == null || desc.isEmpty() ? "" : desc + "\n\n")
+                + "导入后当前全部设置与快捷方式都会被备份内容覆盖，是否继续？";
+        new AlertDialog.Builder(this)
+                .setTitle("导入设置")
+                .setMessage(message)
+                .setPositiveButton("导入", (dialog, which) -> applyImportedBackup(backup))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 应用备份并刷新界面 */
+    private void applyImportedBackup(JSONObject backup) {
+        new Thread(() -> {
+            SettingsBackup.ImportResult result = SettingsBackup.importBackup(this, backup);
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                loadSettings();
+                applyCurrentSettings();
+                Toast.makeText(this, "导入完成，已应用 " + result.applied + " 项设置",
+                        Toast.LENGTH_SHORT).show();
+                if (result.skipped > 0) {
+                    Toast.makeText(this, "导入的设置与当前版本不一致，已跳过不匹配项",
+                            Toast.LENGTH_LONG).show();
+                }
+            });
+        }, "settings-import-apply").start();
     }
 
     /**
