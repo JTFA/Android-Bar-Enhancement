@@ -1,4 +1,4 @@
-package com.example.aiwindow;
+package com.jtfa.barenhancement;
 
 /**
  * 应用功能总配置

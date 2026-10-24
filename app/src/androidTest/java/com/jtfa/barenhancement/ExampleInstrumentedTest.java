@@ -1,4 +1,4 @@
-package com.example.aiwindow;
+package com.jtfa.barenhancement;
 
 import android.content.Context;
 
@@ -21,6 +21,6 @@ public class ExampleInstrumentedTest {
     public void useAppContext() {
         // Context of the app under test.
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        assertEquals("com.example.aiwindow", appContext.getPackageName());
+        assertEquals("com.jtfa.barenhancement", appContext.getPackageName());
     }
 }

@@ -1,4 +1,4 @@
-package com.example.aiwindow;
+package com.jtfa.barenhancement;
 
 import android.app.ActivityOptions;
 import android.app.Notification;
@@ -304,7 +304,7 @@ public class FloatWindowService extends Service {
     private BroadcastReceiver restoreBarReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if ("com.example.aiwindow.RESTORE_BAR".equals(intent.getAction())) {
+            if ("com.jtfa.barenhancement.RESTORE_BAR".equals(intent.getAction())) {
                 // 恢复底部提示条透明度
                 if (bottomBar != null) {
                     bottomBar.animate().alpha(1f).setDuration(150).start();
@@ -571,7 +571,7 @@ public class FloatWindowService extends Service {
             Log.d(TAG, "底部提示条初始化完成");
 
             // 注册广播接收器，用于接收 Activity 发送的恢复提示条通知
-            IntentFilter filter = new IntentFilter("com.example.aiwindow.RESTORE_BAR");
+            IntentFilter filter = new IntentFilter("com.jtfa.barenhancement.RESTORE_BAR");
             // Android 13+ (API 33) 必须指定 RECEIVER_EXPORTED 或 RECEIVER_NOT_EXPORTED
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 registerReceiver(restoreBarReceiver, filter, Context.RECEIVER_NOT_EXPORTED);

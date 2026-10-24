@@ -1,4 +1,4 @@
-package com.example.aiwindow;
+package com.jtfa.barenhancement;
 
 import static android.webkit.WebSettings.FORCE_DARK_OFF;
 import static android.webkit.WebSettings.FORCE_DARK_ON;
@@ -2633,7 +2633,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
     private void sendRestoreBarBroadcast() {
         try {
-            Intent intent = new Intent("com.example.aiwindow.RESTORE_BAR");
+            Intent intent = new Intent("com.jtfa.barenhancement.RESTORE_BAR");
             intent.setPackage(getPackageName());
             sendBroadcast(intent);
         } catch (Exception ignored) {}
@@ -2717,7 +2717,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 Log.d(TAG, "Received RESTORE_BAR broadcast");
             }
         };
-        IntentFilter filter = new IntentFilter("com.example.aiwindow.RESTORE_BAR");
+        IntentFilter filter = new IntentFilter("com.jtfa.barenhancement.RESTORE_BAR");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(restoreBarReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {

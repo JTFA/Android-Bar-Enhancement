@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">小横条工具箱</string>
+    <string name="app_name">小横条扩展</string>
     <string name="click_bar_action">单击提示条操作</string>
     <string name="click_bar_action_desc">设置单击提示条时要打开的应用</string>
     <string name="select_app">选择要打开的应用</string>

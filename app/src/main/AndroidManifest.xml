@@ -118,7 +118,7 @@
             android:exported="false"
             android:resizeableActivity="false"
             android:excludeFromRecents="true"
-            android:taskAffinity="com.example.aiwindow.floating"
+            android:taskAffinity="com.jtfa.barenhancement.floating"
             android:launchMode="singleTask" />
 
         <!-- 快捷方式编辑页面 -->
@@ -134,7 +134,7 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:resizeableActivity="false"
-            android:taskAffinity="com.example.aiwindow.floating" />
+            android:taskAffinity="com.jtfa.barenhancement.floating" />
 
         <activity
             android:name=".OverlayWindowActivity"
@@ -142,7 +142,7 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:resizeableActivity="false"
-            android:taskAffinity="com.example.aiwindow.floating"
+            android:taskAffinity="com.jtfa.barenhancement.floating"
             android:configChanges="orientation|keyboardHidden|screenSize" />
 
         <!-- 删除 WindowHostActivity 的声明 -->

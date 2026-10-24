@@ -1,4 +1,4 @@
-package com.example.aiwindow;
+package com.jtfa.barenhancement;
 
 import android.app.Activity;
 import android.content.BroadcastReceiver;

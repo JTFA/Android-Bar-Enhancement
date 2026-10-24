@@ -1,4 +1,4 @@
-package com.example.aiwindow;
+package com.jtfa.barenhancement;
 
 import android.content.SharedPreferences;
 import android.text.TextUtils;
