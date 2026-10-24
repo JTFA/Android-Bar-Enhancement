@@ -149,6 +149,30 @@ public class FloatWindowService extends Service {
     public static void setOverlayWindowOpen(boolean open) {
         sOverlayWindowOpen = open;
     }
+
+    // 服务实例（同进程静态直连，供设置页控制触发区预览）
+    private static volatile FloatWindowService sInstance;
+
+    /**
+     * 设置页「触发区预览」开关。
+     *
+     * 走同进程静态直连而不是只依赖 startService 的 intent：intent 只改背景透明度，
+     * 若提示条窗口已被展开/收起流程摘掉、或 view alpha 残留 0，黑色指示就会不显示。
+     * 这里直接对服务下指令，把提示条恢复到确定的可见状态。
+     */
+    public static void setTriggerAreaPreview(final boolean show) {
+        final FloatWindowService svc = sInstance;
+        if (svc == null) {
+            Log.w(TAG, "setTriggerAreaPreview(" + show + "): 服务未运行，忽略");
+            return;
+        }
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                svc.applyTriggerAreaPreview(show);
+            }
+        });
+    }
     private String currentAiUrl = "https://www.doubao.com"; // 默认 URL，可通过设置修改
     private String loadedAiUrl = null; // 实际已加载的 URL（用于判断是否需要重新加载）
 
@@ -277,6 +301,18 @@ public class FloatWindowService extends Service {
     private int shortcutOverlayAlpha = 180; // 0-255
     private View shortcutContentContainer;
     private ContinuousRoundRectDrawable shortcutBackgroundDrawable;
+
+    // 文件选择器隐藏提示条后的兜底恢复（回调丢失时防止提示条永久 GONE）
+    private final Handler barVisibilityHandler = new Handler(Looper.getMainLooper());
+    private final Runnable restoreBarVisibilityRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (barContainer != null && barContainer.getVisibility() != View.VISIBLE) {
+                Log.w(TAG, "文件选择器未回调，看门狗恢复提示条可见性");
+                showFloatingWindow();
+            }
+        }
+    };
     
     // AI 窗口模糊效果设置
     private int aiStyle = 0; // 0=不透明, 1=亚克力, 2=液态玻璃
@@ -546,6 +582,7 @@ public class FloatWindowService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        sInstance = this;
         DiagLog.installUncaughtHandler(this);
         DiagLog.log(this, "service onCreate");
         Log.d(TAG, "========================================");
@@ -1333,6 +1370,92 @@ public class FloatWindowService extends Service {
         } else {
             Log.w(TAG, "无法更新样式：视图未初始化");
         }
+    }
+
+    /**
+     * 提示条当前是否处于「收起态」（容器里只有 bottomBar 一个子视图）。
+     * 展开动画/直接展开模式下容器里会是别的视图，此时不能按收起态改布局。
+     */
+    private boolean isCollapsedBar() {
+        return barContainer != null && bottomBar != null
+                && barContainer.getChildCount() == 1
+                && barContainer.getChildAt(0) == bottomBar;
+    }
+
+    /**
+     * 把提示条窗口参数复位为收起态（触发区尺寸、居中、非全屏、非焦点）。
+     * 用于预览前清理被中断的展开流程残留的全屏参数。
+     */
+    private void applyCollapsedBarLayout() {
+        if (barLayoutParams == null || barContainer == null || windowManager == null) return;
+        barLayoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+        barLayoutParams.gravity = Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL;
+        barLayoutParams.softInputMode = 0;
+        barLayoutParams.width = computeBarWindowWidth();
+        barLayoutParams.height = computeBarWindowHeight();
+        barLayoutParams.x = barPositionX;
+        barLayoutParams.y = dpToPx(barPositionY);
+        if (barContainer.getWindowToken() != null) {
+            try {
+                windowManager.updateViewLayout(barContainer, barLayoutParams);
+            } catch (Exception e) {
+                Log.e(TAG, "复位提示条窗口参数失败", e);
+            }
+        }
+        syncGlowWindow();
+    }
+
+    /**
+     * 设置页触发区预览（黑色指示）。
+     *
+     * show=true：把提示条强制恢复到「可见 + 收起态 + 50% 黑」，覆盖此前任何
+     *   把窗口摘掉 / GONE / view alpha=0 的残留状态；
+     * show=false：仅把背景透明度归零（防烧屏），不动窗口状态。
+     */
+    private void applyTriggerAreaPreview(boolean show) {
+        DiagLog.log(this, "applyTriggerAreaPreview show=" + show
+                + " attached=" + (barContainer != null && barContainer.getWindowToken() != null)
+                + " visibility=" + (barContainer != null ? barContainer.getVisibility() : -1)
+                + " barAlpha=" + (bottomBar != null ? bottomBar.getAlpha() : -1f)
+                + " overlayOpen=" + sOverlayWindowOpen);
+
+        if (!show) {
+            currentAlpha = 0f;
+            applyStyleChanges();
+            return;
+        }
+
+        boolean attached = barContainer != null && barContainer.getWindowToken() != null;
+        if (!attached) {
+            if (sOverlayWindowOpen) {
+                // 有窗口 Activity 正在前台：此时窗口由展开流程管理，不做破坏性恢复
+                Log.w(TAG, "触发区预览：窗口 Activity 前台，跳过窗口重建");
+            } else {
+                // 窗口被摘掉/未创建：走完整恢复（重新 addView + 重建 bottomBar）
+                restoreBarWindowAfterFailure("applyTriggerAreaPreview: 提示条未挂载");
+            }
+        }
+
+        if (barContainer != null) {
+            barContainer.setVisibility(View.VISIBLE);
+            barContainer.setAlpha(1f);
+        }
+        if (bottomBar != null) {
+            bottomBar.setAlpha(1f);
+        }
+        // 无窗口 Activity 时，卡住的展开标志只会让提示条保持展开布局，一并复位
+        if (!sOverlayWindowOpen && isCollapsedBar()) {
+            isShortcutWindowExpanded = false;
+            isAiWindowExpanded = false;
+            isOverlayAnimating = false;
+            applyCollapsedBarLayout();
+        }
+
+        currentAlpha = 0.5f;
+        applyStyleChanges();
     }
 
     /**
@@ -2277,7 +2400,11 @@ public class FloatWindowService extends Service {
                     try {
                         if (isAiWindowExpanded || isShortcutWindowExpanded) return;
                         if (barLayoutParams == null || barContainer == null || windowManager == null) return;
-                        if (barContainer.getWindowToken() == null) return;
+                        if (barContainer.getWindowToken() == null) {
+                            // 窗口被摘掉：正是最需要恢复的情况，不能直接 return
+                            restoreBarWindowAfterFailure("watchdog(" + tag + "): 提示条未挂载");
+                            return;
+                        }
                         DisplayMetrics realMetrics = new DisplayMetrics();
                         windowManager.getDefaultDisplay().getRealMetrics(realMetrics);
                         boolean fullscreen = barLayoutParams.width == ViewGroup.LayoutParams.MATCH_PARENT
@@ -2324,6 +2451,9 @@ public class FloatWindowService extends Service {
                 Log.d(TAG, "窗口层级已调整：barContainer 置于 overlayView 之上");
             } catch (Exception e) {
                 Log.e(TAG, "调整窗口层级失败", e);
+                // 关键修复：removeView 成功但 addView 失败时窗口会被摘掉，
+                // 之后不会再有人把它加回来（设置页黑色指示随之消失），立即完整恢复
+                restoreBarWindowAfterFailure("调整窗口层级失败");
             }
         }
 
@@ -3909,6 +4039,9 @@ public class FloatWindowService extends Service {
             } catch (Exception e) {
                 Log.e(TAG, "Failed to hide floating window", e);
             }
+            // 兜底：文件选择器被系统杀掉/回调丢失时，5 秒后自动恢复可见
+            barVisibilityHandler.removeCallbacks(restoreBarVisibilityRunnable);
+            barVisibilityHandler.postDelayed(restoreBarVisibilityRunnable, 5000);
         }
     }
 
@@ -3916,6 +4049,7 @@ public class FloatWindowService extends Service {
      * Restore floating window visibility after dialog closes
      */
     private void showFloatingWindow() {
+        barVisibilityHandler.removeCallbacks(restoreBarVisibilityRunnable);
         if (barContainer != null && windowManager != null) {
             try {
                 barContainer.setVisibility(View.VISIBLE);
@@ -4768,6 +4902,9 @@ public class FloatWindowService extends Service {
                 Log.d(TAG, "窗口层级已调整：barContainer 置于 overlayView 之上");
             } catch (Exception e) {
                 Log.e(TAG, "调整窗口层级失败", e);
+                // 关键修复：removeView 成功但 addView 失败时窗口会被摘掉，
+                // 之后不会再有人把它加回来（设置页黑色指示随之消失），立即完整恢复
+                restoreBarWindowAfterFailure("调整窗口层级失败");
             }
         }
 
@@ -7659,6 +7796,9 @@ public class FloatWindowService extends Service {
     @Override
     public void onDestroy() {
         DiagLog.log(this, "service onDestroy");
+        if (sInstance == this) {
+            sInstance = null;
+        }
         if (rainbowAnimator != null) {
             rainbowAnimator.cancel();
             rainbowAnimator = null;

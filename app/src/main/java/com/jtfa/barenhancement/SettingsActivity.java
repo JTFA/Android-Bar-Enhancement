@@ -307,6 +307,15 @@ public class SettingsActivity extends AppCompatActivity {
     // 快捷窗口轮廓实时预览层（触摸穿透，不影响操作）
     private WindowOutlineOverlay windowOutlineOverlay;
 
+    // 触发区预览（黑色指示）重试：服务可能刚启动，静态直连会落空，350ms 后补一次
+    private final Handler previewRetryHandler = new Handler(Looper.getMainLooper());
+    private final Runnable previewRetryRunnable = new Runnable() {
+        @Override
+        public void run() {
+            FloatWindowService.setTriggerAreaPreview(true);
+        }
+    };
+
     // SharedPreferences
     private SharedPreferences preferences;
 
@@ -2773,7 +2782,16 @@ public class SettingsActivity extends AppCompatActivity {
         intent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
         intent.putExtra("pressed_bar_glow_radius", seekPressedBarGlowRadius.getProgress());
         intent.putExtra("pressed_bar_color_mode", getPressedColorMode());
-        startService(intent);
+        try {
+            startService(intent);
+        } catch (Exception e) {
+            // 后台启动限制等异常不应让设置页崩溃；预览由静态直连兜底
+            e.printStackTrace();
+        }
+        // 关键修复：不只依赖 intent 改透明度，直接让服务把提示条恢复到可见状态
+        FloatWindowService.setTriggerAreaPreview(true);
+        previewRetryHandler.removeCallbacks(previewRetryRunnable);
+        previewRetryHandler.postDelayed(previewRetryRunnable, 350);
     }
     
     @Override
@@ -2800,7 +2818,14 @@ public class SettingsActivity extends AppCompatActivity {
         intent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
         intent.putExtra("pressed_bar_glow_radius", seekPressedBarGlowRadius.getProgress());
         intent.putExtra("pressed_bar_color_mode", getPressedColorMode());
-        startService(intent);
+        try {
+            startService(intent);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        // 离开设置页：取消重试并立即熄灭触发区预览
+        previewRetryHandler.removeCallbacks(previewRetryRunnable);
+        FloatWindowService.setTriggerAreaPreview(false);
     }
 
     /**

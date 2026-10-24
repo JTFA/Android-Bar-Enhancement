@@ -20,6 +20,7 @@ keystore.properties
 # 本地分享用的 release 产物
 /release
 /dist
+/app/release
 
 # 本地文档/临时脚本（不入库）
 *.md
