@@ -19,3 +19,11 @@ local.properties
 keystore.properties
 # 本地分享用的 release 产物
 /release
+/dist
+
+# 本地文档/临时脚本（不入库）
+*.md
+*.py
+*.ps1
+compile_output.txt
+.idea/markdown.xml
