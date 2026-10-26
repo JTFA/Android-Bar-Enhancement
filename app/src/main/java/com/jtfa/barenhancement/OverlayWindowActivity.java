@@ -123,8 +123,24 @@ public class OverlayWindowActivity extends AppCompatActivity {
     public static final String EXTRA_SHORTCUT_STYLE = "shortcut_style";
     public static final String EXTRA_SHORTCUT_BLUR_RADIUS = "shortcut_blur_radius";
     public static final String EXTRA_SHORTCUT_OVERLAY_ALPHA = "shortcut_overlay_alpha";
+    public static final String EXTRA_SHORTCUT_EDGE_REFRACTION = "shortcut_edge_refraction";
+    public static final String EXTRA_SHORTCUT_FINGER_GLOW = "shortcut_finger_glow";
+    public static final String EXTRA_SHORTCUT_DRAG_STRETCH = "shortcut_drag_stretch";
+    public static final String EXTRA_SHORTCUT_EDGE_BAND_DP = "shortcut_edge_band_dp";
+    public static final String EXTRA_SHORTCUT_EDGE_OPACITY = "shortcut_edge_opacity";
+    public static final String EXTRA_FINGER_GLOW_BRIGHTNESS = "finger_glow_brightness";
+    public static final String EXTRA_FINGER_GLOW_SIZE = "finger_glow_size";
     // 顶部小横条透明度
     public static final String EXTRA_TOP_BAR_TRANSPARENCY = "top_bar_transparency";
+    // 输入法 / 页面 / 遮罩设置（设置页未保存时由服务内存传入）
+    public static final String EXTRA_KEYBOARD_OFFSET = "keyboard_offset";
+    public static final String EXTRA_KEYBOARD_ANIM_DURATION = "keyboard_anim_duration";
+    public static final String EXTRA_CUSTOM_CSS = "custom_css";
+    public static final String EXTRA_WEBPAGE_BG_TRANSPARENT = "webpage_bg_transparent";
+    public static final String EXTRA_OVERLAY_ALPHA = "overlay_alpha";
+    public static final String EXTRA_OVERLAY_COLOR = "overlay_color";
+    public static final String EXTRA_OVERLAY_ANIM_DURATION = "overlay_anim_duration";
+    public static final String EXTRA_BLUR_SYNC_MODE = "blur_sync_mode";
 
     public static final int WINDOW_TYPE_AI = 0;
     public static final int WINDOW_TYPE_SHORTCUT = 1;
@@ -664,14 +680,29 @@ public class OverlayWindowActivity extends AppCompatActivity {
             aiBlurRadius = intent.getIntExtra(EXTRA_AI_BLUR_RADIUS, 25);
             aiOverlayAlpha = intent.getIntExtra(EXTRA_AI_OVERLAY_ALPHA, 204);
 
-            // 加载输入法避让设置
-            loadKeyboardSettings();
+            // 加载输入法避让设置：优先使用服务内存中的未保存值
+            if (intent.hasExtra(EXTRA_KEYBOARD_OFFSET)
+                    || intent.hasExtra(EXTRA_KEYBOARD_ANIM_DURATION)) {
+                keyboardOffset = intent.getIntExtra(EXTRA_KEYBOARD_OFFSET, keyboardOffset);
+                keyboardAnimDuration = intent.getIntExtra(EXTRA_KEYBOARD_ANIM_DURATION, keyboardAnimDuration);
+            } else {
+                loadKeyboardSettings();
+            }
 
-            // 加载自定义 CSS
-            loadCustomCss();
+            // 加载自定义 CSS：优先使用服务内存中的未保存值
+            if (intent.hasExtra(EXTRA_CUSTOM_CSS)) {
+                customCss = intent.getStringExtra(EXTRA_CUSTOM_CSS);
+                if (customCss == null) customCss = "";
+            } else {
+                loadCustomCss();
+            }
 
-            // 加载网页背景透明设置
-            loadWebpageBgTransparentSetting();
+            // 加载网页背景透明设置：优先使用服务内存中的未保存值
+            if (intent.hasExtra(EXTRA_WEBPAGE_BG_TRANSPARENT)) {
+                webpageBgTransparent = intent.getBooleanExtra(EXTRA_WEBPAGE_BG_TRANSPARENT, false);
+            } else {
+                loadWebpageBgTransparentSetting();
+            }
         } else {
             shortcutIconSize = intent.getIntExtra(EXTRA_SHORTCUT_ICON_SIZE, 100);
             shortcutIconCorner = intent.getIntExtra(EXTRA_SHORTCUT_ICON_CORNER, 16);
@@ -679,15 +710,27 @@ public class OverlayWindowActivity extends AppCompatActivity {
             shortcutBlurRadius = intent.getIntExtra(EXTRA_SHORTCUT_BLUR_RADIUS, 20);
             shortcutOverlayAlpha = intent.getIntExtra(EXTRA_SHORTCUT_OVERLAY_ALPHA, 180);
 
-            // ColorOS 风格效果开关（直接读 SharedPreferences，同输入法避让的加载模式）
-            loadShortcutEffectSettings();
+            // ColorOS 风格效果开关：优先使用服务内存中的未保存值
+            if (intent.hasExtra(EXTRA_SHORTCUT_EDGE_REFRACTION)
+                    || intent.hasExtra(EXTRA_SHORTCUT_FINGER_GLOW)
+                    || intent.hasExtra(EXTRA_SHORTCUT_DRAG_STRETCH)) {
+                shortcutEdgeRefraction = intent.getBooleanExtra(EXTRA_SHORTCUT_EDGE_REFRACTION, true);
+                shortcutFingerGlow = intent.getBooleanExtra(EXTRA_SHORTCUT_FINGER_GLOW, true);
+                shortcutDragStretch = intent.getBooleanExtra(EXTRA_SHORTCUT_DRAG_STRETCH, true);
+                shortcutEdgeBandDp = intent.getIntExtra(EXTRA_SHORTCUT_EDGE_BAND_DP, 4);
+                shortcutEdgeOpacity = intent.getIntExtra(EXTRA_SHORTCUT_EDGE_OPACITY, 48);
+                fingerGlowBrightness = intent.getIntExtra(EXTRA_FINGER_GLOW_BRIGHTNESS, 27);
+                fingerGlowSize = intent.getIntExtra(EXTRA_FINGER_GLOW_SIZE, 100);
+            } else {
+                loadShortcutEffectSettings();
+            }
         }
 
         // 读取顶部小横条透明度
         topBarTransparency = intent.getIntExtra(EXTRA_TOP_BAR_TRANSPARENCY, 40);
 
         // 加载背景遮罩设置（所有窗口类型）
-        loadOverlaySettings();
+        loadOverlaySettings(intent);
     }
 
     /**
@@ -751,17 +794,27 @@ public class OverlayWindowActivity extends AppCompatActivity {
     }
 
     /**
-     * 从 SharedPreferences 加载背景遮罩设置
+     * 加载背景遮罩设置：优先使用服务内存中的未保存值，缺失时回退到 SharedPreferences。
      */
-    private void loadOverlaySettings() {
+    private void loadOverlaySettings(Intent intent) {
         try {
             SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
-            overlayAlpha = prefs.getInt("overlay_alpha", 50);
-            overlayColor = prefs.getString("overlay_color", "#000000");
-            overlayAnimDuration = prefs.getInt("overlay_anim_duration", 100);
+            overlayAlpha = intent.hasExtra(EXTRA_OVERLAY_ALPHA)
+                    ? intent.getIntExtra(EXTRA_OVERLAY_ALPHA, 50)
+                    : prefs.getInt("overlay_alpha", 50);
+            overlayColor = intent.hasExtra(EXTRA_OVERLAY_COLOR)
+                    ? intent.getStringExtra(EXTRA_OVERLAY_COLOR)
+                    : prefs.getString("overlay_color", "#000000");
+            if (overlayColor == null) overlayColor = "#000000";
+            overlayAnimDuration = intent.hasExtra(EXTRA_OVERLAY_ANIM_DURATION)
+                    ? intent.getIntExtra(EXTRA_OVERLAY_ANIM_DURATION, 100)
+                    : prefs.getInt("overlay_anim_duration", 100);
             // 模糊层同步模式：强制「均衡」档时忽略用户存储值（存储值不覆写，恢复开关后原档位生效）
             // blur_sync_entries：0 精确同步 / 1 均衡 / 2 性能优先
-            blurSyncMode = AppConfig.BLUR_SYNC_FORCE_BALANCED ? 1 : prefs.getInt("blur_sync_mode", 0);
+            int requestedBlurSync = intent.hasExtra(EXTRA_BLUR_SYNC_MODE)
+                    ? intent.getIntExtra(EXTRA_BLUR_SYNC_MODE, 0)
+                    : prefs.getInt("blur_sync_mode", 0);
+            blurSyncMode = AppConfig.BLUR_SYNC_FORCE_BALANCED ? 1 : requestedBlurSync;
             Log.d(TAG, "已加载遮罩设置 - 透明度: " + overlayAlpha + "%, 颜色: " + overlayColor + ", 动画时长: " + overlayAnimDuration + "ms");
         } catch (Exception e) {
             Log.e(TAG, "加载遮罩设置失败", e);

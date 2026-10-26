@@ -304,6 +304,14 @@ public class FloatWindowService extends Service {
     private int shortcutStyle = 0; // 0=不透明, 1=亚克力, 2=液态玻璃
     private int shortcutBlurRadius = 20; // dp
     private int shortcutOverlayAlpha = 180; // 0-255
+    private int blurSyncMode = 0; // 0 精确同步 / 1 均衡 / 2 性能优先
+    private boolean shortcutEdgeRefraction = true;
+    private boolean shortcutFingerGlow = true;
+    private boolean shortcutDragStretch = true;
+    private int shortcutEdgeBandDp = 4;
+    private int shortcutEdgeOpacity = 48;
+    private int fingerGlowBrightness = 27;
+    private int fingerGlowSize = 100;
     private View shortcutContentContainer;
     private ContinuousRoundRectDrawable shortcutBackgroundDrawable;
 
@@ -489,9 +497,11 @@ public class FloatWindowService extends Service {
         // 2. 注入深色模式 CSS
         injectDarkModeCSS(aiWebView);
             
-        // 3. 注入自定义 CSS
+        // 3. 注入自定义 CSS（清空时移除旧的注入内容）
         if (!TextUtils.isEmpty(customCss)) {
             injectCustomCss(aiWebView);
+        } else {
+            removeCustomCss(aiWebView);
         }
             
         // 4. 根据设置调整 WebView 背景透明度
@@ -552,6 +562,22 @@ public class FloatWindowService extends Service {
         }
     }
         
+    /**
+     * 移除自定义 CSS（用户清空输入框时使用）
+     */
+    private void removeCustomCss(WebView view) {
+        String js = "(function(){" +
+                "var s=document.getElementById('__custom_css');" +
+                "if(s){s.parentNode.removeChild(s);}" +
+                "})()";
+        try {
+            view.evaluateJavascript(js, null);
+            Log.d(TAG, "自定义 CSS 已移除");
+        } catch (Exception e) {
+            Log.e(TAG, "移除自定义 CSS 失败", e);
+        }
+    }
+
     /**
      * 注入自定义 CSS
      */
@@ -824,11 +850,8 @@ public class FloatWindowService extends Service {
         else if (intent != null && "UPDATE_KEYBOARD_SETTINGS".equals(intent.getAction())) {
             keyboardOffset = intent.getIntExtra("keyboard_offset", keyboardOffset);
             keyboardAnimDuration = intent.getIntExtra("keyboard_anim_duration", keyboardAnimDuration);
-            // 保存到 prefs（下次启动时生效）
-            getSharedPreferences("ai_window_settings", MODE_PRIVATE).edit()
-                    .putInt("keyboard_offset", keyboardOffset)
-                    .putInt("keyboard_anim_duration", keyboardAnimDuration)
-                    .apply();
+            // 注意：这里不写 prefs。设置页的即时预览不能提前落盘，
+            // 只有用户点「保存」后 SettingsActivity 才统一持久化。
             Log.d(TAG, "输入法设置已更新: offset=" + keyboardOffset + ", animDuration=" + keyboardAnimDuration);
         }
         // 处理快捷方式窗口设置更新
@@ -844,6 +867,9 @@ public class FloatWindowService extends Service {
             shortcutStyle = intent.getIntExtra("shortcut_style", shortcutStyle);
             shortcutBlurRadius = intent.getIntExtra("shortcut_blur_radius", shortcutBlurRadius);
             shortcutOverlayAlpha = intent.getIntExtra("shortcut_overlay_alpha", shortcutOverlayAlpha);
+            if (intent.hasExtra("blur_sync_mode")) {
+                blurSyncMode = intent.getIntExtra("blur_sync_mode", blurSyncMode);
+            }
 
             // 如果窗口已展开，需要重建
             if (isShortcutWindowExpanded) {
@@ -892,6 +918,29 @@ public class FloatWindowService extends Service {
             }
             
             Log.d(TAG, "AI 窗口模糊效果已更新: style=" + aiStyle + ", blurRadius=" + aiBlurRadius + ", overlayAlpha=" + aiOverlayAlpha);
+        }
+        // AI 页面设置：网页背景透明 / 自定义 CSS（即时生效，不写 prefs）
+        else if (intent != null && "UPDATE_AI_PAGE_SETTINGS".equals(intent.getAction())) {
+            webpageBgTransparent = intent.getBooleanExtra("webpage_bg_transparent", webpageBgTransparent);
+            if (intent.hasExtra("custom_css")) {
+                String css = intent.getStringExtra("custom_css");
+                customCss = css != null ? css : "";
+            }
+            applyWebpageSettings();
+            Log.d(TAG, "AI 页面设置已更新: transparent=" + webpageBgTransparent
+                    + ", cssLength=" + (customCss != null ? customCss.length() : 0));
+        }
+        // 快捷窗口 ColorOS 风格效果（即时生效，不写 prefs）
+        else if (intent != null && "UPDATE_SHORTCUT_EFFECT_SETTINGS".equals(intent.getAction())) {
+            shortcutEdgeRefraction = intent.getBooleanExtra("shortcut_edge_refraction", shortcutEdgeRefraction);
+            shortcutFingerGlow = intent.getBooleanExtra("shortcut_finger_glow", shortcutFingerGlow);
+            shortcutDragStretch = intent.getBooleanExtra("shortcut_drag_stretch", shortcutDragStretch);
+            shortcutEdgeBandDp = intent.getIntExtra("shortcut_edge_band_dp", shortcutEdgeBandDp);
+            shortcutEdgeOpacity = intent.getIntExtra("shortcut_edge_opacity", shortcutEdgeOpacity);
+            fingerGlowBrightness = intent.getIntExtra("finger_glow_brightness", fingerGlowBrightness);
+            fingerGlowSize = intent.getIntExtra("finger_glow_size", fingerGlowSize);
+            Log.d(TAG, "快捷窗口效果已更新: refraction=" + shortcutEdgeRefraction
+                    + ", glow=" + shortcutFingerGlow + ", stretch=" + shortcutDragStretch);
         }
         // 处理顶部小横条透明度更新
         else if (intent != null && "UPDATE_TOP_BAR_TRANSPARENCY".equals(intent.getAction())) {
@@ -2778,6 +2827,15 @@ public class FloatWindowService extends Service {
         intent.putExtra(OverlayWindowActivity.EXTRA_AI_BLUR_RADIUS, aiBlurRadius);
         intent.putExtra(OverlayWindowActivity.EXTRA_AI_OVERLAY_ALPHA, aiOverlayAlpha);
         intent.putExtra(OverlayWindowActivity.EXTRA_TOP_BAR_TRANSPARENCY, topBarTransparency);
+        // 以下设置同样只存在于服务内存中（设置页未保存时不能读 prefs）
+        intent.putExtra(OverlayWindowActivity.EXTRA_KEYBOARD_OFFSET, keyboardOffset);
+        intent.putExtra(OverlayWindowActivity.EXTRA_KEYBOARD_ANIM_DURATION, keyboardAnimDuration);
+        intent.putExtra(OverlayWindowActivity.EXTRA_CUSTOM_CSS, customCss);
+        intent.putExtra(OverlayWindowActivity.EXTRA_WEBPAGE_BG_TRANSPARENT, webpageBgTransparent);
+        intent.putExtra(OverlayWindowActivity.EXTRA_OVERLAY_ALPHA, overlayAlpha);
+        intent.putExtra(OverlayWindowActivity.EXTRA_OVERLAY_COLOR, overlayColor);
+        intent.putExtra(OverlayWindowActivity.EXTRA_OVERLAY_ANIM_DURATION, overlayAnimDuration);
+        intent.putExtra(OverlayWindowActivity.EXTRA_BLUR_SYNC_MODE, blurSyncMode);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
         startActivity(intent, ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle());
         // 隐藏底部提示条（透明度设为0）
@@ -2817,6 +2875,17 @@ public class FloatWindowService extends Service {
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_STYLE, effectiveStyle);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_BLUR_RADIUS, shortcutBlurRadius);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_OVERLAY_ALPHA, shortcutOverlayAlpha);
+        intent.putExtra(OverlayWindowActivity.EXTRA_BLUR_SYNC_MODE, blurSyncMode);
+        intent.putExtra(OverlayWindowActivity.EXTRA_OVERLAY_ALPHA, overlayAlpha);
+        intent.putExtra(OverlayWindowActivity.EXTRA_OVERLAY_COLOR, overlayColor);
+        intent.putExtra(OverlayWindowActivity.EXTRA_OVERLAY_ANIM_DURATION, overlayAnimDuration);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_EDGE_REFRACTION, shortcutEdgeRefraction);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_FINGER_GLOW, shortcutFingerGlow);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_DRAG_STRETCH, shortcutDragStretch);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_EDGE_BAND_DP, shortcutEdgeBandDp);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_EDGE_OPACITY, shortcutEdgeOpacity);
+        intent.putExtra(OverlayWindowActivity.EXTRA_FINGER_GLOW_BRIGHTNESS, fingerGlowBrightness);
+        intent.putExtra(OverlayWindowActivity.EXTRA_FINGER_GLOW_SIZE, fingerGlowSize);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
         startActivity(intent, ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle());
         if (bottomBar != null) bottomBar.setAlpha(0f);
@@ -7746,6 +7815,14 @@ public class FloatWindowService extends Service {
             shortcutStyle = prefs.getInt("shortcut_style", 0);
             shortcutBlurRadius = prefs.getInt("shortcut_blur_radius", 20);
             shortcutOverlayAlpha = prefs.getInt("shortcut_overlay_alpha", 180);
+            blurSyncMode = prefs.getInt("blur_sync_mode", 0);
+            shortcutEdgeRefraction = prefs.getBoolean("shortcut_edge_refraction", true);
+            shortcutFingerGlow = prefs.getBoolean("shortcut_finger_glow", true);
+            shortcutDragStretch = prefs.getBoolean("shortcut_drag_stretch", true);
+            shortcutEdgeBandDp = prefs.getInt("shortcut_edge_band_dp", 4);
+            shortcutEdgeOpacity = prefs.getInt("shortcut_edge_opacity", 48);
+            fingerGlowBrightness = prefs.getInt("finger_glow_brightness", 27);
+            fingerGlowSize = prefs.getInt("finger_glow_size", 100);
             
             // 加载 AI 窗口模糊效果设置
             aiStyle = prefs.getInt("ai_style", 0);

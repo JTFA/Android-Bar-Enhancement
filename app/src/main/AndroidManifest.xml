@@ -78,6 +78,7 @@
             android:name=".SettingsActivity"
             android:exported="false"
             android:label="提示条设置"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
             android:theme="@style/Theme.ModernSettings" />
 
         <!-- 悬浮窗前台服务 -->

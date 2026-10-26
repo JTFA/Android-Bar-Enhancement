@@ -28,6 +28,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -287,6 +288,28 @@ public class SettingsActivity extends AppCompatActivity {
     // 保存按钮
     private Button btnSave;
 
+    // 未保存修改与返回确认
+    private boolean hasUnsavedChanges = false;
+    private boolean uiInitialized = false;
+    private boolean suppressCallbacks = false;
+    private boolean discardingChanges = false;
+    private AlertDialog unsavedDialog;
+    private final Handler pendingApplyHandler = new Handler(Looper.getMainLooper());
+    private final Runnable pendingApplyRunnable = new Runnable() {
+        @Override
+        public void run() {
+            applyCurrentSettings();
+        }
+    };
+    private final Runnable markUiInitializedRunnable = new Runnable() {
+        @Override
+        public void run() {
+            uiInitialized = true;
+            // Spinner 首次布局时可能回调一次 onItemSelected，这里清掉误判
+            hasUnsavedChanges = false;
+        }
+    };
+
     // 快捷窗口轮廓实时预览层（触摸穿透，不影响操作）
     private WindowOutlineOverlay windowOutlineOverlay;
 
@@ -328,6 +351,80 @@ public class SettingsActivity extends AppCompatActivity {
         ((FrameLayout) findViewById(android.R.id.content)).addView(windowOutlineOverlay,
                 new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // Spinner 首次布局可能回调一次，延迟标记界面已完成初始化
+        pendingApplyHandler.postDelayed(markUiInitializedRunnable, 300);
+
+        // 返回时若有未保存修改，询问保存/取消
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (unsavedDialog != null && unsavedDialog.isShowing()) return;
+                if (hasUnsavedChanges) {
+                    showUnsavedDialog();
+                } else {
+                    finish();
+                }
+            }
+        });
+    }
+
+    private void showUnsavedDialog() {
+        if (isFinishing() || isDestroyed()) return;
+        unsavedDialog = new AlertDialog.Builder(this)
+                .setMessage("是否保存设置？")
+                .setPositiveButton("保存", (dialog, which) -> {
+                    dialog.dismiss();
+                    saveSettings();
+                    finish();
+                })
+                .setNegativeButton("取消", (dialog, which) -> {
+                    dialog.dismiss();
+                    discardChangesAndFinish();
+                })
+                .setCancelable(false)
+                .show();
+    }
+
+    /**
+     * 取消本次修改：恢复到 SharedPreferences 中最后一次保存的状态。
+     * 未点过保存时，prefs 仍是进入页面时的值，因此等价于回到进入页面时。
+     */
+    private void discardChangesAndFinish() {
+        discardingChanges = true;
+        pendingApplyHandler.removeCallbacks(pendingApplyRunnable);
+        hasUnsavedChanges = false;
+
+        // 静默从 prefs 重新加载控件，避免监听器把当前修改再次下发
+        suppressCallbacks = true;
+        loadSettings();
+        suppressCallbacks = false;
+
+        // 把最后一次保存的状态重新下发给服务
+        applyCurrentSettings();
+        finish();
+    }
+
+    /** 任意设置发生变化：标记未保存并立即下发到服务（不写 prefs）。 */
+    private void onSettingChanged() {
+        if (!uiInitialized || suppressCallbacks || discardingChanges) return;
+        hasUnsavedChanges = true;
+        applyCurrentSettings();
+    }
+
+    /** 文本输入使用防抖，避免每敲一个字符都下发一次。 */
+    private void onTextSettingChanged() {
+        if (!uiInitialized || suppressCallbacks || discardingChanges) return;
+        hasUnsavedChanges = true;
+        pendingApplyHandler.removeCallbacks(pendingApplyRunnable);
+        pendingApplyHandler.postDelayed(pendingApplyRunnable, 350);
+    }
+
+    private void flushPendingApply() {
+        pendingApplyHandler.removeCallbacks(pendingApplyRunnable);
+        if (!discardingChanges) {
+            applyCurrentSettings();
+        }
     }
 
     /** 读取四个滑块当前值，刷新并显示轮廓预览层 */
@@ -827,96 +924,85 @@ public class SettingsActivity extends AppCompatActivity {
     }
     
     /**
-     * 保存设置到 SharedPreferences
+     * 保存设置到 SharedPreferences。
+     * 这是本次页面会话中唯一真正落盘的入口；其它修改只下发服务。
      */
     private void saveSettings() {
+        persistAllSettings();
+        pendingApplyHandler.removeCallbacks(pendingApplyRunnable);
+        applyCurrentSettings();
+        hasUnsavedChanges = false;
+        Toast.makeText(this, "设置已保存并应用", Toast.LENGTH_SHORT).show();
+    }
+
+    private void persistAllSettings() {
         SharedPreferences.Editor editor = preferences.edit();
-        
-        // 保存 AI URL
-        String aiUrl = editAiUrl.getText().toString().trim();
-        if (TextUtils.isEmpty(aiUrl)) {
-            aiUrl = "https://www.doubao.com"; // 默认值
-        }
-        editor.putString(KEY_AI_URL, aiUrl);
-        
+
+        editor.putString(KEY_AI_URL, getAiUrlSafe());
+
         // 保存提示条样式
         editor.putInt(KEY_BAR_WIDTH, seekBarWidth.getProgress());
         editor.putInt(KEY_BAR_HEIGHT, seekBarHeight.getProgress());
         editor.putInt(KEY_BAR_CORNER, seekBarCorner.getProgress());
         editor.putInt(KEY_BAR_POSITION_Y, seekBarPositionY.getProgress());
         editor.putInt(KEY_LONG_PRESS_DURATION, seekLongPressDuration.getProgress());
-        
+
         // 保存 AI 窗口大小
-        int windowWidth = seekWindowWidth.getProgress();
-        int windowHeight = seekWindowHeight.getProgress();
-        editor.putInt(KEY_WINDOW_WIDTH, windowWidth);
-        editor.putInt(KEY_WINDOW_HEIGHT, windowHeight);
+        editor.putInt(KEY_WINDOW_WIDTH, seekWindowWidth.getProgress());
+        editor.putInt(KEY_WINDOW_HEIGHT, seekWindowHeight.getProgress());
         editor.putInt(KEY_WINDOW_POSITION_Y, seekWindowPositionY.getProgress());
-        
+
         // 保存边框和阴影设置
         editor.putInt(KEY_BORDER_WIDTH, seekBorderWidth.getProgress());
-        editor.putInt(KEY_CORNER_RADIUS, seekCornerRadius.getProgress()); // 保存圆角半径
-        String borderColor = editBorderColor.getText().toString().trim();
-        if (TextUtils.isEmpty(borderColor) || !borderColor.startsWith("#")) {
-            borderColor = "#4CAF50";
-        }
-        editor.putString(KEY_BORDER_COLOR, borderColor);
+        editor.putInt(KEY_CORNER_RADIUS, seekCornerRadius.getProgress());
+        editor.putString(KEY_BORDER_COLOR, getBorderColorSafe());
         editor.putInt(KEY_BORDER_ALPHA, seekBorderAlpha.getProgress());
-        
+
         // 保存关闭按钮显示设置
         editor.putBoolean(KEY_SHOW_CLOSE_BUTTON, switchShowCloseButton.isChecked());
-        
+
         // 保存显示刷新按钮设置
         editor.putBoolean(KEY_SHOW_REFRESH_BUTTON, switchShowRefreshButton.isChecked());
-        
+
         // 保存显示后退按钮设置
         editor.putBoolean(KEY_SHOW_BACK_BUTTON, switchShowBackButton.isChecked());
-        
+
         // 保存点击窗口外关闭窗口设置
         editor.putBoolean(KEY_CLOSE_ON_OUTSIDE_CLICK, switchCloseOnOutsideClick.isChecked());
-        
+
         // 保存侧边返回手势设置
         editor.putBoolean(KEY_BACK_PRIORITIZE_WEBVIEW, switchBackPrioritizeWebview.isChecked());
-        
+
         // 保存输入法避让设置
         editor.putInt(KEY_KEYBOARD_OFFSET, seekKeyboardOffset.getProgress());
         editor.putInt(KEY_KEYBOARD_ANIM_DURATION, seekKeyboardAnimDuration.getProgress());
-        
+
         // 保存动画速度
         editor.putInt(KEY_ANIM_DURATION, seekAnimDuration.getProgress());
-        
+
         // 保存按下状态样式
         editor.putBoolean(KEY_PRESSED_BAR_ENABLED, switchPressedBarEnabled.isChecked());
         editor.putInt(KEY_PRESSED_BAR_WIDTH, seekPressedBarWidth.getProgress());
         editor.putInt(KEY_PRESSED_BAR_HEIGHT, seekPressedBarHeight.getProgress());
         editor.putInt(KEY_PRESSED_BAR_CORNER, seekPressedBarCorner.getProgress());
         editor.putInt(KEY_PRESSED_BAR_ALPHA, seekPressedBarAlpha.getProgress());
-        String pressedColor = editPressedBarColor.getText().toString().trim();
-        if (TextUtils.isEmpty(pressedColor) || !pressedColor.startsWith("#")) {
-            pressedColor = "#333333";
-        }
-        editor.putString(KEY_PRESSED_BAR_COLOR, pressedColor);
-        
+        editor.putString(KEY_PRESSED_BAR_COLOR, getPressedBarColorSafe());
+
         // 保存羽化宽度
         editor.putInt(KEY_PRESSED_BAR_FEATHER, seekPressedBarFeather.getProgress());
-        
+
         // 保存按下时位置Y
         editor.putInt(KEY_PRESSED_BAR_POSITION_Y, seekPressedBarPositionY.getProgress());
 
         // 保存光晕半径与颜色模式
         editor.putInt(KEY_PRESSED_BAR_GLOW_RADIUS, seekPressedBarGlowRadius.getProgress());
         editor.putString(KEY_PRESSED_BAR_COLOR_MODE, getPressedColorMode());
-        
-        // 保存按下时位置Y
+
         // 保存背景遮罩设置
         editor.putInt(KEY_OVERLAY_ALPHA, seekOverlayAlpha.getProgress());
-        String overlayColor = editOverlayColor.getText().toString().trim();
-        if (TextUtils.isEmpty(overlayColor) || !overlayColor.startsWith("#")) {
-            overlayColor = "#000000";
-        }
-        editor.putString(KEY_OVERLAY_COLOR, overlayColor);
+        editor.putString(KEY_OVERLAY_COLOR, getOverlayColorSafe());
         editor.putInt(KEY_OVERLAY_ANIM_DURATION, seekOverlayAnimDuration.getProgress());
-        
+
         // 保存快捷方式窗口设置
         editor.putInt(KEY_SHORTCUT_WINDOW_WIDTH, seekShortcutWindowWidth.getProgress());
         editor.putInt(KEY_SHORTCUT_WINDOW_HEIGHT, seekShortcutWindowHeight.getProgress());
@@ -944,23 +1030,22 @@ public class SettingsActivity extends AppCompatActivity {
         // 保存手指光晕参数
         editor.putInt(KEY_FINGER_GLOW_BRIGHTNESS, seekFingerGlowBrightness.getProgress());
         editor.putInt(KEY_FINGER_GLOW_SIZE, seekFingerGlowSize.getProgress());
-        
+
         // 保存 AI 窗口模糊效果设置
         editor.putInt(KEY_AI_STYLE, spinnerAiStyle.getSelectedItemPosition());
-        
+
         int aiOverlayAlphaToSave = seekAiOverlayAlpha.getProgress();
         // 当样式为不透明时，强制保存 100%
         if (spinnerAiStyle.getSelectedItemPosition() == 0) {
             aiOverlayAlphaToSave = 255;
         }
-        
+
         editor.putInt(KEY_AI_BLUR_RADIUS, seekAiBlurRadius.getProgress());
         editor.putInt(KEY_AI_OVERLAY_ALPHA, aiOverlayAlphaToSave);
-        
+
         // 保存自定义 CSS
-        String customCss = editCustomCss.getText().toString().trim();
-        editor.putString(KEY_CUSTOM_CSS, customCss);
-        
+        editor.putString(KEY_CUSTOM_CSS, editCustomCss.getText().toString().trim());
+
         // 保存网页背景透明设置
         editor.putBoolean(KEY_WEBPAGE_BG_TRANSPARENT, switchWebpageBgTransparent.isChecked());
 
@@ -970,146 +1055,8 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putBoolean("use_expand_directly", switchUseExpandDirectly.isChecked());
         editor.putBoolean("try_fullscreen_windowing", switchTryFullscreenWindowing.isChecked());
         editor.putString("custom_windowing_mode", editCustomWindowingMode.getText().toString().trim());
-        
-        // 提交保存
-        editor.apply();
-        
-        // 通知服务更新
-        applySettingsToService(aiUrl, windowWidth, windowHeight);
-        
-        Toast.makeText(this, "设置已保存并应用", Toast.LENGTH_SHORT).show();
-    }
-    
-    /**
-     * 将设置应用到正在运行的服务
-     */
-    private void applySettingsToService(String aiUrl, int windowWidth, int windowHeight) {
-        // 更新提示条样式和位置
-        Intent styleIntent = new Intent(this, FloatWindowService.class);
-        styleIntent.setAction("UPDATE_STYLE");
-        styleIntent.putExtra("width", seekBarWidth.getProgress());
-        styleIntent.putExtra("height", seekBarHeight.getProgress());
-        styleIntent.putExtra("corner", seekBarCorner.getProgress());
-        styleIntent.putExtra("position_y", seekBarPositionY.getProgress());
-        styleIntent.putExtra("pressed_bar_enabled", switchPressedBarEnabled.isChecked());
-        styleIntent.putExtra("pressed_bar_color", getPressedBarColorSafe());
-        styleIntent.putExtra("pressed_bar_alpha", seekPressedBarAlpha.getProgress());
-        styleIntent.putExtra("pressed_bar_width", seekPressedBarWidth.getProgress());
-        styleIntent.putExtra("pressed_bar_height", seekPressedBarHeight.getProgress());
-        styleIntent.putExtra("pressed_bar_corner", seekPressedBarCorner.getProgress());
-        styleIntent.putExtra("pressed_bar_feather_width", seekPressedBarFeather.getProgress());
-        styleIntent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
-        styleIntent.putExtra("pressed_bar_glow_radius", seekPressedBarGlowRadius.getProgress());
-        styleIntent.putExtra("pressed_bar_color_mode", getPressedColorMode());
-        startService(styleIntent);
-        
-        // 关键修复：获取边框和阴影设置
-        String borderColor = editBorderColor.getText().toString().trim();
-        if (TextUtils.isEmpty(borderColor) || !borderColor.startsWith("#")) {
-            borderColor = "#4CAF50";
-        }
-        
-//        String shadowColor = editShadowColor.getText().toString().trim();
-//        if (TextUtils.isEmpty(shadowColor) || !shadowColor.startsWith("#")) {
-//            shadowColor = "#000000";
-//        }
-        
-        // 更新 AI 窗口大小、位置、边框和阴影
-        Intent sizeIntent = new Intent(this, FloatWindowService.class);
-        sizeIntent.setAction("UPDATE_WINDOW_SIZE");
-        sizeIntent.putExtra("window_width", dpToPx(windowWidth));
-        sizeIntent.putExtra("window_height", dpToPx(windowHeight));
-        sizeIntent.putExtra("window_position_y", seekWindowPositionY.getProgress());
-        sizeIntent.putExtra("border_width", seekBorderWidth.getProgress());
-        sizeIntent.putExtra("corner_radius", seekCornerRadius.getProgress()); // 新增：圆角半径
-        sizeIntent.putExtra("border_color", borderColor);
-        sizeIntent.putExtra("border_alpha", seekBorderAlpha.getProgress() / 100.0f);
-//        sizeIntent.putExtra("shadow_width", seekShadowWidth.getProgress());
-//        sizeIntent.putExtra("shadow_color", shadowColor);
-//        sizeIntent.putExtra("shadow_alpha", seekShadowAlpha.getProgress() / 100.0f);
-        sizeIntent.putExtra("show_close_button", switchShowCloseButton.isChecked()); // 新增：关闭按钮显示
-        sizeIntent.putExtra("show_refresh_button", switchShowRefreshButton.isChecked()); // 新增：显示刷新按钮
-        sizeIntent.putExtra("show_back_button", switchShowBackButton.isChecked()); // 新增：显示后退按钮
-        sizeIntent.putExtra("close_on_outside_click", switchCloseOnOutsideClick.isChecked()); // 点击窗口外关闭窗口
-        sizeIntent.putExtra("back_prioritize_webview", switchBackPrioritizeWebview.isChecked()); // 侧边返回手势行为
-        sizeIntent.putExtra("overlay_color", editOverlayColor.getText().toString().trim());
-        sizeIntent.putExtra("overlay_alpha", seekOverlayAlpha.getProgress());
-        sizeIntent.putExtra("use_expand_directly", switchUseExpandDirectly.isChecked());
-        startService(sizeIntent);
-        
-        // 更新输入法避让设置
-        Intent kbIntent = new Intent(this, FloatWindowService.class);
-        kbIntent.setAction("UPDATE_KEYBOARD_SETTINGS");
-        kbIntent.putExtra("keyboard_offset", seekKeyboardOffset.getProgress());
-        kbIntent.putExtra("keyboard_anim_duration", seekKeyboardAnimDuration.getProgress());
-        startService(kbIntent);
-        
-        // 更新动画速度（通过 UPDATE_STYLE 传递）
-        Intent animIntent = new Intent(this, FloatWindowService.class);
-        animIntent.setAction("UPDATE_STYLE");
-        animIntent.putExtra("anim_duration", seekAnimDuration.getProgress());
-        animIntent.putExtra("overlay_anim_duration", seekOverlayAnimDuration.getProgress());
-        // 保持当前其他样式不变，传入现有值
-        animIntent.putExtra("width", seekBarWidth.getProgress());
-        animIntent.putExtra("height", seekBarHeight.getProgress());
-        animIntent.putExtra("corner", seekBarCorner.getProgress());
-        animIntent.putExtra("position_y", seekBarPositionY.getProgress());
-        animIntent.putExtra("long_press_duration", seekLongPressDuration.getProgress());
-        // 按下状态样式
-        animIntent.putExtra("pressed_bar_enabled", switchPressedBarEnabled.isChecked());
-        animIntent.putExtra("pressed_bar_color", getPressedBarColorSafe());
-        animIntent.putExtra("pressed_bar_alpha", seekPressedBarAlpha.getProgress());
-        animIntent.putExtra("pressed_bar_width", seekPressedBarWidth.getProgress());
-        animIntent.putExtra("pressed_bar_height", seekPressedBarHeight.getProgress());
-        animIntent.putExtra("pressed_bar_corner", seekPressedBarCorner.getProgress());
-        animIntent.putExtra("pressed_bar_feather_width", seekPressedBarFeather.getProgress());
-        animIntent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
-        animIntent.putExtra("pressed_bar_glow_radius", seekPressedBarGlowRadius.getProgress());
-        animIntent.putExtra("pressed_bar_color_mode", getPressedColorMode());
-        startService(animIntent);
-        
-        // 更新 AI URL（如果服务正在运行且窗口已展开）
-        Intent urlIntent = new Intent(this, FloatWindowService.class);
-        urlIntent.setAction("UPDATE_AI_URL");
-        urlIntent.putExtra("ai_url", aiUrl);
-        startService(urlIntent);
-        
-        // 更新快捷方式窗口设置
-        Intent shortcutIntent = new Intent(this, FloatWindowService.class);
-        shortcutIntent.setAction("UPDATE_SHORTCUT_SETTINGS");
-        shortcutIntent.putExtra("shortcut_window_width", seekShortcutWindowWidth.getProgress());
-        shortcutIntent.putExtra("shortcut_window_height", seekShortcutWindowHeight.getProgress());
-        shortcutIntent.putExtra("shortcut_window_position_y", seekShortcutWindowPositionY.getProgress());
-        shortcutIntent.putExtra("shortcut_corner_radius", seekShortcutCornerRadius.getProgress());
-        shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
-        shortcutIntent.putExtra("shortcut_icon_corner", seekShortcutIconCorner.getProgress());
-        shortcutIntent.putExtra("try_fullscreen_windowing", switchTryFullscreenWindowing.isChecked());
-        shortcutIntent.putExtra("custom_windowing_mode", parseCustomWindowingMode());
-        shortcutIntent.putExtra("shortcut_style",
-                switchUseExpandDirectly.isChecked() ? 0 : spinnerShortcutStyle.getSelectedItemPosition());
-        shortcutIntent.putExtra("shortcut_blur_radius", seekShortcutBlurRadius.getProgress());
-        shortcutIntent.putExtra("shortcut_overlay_alpha", seekShortcutOverlayAlpha.getProgress());
-        startService(shortcutIntent);
-        
-        // 更新 AI 窗口模糊效果设置
-        Intent aiBlurIntent = new Intent(this, FloatWindowService.class);
-        aiBlurIntent.setAction("UPDATE_AI_BLUR_SETTINGS");
-        aiBlurIntent.putExtra("ai_style", spinnerAiStyle.getSelectedItemPosition());
-        
-        int aiOverlayAlphaToSend = seekAiOverlayAlpha.getProgress();
-        if (spinnerAiStyle.getSelectedItemPosition() == 0) {
-            aiOverlayAlphaToSend = 255;
-        }
-        
-        aiBlurIntent.putExtra("ai_blur_radius", seekAiBlurRadius.getProgress());
-        aiBlurIntent.putExtra("ai_overlay_alpha", aiOverlayAlphaToSend);
-        startService(aiBlurIntent);
 
-        // 更新顶部小横条透明度
-        Intent barTpIntent = new Intent(this, FloatWindowService.class);
-        barTpIntent.setAction("UPDATE_TOP_BAR_TRANSPARENCY");
-        barTpIntent.putExtra("top_bar_transparency", seekTopBarTransparency.getProgress());
-        startService(barTpIntent);
+        editor.apply();
     }
 
     /**
@@ -1121,7 +1068,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textWidth.setText("宽度: " + progress + "dp");
-                applyCurrentSettings(); // 实时应用
+                onSettingChanged(); // 实时应用
             }
 
             @Override
@@ -1136,7 +1083,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textHeight.setText("高度: " + progress + "dp");
-                applyCurrentSettings(); // 实时应用
+                onSettingChanged(); // 实时应用
             }
 
             @Override
@@ -1151,7 +1098,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textCorner.setText("圆角: " + progress + "dp");
-                applyCurrentSettings(); // 实时应用
+                onSettingChanged(); // 实时应用
             }
 
             @Override
@@ -1167,7 +1114,7 @@ public class SettingsActivity extends AppCompatActivity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 String posYText = progress >= 0 ? "位置 Y: " + progress + "dp (向上)" : "位置 Y: " + progress + "dp (向下)";
                 textPositionY.setText(posYText);
-                applyCurrentSettings(); // 实时应用
+                onSettingChanged(); // 实时应用
             }
 
             @Override
@@ -1182,7 +1129,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textLongPressDuration.setText("长按触发时间: " + progress + "ms");
-                applyCurrentSettings(); // 实时应用
+                onSettingChanged(); // 实时应用
             }
 
             @Override
@@ -1198,7 +1145,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textWindowWidth.setText("宽度: " + progress + "dp");
-                applyCurrentSettings();
+                onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1209,7 +1156,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textWindowHeight.setText("高度: " + progress + "dp");
-                applyCurrentSettings();
+                onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1220,7 +1167,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textWindowPositionY.setText("窗口位置 Y: " + progress + " (居中)");
-                applyCurrentSettings(); // 实时应用
+                onSettingChanged(); // 实时应用
             }
 
             @Override
@@ -1235,7 +1182,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textBorderWidth.setText("边框宽度: " + progress + "dp");
-                applyCurrentSettings();
+                onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1246,7 +1193,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textCornerRadius.setText("窗口圆角: " + progress + "dp");
-                applyCurrentSettings();
+                onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1257,7 +1204,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textBorderAlpha.setText("边框透明度: " + String.format("%.2f", progress / 100.0f));
-                applyCurrentSettings();
+                onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1269,7 +1216,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textKeyboardOffset.setText("窗口上移距离: " + progress + "px");
-                applyCurrentSettings();
+                onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1280,7 +1227,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textKeyboardAnimDuration.setText("平移动画时长: " + progress + "ms");
-                applyCurrentSettings();
+                onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1291,7 +1238,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textAnimDuration.setText("动画速度: " + progress + "ms");
-                applyCurrentSettings();
+                onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1301,7 +1248,7 @@ public class SettingsActivity extends AppCompatActivity {
         switchPressedBarEnabled.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
-                applyCurrentSettings();
+                onSettingChanged();
                 if (isChecked) {
                     triggerPressedPreview();
                 }
@@ -1313,7 +1260,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textPressedBarWidth.setText("按下时宽度: " + progress + "dp");
-                applyCurrentSettings();
+                onSettingChanged();
                 triggerPressedPreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
@@ -1325,7 +1272,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textPressedBarHeight.setText("按下时高度: " + progress + "dp");
-                applyCurrentSettings();
+                onSettingChanged();
                 triggerPressedPreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
@@ -1337,7 +1284,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textPressedBarCorner.setText("按下时圆角: " + progress + "dp");
-                applyCurrentSettings();
+                onSettingChanged();
                 triggerPressedPreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
@@ -1350,7 +1297,7 @@ public class SettingsActivity extends AppCompatActivity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 float alpha = progress / 100.0f;
                 textPressedBarAlpha.setText("按下时透明度: " + String.format("%.2f", alpha));
-                applyCurrentSettings();
+                onSettingChanged();
                 triggerPressedPreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
@@ -1362,7 +1309,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textPressedBarFeather.setText("边缘羽化宽度: " + progress + "dp");
-                applyCurrentSettings();
+                onSettingChanged();
                 triggerPressedPreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
@@ -1375,7 +1322,7 @@ public class SettingsActivity extends AppCompatActivity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 String posYText = progress >= 0 ? "按下时位置Y: " + progress + "dp (向上)" : "按下时位置Y: " + progress + "dp (向下)";
                 textPressedBarPositionY.setText(posYText);
-                applyCurrentSettings();
+                onSettingChanged();
                 triggerPressedPreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
@@ -1387,7 +1334,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textPressedBarGlowRadius.setText(progress == 0 ? "光晕半径: 关闭" : "光晕半径: " + progress + "dp");
-                applyCurrentSettings();
+                onSettingChanged();
                 triggerPressedPreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
@@ -1399,7 +1346,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onCheckedChanged(RadioGroup group, int checkedId) {
                 updatePressedColorInputVisibility();
-                applyCurrentSettings();
+                onSettingChanged();
                 triggerPressedPreview();
             }
         });
@@ -1418,7 +1365,7 @@ public class SettingsActivity extends AppCompatActivity {
                 textTimeout = new Runnable() {
                     @Override
                     public void run() {
-                        applyCurrentSettings();
+                        onTextSettingChanged();
                         triggerPressedPreview();
                     }
                 };
@@ -1433,7 +1380,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textOverlayAlpha.setText("遮罩透明度: " + progress + "%");
-                applyCurrentSettings();
+                onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1444,7 +1391,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textOverlayAnimDuration.setText("遮罩渐变时长: " + progress + "ms");
-                applyCurrentSettings();
+                onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1455,7 +1402,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutWindowWidth.setText("快捷窗口宽度: " + progress + "dp");
-                applyCurrentSettings();
+                onSettingChanged();
                 if (fromUser) refreshWindowOutlinePreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) { refreshWindowOutlinePreview(); }
@@ -1467,7 +1414,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutWindowHeight.setText("快捷窗口最大高度: " + progress + "dp");
-                applyCurrentSettings();
+                onSettingChanged();
                 if (fromUser) refreshWindowOutlinePreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) { refreshWindowOutlinePreview(); }
@@ -1479,7 +1426,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutWindowPositionY.setText("快捷窗口位置 Y: " + progress + " (居中)");
-                applyCurrentSettings();
+                onSettingChanged();
                 if (fromUser) refreshWindowOutlinePreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) { refreshWindowOutlinePreview(); }
@@ -1491,7 +1438,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutCornerRadius.setText("快捷窗口圆角: " + progress + "dp");
-                applyCurrentSettings();
+                onSettingChanged();
                 if (fromUser) refreshWindowOutlinePreview();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) { refreshWindowOutlinePreview(); }
@@ -1503,7 +1450,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutIconSize.setText("图标大小: " + progress + "%");
-                applyCurrentSettings();
+                onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1514,17 +1461,18 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutIconCorner.setText("图标圆角: " + progress + "%");
-                applyCurrentSettings();
+                onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
 
-        // 边缘光参数 - 仅更新文案（保存后下次开窗生效）
+        // 边缘光 / 手指光晕参数
         seekShortcutEdgeBand.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutEdgeBand.setText("边缘光宽度: " + progress + "dp");
+                if (fromUser) onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1533,15 +1481,16 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutEdgeOpacity.setText("边缘光透明度: " + progress + "%");
+                if (fromUser) onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
-        // 手指光晕参数 - 仅更新文案（保存后下次开窗生效）
         seekFingerGlowBrightness.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textFingerGlowBrightness.setText("光晕亮度: " + progress + "%");
+                if (fromUser) onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1550,16 +1499,23 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textFingerGlowSize.setText("光晕范围: " + progress + "%");
+                if (fromUser) onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
         // 边缘折射光开关控制边缘光参数显隐
-        switchShortcutEdgeRefraction.setOnCheckedChangeListener((buttonView, isChecked) ->
-                updateEdgeSettingsVisibility(isChecked));
+        switchShortcutEdgeRefraction.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            updateEdgeSettingsVisibility(isChecked);
+            onSettingChanged();
+        });
         // 手指光晕开关控制光晕参数显隐
-        switchShortcutFingerGlow.setOnCheckedChangeListener((buttonView, isChecked) ->
-                updateFingerGlowSettingsVisibility(isChecked));
+        switchShortcutFingerGlow.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            updateFingerGlowSettingsVisibility(isChecked);
+            onSettingChanged();
+        });
+        switchShortcutDragStretch.setOnCheckedChangeListener((buttonView, isChecked) ->
+                onSettingChanged());
 
         // 保存并应用按钮
         btnSave.setOnClickListener(new View.OnClickListener() {
@@ -1572,13 +1528,13 @@ public class SettingsActivity extends AppCompatActivity {
         // 尝试消除授权弹窗开关 - 实时下发（手势路径）
         switchTryFullscreenWindowing.setOnCheckedChangeListener((buttonView, isChecked) -> {
             updateCustomWindowingModeVisibility(); // 开关开启时显示自定义 windowingMode 输入框
-            applyCurrentSettings();
+            onSettingChanged();
         });
 
         // 悬浮窗模式：开启后快捷窗口固定不透明，透明相关设置置灰
         switchUseExpandDirectly.setOnCheckedChangeListener((buttonView, isChecked) -> {
             updateFloatingWindowModeRestrictions(isChecked);
-            applyCurrentSettings();
+            onSettingChanged();
         });
         
         spinnerShortcutStyle.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -1588,7 +1544,15 @@ public class SettingsActivity extends AppCompatActivity {
                 if (!switchUseExpandDirectly.isChecked()) {
                     shortcutStyleBeforeFloatMode = position;
                 }
-                applyCurrentSettings();
+                onSettingChanged();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        spinnerBlurSyncMode.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                onSettingChanged();
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
@@ -1596,7 +1560,7 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutBlurRadius.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutBlurRadius.setText("模糊半径: " + progress + "dp");
-                if (fromUser) applyCurrentSettings();
+                if (fromUser) onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1605,7 +1569,7 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutOverlayAlpha.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textShortcutOverlayAlpha.setText("叠加色透明度: " + (progress * 100 / 255) + "%");
-                if (fromUser) applyCurrentSettings();
+                if (fromUser) onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1615,7 +1579,7 @@ public class SettingsActivity extends AppCompatActivity {
         seekAiBlurRadius.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textAiBlurRadius.setText("AI 窗口模糊半径: " + progress + "dp");
-                if (fromUser) applyCurrentSettings();
+                if (fromUser) onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1624,7 +1588,7 @@ public class SettingsActivity extends AppCompatActivity {
         seekAiOverlayAlpha.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textAiOverlayAlpha.setText("网页透明度: " + (progress * 100 / 255) + "%");
-                if (fromUser) applyCurrentSettings();
+                if (fromUser) onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -1639,26 +1603,52 @@ public class SettingsActivity extends AppCompatActivity {
                     seekAiOverlayAlpha.setProgress(255);
                     textAiOverlayAlpha.setText("网页透明度: 100%");
                 }
-                applyCurrentSettings();
+                onSettingChanged();
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
         
         // 网页背景透明开关监听器
-        switchWebpageBgTransparent.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            // 实时保存设置
-            preferences.edit().putBoolean(KEY_WEBPAGE_BG_TRANSPARENT, isChecked).apply();
-        });
+        switchWebpageBgTransparent.setOnCheckedChangeListener((buttonView, isChecked) ->
+                onSettingChanged());
 
         // 顶部小横条透明度 - 实时更新
         seekTopBarTransparency.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 textTopBarTransparency.setText("小横条透明度: " + progress + "%");
-                applyCurrentSettings();
+                onSettingChanged();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
+        // 其余开关 / 文本设置：即时下发服务，但不写 prefs
+        switchShowCloseButton.setOnCheckedChangeListener((buttonView, isChecked) -> onSettingChanged());
+        switchShowRefreshButton.setOnCheckedChangeListener((buttonView, isChecked) -> onSettingChanged());
+        switchShowBackButton.setOnCheckedChangeListener((buttonView, isChecked) -> onSettingChanged());
+        switchCloseOnOutsideClick.setOnCheckedChangeListener((buttonView, isChecked) -> onSettingChanged());
+        switchBackPrioritizeWebview.setOnCheckedChangeListener((buttonView, isChecked) -> onSettingChanged());
+
+        addDebouncedTextWatcher(editAiUrl);
+        addDebouncedTextWatcher(editBorderColor);
+        addDebouncedTextWatcher(editOverlayColor);
+        addDebouncedTextWatcher(editCustomCss);
+        addDebouncedTextWatcher(editCustomWindowingMode);
+    }
+
+    /** 文本输入防抖：停止输入 350ms 后再下发，避免逐字刷新。 */
+    private void addDebouncedTextWatcher(EditText editText) {
+        if (editText == null) return;
+        editText.addTextChangedListener(new android.text.TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                onTextSettingChanged();
+            }
+            @Override
+            public void afterTextChanged(android.text.Editable s) {}
         });
     }
 
@@ -1852,8 +1842,9 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("show_back_button", switchShowBackButton.isChecked()); // 新增：显示后退按钮
         sizeIntent.putExtra("close_on_outside_click", switchCloseOnOutsideClick.isChecked()); // 点击窗口外关闭窗口
         sizeIntent.putExtra("back_prioritize_webview", switchBackPrioritizeWebview.isChecked()); // 侧边返回手势行为
-        sizeIntent.putExtra("overlay_color", editOverlayColor.getText().toString().trim());
+        sizeIntent.putExtra("overlay_color", getOverlayColorSafe());
         sizeIntent.putExtra("overlay_alpha", seekOverlayAlpha.getProgress());
+        sizeIntent.putExtra("overlay_anim_duration", seekOverlayAnimDuration.getProgress());
         sizeIntent.putExtra("use_expand_directly", switchUseExpandDirectly.isChecked());
         startService(sizeIntent);
         
@@ -1902,7 +1893,45 @@ public class SettingsActivity extends AppCompatActivity {
                 switchUseExpandDirectly.isChecked() ? 0 : spinnerShortcutStyle.getSelectedItemPosition());
         shortcutIntent.putExtra("shortcut_blur_radius", seekShortcutBlurRadius.getProgress());
         shortcutIntent.putExtra("shortcut_overlay_alpha", seekShortcutOverlayAlpha.getProgress());
+        shortcutIntent.putExtra("blur_sync_mode", spinnerBlurSyncMode.getSelectedItemPosition());
         startService(shortcutIntent);
+
+        // 快捷窗口 ColorOS 风格效果
+        Intent shortcutEffectIntent = new Intent(this, FloatWindowService.class);
+        shortcutEffectIntent.setAction("UPDATE_SHORTCUT_EFFECT_SETTINGS");
+        shortcutEffectIntent.putExtra("shortcut_edge_refraction", switchShortcutEdgeRefraction.isChecked());
+        shortcutEffectIntent.putExtra("shortcut_finger_glow", switchShortcutFingerGlow.isChecked());
+        shortcutEffectIntent.putExtra("shortcut_drag_stretch", switchShortcutDragStretch.isChecked());
+        shortcutEffectIntent.putExtra("shortcut_edge_band_dp", seekShortcutEdgeBand.getProgress());
+        shortcutEffectIntent.putExtra("shortcut_edge_opacity", seekShortcutEdgeOpacity.getProgress());
+        shortcutEffectIntent.putExtra("finger_glow_brightness", seekFingerGlowBrightness.getProgress());
+        shortcutEffectIntent.putExtra("finger_glow_size", seekFingerGlowSize.getProgress());
+        startService(shortcutEffectIntent);
+
+        // AI 页面设置（网页背景透明、自定义 CSS）
+        Intent aiPageIntent = new Intent(this, FloatWindowService.class);
+        aiPageIntent.setAction("UPDATE_AI_PAGE_SETTINGS");
+        aiPageIntent.putExtra("webpage_bg_transparent", switchWebpageBgTransparent.isChecked());
+        aiPageIntent.putExtra("custom_css", editCustomCss.getText().toString().trim());
+        startService(aiPageIntent);
+
+        // 更新 AI URL
+        Intent aiUrlIntent = new Intent(this, FloatWindowService.class);
+        aiUrlIntent.setAction("UPDATE_AI_URL");
+        aiUrlIntent.putExtra("ai_url", getAiUrlSafe());
+        startService(aiUrlIntent);
+
+        // 更新 AI 窗口模糊效果设置
+        Intent aiBlurIntent = new Intent(this, FloatWindowService.class);
+        aiBlurIntent.setAction("UPDATE_AI_BLUR_SETTINGS");
+        aiBlurIntent.putExtra("ai_style", spinnerAiStyle.getSelectedItemPosition());
+        int aiOverlayAlphaToSend = seekAiOverlayAlpha.getProgress();
+        if (spinnerAiStyle.getSelectedItemPosition() == 0) {
+            aiOverlayAlphaToSend = 255;
+        }
+        aiBlurIntent.putExtra("ai_blur_radius", seekAiBlurRadius.getProgress());
+        aiBlurIntent.putExtra("ai_overlay_alpha", aiOverlayAlphaToSend);
+        startService(aiBlurIntent);
 
         // 更新顶部小横条透明度
         Intent barTransparencyIntent = new Intent(this, FloatWindowService.class);
@@ -1938,6 +1967,30 @@ public class SettingsActivity extends AppCompatActivity {
         }
         return color;
     }
+
+    private String getAiUrlSafe() {
+        String url = editAiUrl.getText().toString().trim();
+        if (TextUtils.isEmpty(url)) {
+            return "https://www.doubao.com";
+        }
+        return url;
+    }
+
+    private String getBorderColorSafe() {
+        String color = editBorderColor.getText().toString().trim();
+        if (TextUtils.isEmpty(color) || !color.startsWith("#")) {
+            return "#4CAF50";
+        }
+        return color;
+    }
+
+    private String getOverlayColorSafe() {
+        String color = editOverlayColor.getText().toString().trim();
+        if (TextUtils.isEmpty(color) || !color.startsWith("#")) {
+            return "#000000";
+        }
+        return color;
+    }
     
     /**
      * 触发按下样式预览（自动显示按下样式覆盖层，1秒无操作后自动隐藏）
@@ -1952,6 +2005,11 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        // 回到设置页：重新把当前（可能是未保存的）设置下发给服务
+        if (!discardingChanges) {
+            flushPendingApply();
+        }
+
         // 进入设置页面时，将底部提示条透明度设为50%
         Intent intent = new Intent(this, FloatWindowService.class);
         intent.setAction("UPDATE_STYLE");
@@ -1988,33 +2046,51 @@ public class SettingsActivity extends AppCompatActivity {
         super.onPause();
         // 离开设置页时立即隐藏快捷窗口轮廓预览，避免残留
         if (windowOutlineOverlay != null) windowOutlineOverlay.hideNow();
-        // 离开设置页面时，将底部提示条透明度设为0
-        Intent intent = new Intent(this, FloatWindowService.class);
-        intent.setAction("UPDATE_STYLE");
-        intent.putExtra("width", seekBarWidth.getProgress());
-        intent.putExtra("height", seekBarHeight.getProgress());
-        intent.putExtra("corner", seekBarCorner.getProgress());
-        intent.putExtra("alpha", 0.0f);
-        intent.putExtra("position_y", seekBarPositionY.getProgress());
-        intent.putExtra("long_press_duration", seekLongPressDuration.getProgress());
-        intent.putExtra("pressed_bar_enabled", switchPressedBarEnabled.isChecked());
-        intent.putExtra("pressed_bar_color", getPressedBarColorSafe());
-        intent.putExtra("pressed_bar_alpha", seekPressedBarAlpha.getProgress());
-        intent.putExtra("pressed_bar_width", seekPressedBarWidth.getProgress());
-        intent.putExtra("pressed_bar_height", seekPressedBarHeight.getProgress());
-        intent.putExtra("pressed_bar_corner", seekPressedBarCorner.getProgress());
-        intent.putExtra("pressed_bar_feather_width", seekPressedBarFeather.getProgress());
-        intent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
-        intent.putExtra("pressed_bar_glow_radius", seekPressedBarGlowRadius.getProgress());
-        intent.putExtra("pressed_bar_color_mode", getPressedColorMode());
-        try {
-            startService(intent);
-        } catch (Exception e) {
-            e.printStackTrace();
+
+        if (!discardingChanges) {
+            // 先执行待下发的文本修改，再隐藏提示条
+            flushPendingApply();
+            // 离开设置页面时，将底部提示条透明度设为0
+            Intent intent = new Intent(this, FloatWindowService.class);
+            intent.setAction("UPDATE_STYLE");
+            intent.putExtra("width", seekBarWidth.getProgress());
+            intent.putExtra("height", seekBarHeight.getProgress());
+            intent.putExtra("corner", seekBarCorner.getProgress());
+            intent.putExtra("alpha", 0.0f);
+            intent.putExtra("position_y", seekBarPositionY.getProgress());
+            intent.putExtra("long_press_duration", seekLongPressDuration.getProgress());
+            intent.putExtra("pressed_bar_enabled", switchPressedBarEnabled.isChecked());
+            intent.putExtra("pressed_bar_color", getPressedBarColorSafe());
+            intent.putExtra("pressed_bar_alpha", seekPressedBarAlpha.getProgress());
+            intent.putExtra("pressed_bar_width", seekPressedBarWidth.getProgress());
+            intent.putExtra("pressed_bar_height", seekPressedBarHeight.getProgress());
+            intent.putExtra("pressed_bar_corner", seekPressedBarCorner.getProgress());
+            intent.putExtra("pressed_bar_feather_width", seekPressedBarFeather.getProgress());
+            intent.putExtra("pressed_bar_position_y", seekPressedBarPositionY.getProgress());
+            intent.putExtra("pressed_bar_glow_radius", seekPressedBarGlowRadius.getProgress());
+            intent.putExtra("pressed_bar_color_mode", getPressedColorMode());
+            try {
+                startService(intent);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
         // 离开设置页：取消重试并立即熄灭触发区预览
         previewRetryHandler.removeCallbacks(previewRetryRunnable);
         FloatWindowService.setTriggerAreaPreview(false);
+    }
+
+    @Override
+    protected void onDestroy() {
+        pendingApplyHandler.removeCallbacks(pendingApplyRunnable);
+        pendingApplyHandler.removeCallbacks(markUiInitializedRunnable);
+        if (previewRetryHandler != null) {
+            previewRetryHandler.removeCallbacks(previewRetryRunnable);
+        }
+        if (unsavedDialog != null && unsavedDialog.isShowing()) {
+            unsavedDialog.dismiss();
+        }
+        super.onDestroy();
     }
 
     /**
