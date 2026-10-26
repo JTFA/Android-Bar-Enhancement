@@ -350,6 +350,8 @@ public class SettingsActivity extends AppCompatActivity {
     private final Map<String, SyncSpec> syncSpecs = new LinkedHashMap<>();
     private final List<SyncRowLayout> advancedSyncRows = new ArrayList<>();
     private int previousRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+    private boolean previousLandscape = false;
+    private Boolean exitTargetLandscape = null;
     private boolean orientationForced = false;
     private boolean restoringOrientation = false;
     private boolean changingOrientation = false;
@@ -377,6 +379,8 @@ public class SettingsActivity extends AppCompatActivity {
         // 初始化 SharedPreferences
         preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         previousRequestedOrientation = getRequestedOrientation();
+        previousLandscape = getResources().getConfiguration().orientation
+                == Configuration.ORIENTATION_LANDSCAPE;
 
         initViews();
         setupSyncSpecs();
@@ -2583,12 +2587,23 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        if (isFinishing() || restoringOrientation) return;
-
         boolean newLandscape = newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE;
+        if (restoringOrientation) {
+            // 系统方向已恢复：用恢复后的真实方向重读落盘值，
+            // 不再依赖服务尚未更新的 Configuration
+            FloatWindowService.reloadSettingsForOrientation(newLandscape);
+            return;
+        }
+        if (isFinishing()) return;
+
         // 只处理真正的横竖屏切换；键盘/深色模式等配置变化不重载控件
         if (newLandscape == lastLandscape) {
             return;
+        }
+        // 用户物理旋转时，退出目标应跟随新的系统方向；
+        // 由方向按钮触发的旋转则保留进入设置页时的原始方向。
+        if (!changingOrientation) {
+            previousLandscape = newLandscape;
         }
         // 先按旧方向把控件值收进模型，再切换布局
         captureCurrentValues(lastLandscape);
@@ -2611,9 +2626,16 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     public void finish() {
         if (orientationForced) {
+            // 退出目标是强制旋转前的系统方向
+            exitTargetLandscape = previousLandscape;
             orientationForced = false;
             restoringOrientation = true;
+            // 先放行服务的方向回调，再请求恢复系统方向，
+            // 避免服务 onConfigurationChanged 因设置页仍标记为前台而被跳过
+            FloatWindowService.sSettingsActivityOpen = false;
             setRequestedOrientation(previousRequestedOrientation);
+        } else if (exitTargetLandscape == null) {
+            exitTargetLandscape = OrientationSettings.isLandscape(this);
         }
         super.finish();
     }
@@ -2666,7 +2688,9 @@ public class SettingsActivity extends AppCompatActivity {
         // 离开设置页时立即隐藏快捷窗口轮廓预览，避免残留
         if (windowOutlineOverlay != null) windowOutlineOverlay.hideNow();
 
-        if (!discardingChanges) {
+        // 退出时不再下发当前方向（可能是横屏）的即时值：
+        // 在途 UPDATE_* 会晚于重载到达并覆盖落盘值。真正退出统一走下面的重载。
+        if (!discardingChanges && !isFinishing()) {
             // 先执行待下发的文本修改，再隐藏提示条
             flushPendingApply();
             // 离开设置页面时，将底部提示条透明度设为0
@@ -2701,7 +2725,10 @@ public class SettingsActivity extends AppCompatActivity {
         // 真正退出时（保存/放弃/直接返回）让服务按最终方向重新读取落盘值，
         // 避免退出瞬间方向恢复与服务配置变化时序错位。
         if (isFinishing()) {
-            FloatWindowService.reloadSettingsForCurrentOrientation();
+            boolean targetLandscape = exitTargetLandscape != null
+                    ? exitTargetLandscape
+                    : OrientationSettings.isLandscape(this);
+            FloatWindowService.reloadSettingsForOrientation(targetLandscape);
         }
     }
 

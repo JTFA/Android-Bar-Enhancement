@@ -225,6 +225,19 @@ public class BlurWindowActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                 | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+
+        // 关键：与 OverlayWindowActivity 使用同一套屏幕坐标原点。
+        // 否则横屏且状态栏在左侧时，Gravity.TOP|START 的 x/y 会以被系统栏 inset 后的
+        // 内容区为原点，模糊层整体右偏一个状态栏宽度（右横屏状态栏在右侧则看不出偏移）。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().setDecorFitsSystemWindows(false);
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    getWindow().getDecorView().getSystemUiVisibility()
+                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        }
         
         // 关键：设置窗口背景为圆角矩形（半透明或完全透明）
         // 这样模糊效果会透过这个圆角背景显示出来
@@ -242,6 +255,9 @@ public class BlurWindowActivity extends Activity {
         // setContentView 之后 DecorView 已创建，此时才能设置窗口属性和模糊
         // 设置窗口位置和尺寸（绝对坐标，TOP|START 原点在屏幕左上角）
         WindowManager.LayoutParams wmParams = getWindow().getAttributes();
+        // 以整块屏幕为布局范围：x/y 与 getRealMetrics()/OverlayWindowActivity 的屏幕坐标一致
+        wmParams.flags |= WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
         wmParams.gravity = Gravity.TOP | Gravity.START;
         wmParams.x = blurX;
         wmParams.y = blurY;
