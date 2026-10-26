@@ -128,7 +128,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
 
         // 说明
         TextView descView = new TextView(this);
-        descView.setText("添加、编辑或删除快捷方式。双击提示条弹出快捷方式窗口。\n图标支持 emoji 和自定义图片。");
+        descView.setText("添加、编辑或删除快捷方式，长按拖动可调整顺序。");
         descView.setTextSize(14);
         descView.setTextColor(resolveThemeColor(R.attr.textSecondary));
         descView.setPadding(0, 0, 0, dpToPx(20));

@@ -42,13 +42,13 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="请先授予悬浮窗权限，然后启动服务"
-            android:textSize="14sp"
-            android:textColor="?attr/textSecondary"
-            android:layout_marginBottom="24dp" />
+<!--        <TextView-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:text="请先授予悬浮窗权限，然后启动服务"-->
+<!--            android:textSize="14sp"-->
+<!--            android:textColor="?attr/textSecondary"-->
+<!--            android:layout_marginBottom="24dp" />-->
 
         <!-- 权限与服务卡片 -->
         <LinearLayout
@@ -250,15 +250,15 @@
         </LinearLayout>
 
         <!-- 提示信息 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="提示：启动服务后，Activity将关闭，悬浮窗将在后台运行"
-            android:textSize="12sp"
-            android:textColor="?attr/textHint"
-            android:gravity="center"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="8dp" />
+<!--        <TextView-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:text="提示：启动服务后，Activity将关闭，悬浮窗将在后台运行"-->
+<!--            android:textSize="12sp"-->
+<!--            android:textColor="?attr/textHint"-->
+<!--            android:gravity="center"-->
+<!--            android:layout_gravity="center_horizontal"-->
+<!--            android:layout_marginTop="8dp" />-->
 
     </LinearLayout>
 

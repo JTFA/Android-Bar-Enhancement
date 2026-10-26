@@ -68,7 +68,7 @@
     <string-array name="shortcut_style_entries">
         <item>不透明</item>
         <item>亚克力透明</item>
-        <item>液态玻璃透明</item>
+        <item>液态玻璃透明（尚未实现）</item>
     </string-array>
 
     <string-array name="action_entries">

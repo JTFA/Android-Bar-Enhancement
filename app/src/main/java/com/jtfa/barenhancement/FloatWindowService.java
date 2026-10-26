@@ -1168,7 +1168,7 @@ public class FloatWindowService extends Service {
     private Notification createNotification() {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("小横条扩展正在运行")
-                .setContentText("点击可关闭悬浮窗")
+                .setContentText("悬浮窗已开启")
                 .setSmallIcon(android.R.drawable.ic_dialog_info) // 使用系统图标
                 .setOngoing(true) // 设置为持续通知，不可滑动删除
                 .build();

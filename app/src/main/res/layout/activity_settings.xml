@@ -1387,7 +1387,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="玻璃片边缘折射光，上下边缘明显"
+                        android:text="仿ColorOS质感光效"
                         android:textSize="12sp"
                         android:textColor="#9E9E9E" />
 
@@ -1847,12 +1847,12 @@
                         android:textSize="14sp"
                         android:textColor="?attr/textPrimary" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="点击窗口外部区域时关闭窗口（默认开启）"
-                        android:textSize="12sp"
-                        android:textColor="#9E9E9E" />
+<!--                    <TextView-->
+<!--                        android:layout_width="wrap_content"-->
+<!--                        android:layout_height="wrap_content"-->
+<!--                        android:text="点击窗口外部区域时关闭窗口（默认开启）"-->
+<!--                        android:textSize="12sp"-->
+<!--                        android:textColor="#9E9E9E" />-->
 
                 </LinearLayout>
 
@@ -2135,15 +2135,15 @@
 
         </LinearLayout>
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="提示：修改设置后点击保存并应用即可实时生效"
-            android:textSize="12sp"
-            android:textColor="?attr/textHint"
-            android:gravity="center"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="24dp" />
+<!--        <TextView-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:text="提示：修改设置后点击保存并应用即可实时生效"-->
+<!--            android:textSize="12sp"-->
+<!--            android:textColor="?attr/textHint"-->
+<!--            android:gravity="center"-->
+<!--            android:layout_gravity="center_horizontal"-->
+<!--            android:layout_marginBottom="24dp" />-->
 
     </LinearLayout>
 
