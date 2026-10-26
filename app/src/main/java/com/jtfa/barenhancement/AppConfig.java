@@ -62,6 +62,11 @@ public final class AppConfig {
      */
     public static final int DEFAULT_SHORTCUT_WINDOW_HEIGHT_DP = 350;
 
+    /** 快捷方式图标列数：可调范围与默认值 */
+    public static final int SHORTCUT_ICON_COLUMNS_MIN = 3;
+    public static final int SHORTCUT_ICON_COLUMNS_MAX = 10;
+    public static final int DEFAULT_SHORTCUT_ICON_COLUMNS = 4;
+
     private AppConfig() {
     }
 }

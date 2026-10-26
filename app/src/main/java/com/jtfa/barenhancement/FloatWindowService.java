@@ -200,7 +200,8 @@ public class FloatWindowService extends Service {
     private int shortcutWindowPositionY = 231; // 居中位置
     private int shortcutCornerRadius = 24; // dp
     private String shortcutBgColor = "#FFFFFF";
-    private int shortcutIconSize = 100; // 图标大小百分比 50-150，默认 100%
+    private int shortcutIconColumns = AppConfig.DEFAULT_SHORTCUT_ICON_COLUMNS; // 图标列数 3-10
+    private int shortcutIconSize = 100; // 图标大小百分比 50-100，默认 100%
     private int shortcutIconCorner = 16; // 图标圆角（图标边长百分比 0-50，连续曲率 superellipse）
     private boolean tryFullscreenWindowing = false; // 尝试消除授权弹窗（windowingMode 自定义）
     private int customWindowingMode = 6; // 自定义 windowingMode，不输入时默认 6
@@ -860,7 +861,11 @@ public class FloatWindowService extends Service {
             shortcutWindowHeight = intent.getIntExtra("shortcut_window_height", shortcutWindowHeight);
             shortcutWindowPositionY = intent.getIntExtra("shortcut_window_position_y", shortcutWindowPositionY);
             shortcutCornerRadius = intent.getIntExtra("shortcut_corner_radius", shortcutCornerRadius);
-            shortcutIconSize = intent.getIntExtra("shortcut_icon_size", shortcutIconSize);
+            shortcutIconColumns = Math.max(AppConfig.SHORTCUT_ICON_COLUMNS_MIN,
+                    Math.min(AppConfig.SHORTCUT_ICON_COLUMNS_MAX,
+                            intent.getIntExtra("shortcut_icon_columns", shortcutIconColumns)));
+            shortcutIconSize = Math.max(50, Math.min(100,
+                    intent.getIntExtra("shortcut_icon_size", shortcutIconSize)));
             shortcutIconCorner = intent.getIntExtra("shortcut_icon_corner", shortcutIconCorner);
             tryFullscreenWindowing = intent.getBooleanExtra("try_fullscreen_windowing", tryFullscreenWindowing);
             customWindowingMode = intent.getIntExtra("custom_windowing_mode", customWindowingMode);
@@ -2870,6 +2875,7 @@ public class FloatWindowService extends Service {
         intent.putExtra(OverlayWindowActivity.EXTRA_SHOW_BACK_BUTTON, showBackButton);
         intent.putExtra(OverlayWindowActivity.EXTRA_CLOSE_ON_OUTSIDE, closeOnOutsideClick);
         intent.putExtra(OverlayWindowActivity.EXTRA_BACK_PRIORITIZE_WEBVIEW, backPrioritizeWebview);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_ICON_COLUMNS, shortcutIconColumns);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_ICON_SIZE, shortcutIconSize);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_ICON_CORNER, shortcutIconCorner);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_STYLE, effectiveStyle);
@@ -5323,7 +5329,9 @@ public class FloatWindowService extends Service {
 
         // ===== 1. 创建 GridLayout 并添加快捷方式 =====
         android.widget.GridLayout gridLayout = new android.widget.GridLayout(this);
-        gridLayout.setColumnCount(4);
+        int iconColumns = Math.max(AppConfig.SHORTCUT_ICON_COLUMNS_MIN,
+                Math.min(AppConfig.SHORTCUT_ICON_COLUMNS_MAX, shortcutIconColumns));
+        gridLayout.setColumnCount(iconColumns);
         gridLayout.setRowCount(android.widget.GridLayout.UNDEFINED);
         gridLayout.setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12));
 
@@ -5581,9 +5589,12 @@ public class FloatWindowService extends Service {
         cell.setGravity(Gravity.CENTER);
         cell.setPadding(dpToPx(4), dpToPx(8), dpToPx(4), dpToPx(8));
 
-        // 计算均匀分布的单元格宽度：窗口宽度减去 grid padding 后 / 4
+        // 计算均匀分布的单元格宽度：窗口宽度减去 grid padding 后按列数均分
         int gridPadding = dpToPx(12) * 2;
-        int cellWidth = (dpToPx(shortcutWindowWidth) - gridPadding) / 4;
+        int iconColumns = Math.max(AppConfig.SHORTCUT_ICON_COLUMNS_MIN,
+                Math.min(AppConfig.SHORTCUT_ICON_COLUMNS_MAX, shortcutIconColumns));
+        int availableWidth = dpToPx(shortcutWindowWidth) - gridPadding;
+        int cellWidth = availableWidth / iconColumns;
 
         android.widget.GridLayout.LayoutParams cellParams = new android.widget.GridLayout.LayoutParams(
                 android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED),
@@ -5595,14 +5606,19 @@ public class FloatWindowService extends Service {
         cell.setClickable(true);
         cell.setFocusable(true);
 
-        // 图标大小缩放因子
-        final float iconScale = Math.max(0.5f, Math.min(1.5f, shortcutIconSize / 100.0f));
+        // 图标大小缩放因子：100% = 当前列数下均分后的最大尺寸
+        final float iconScale = Math.max(0.5f, Math.min(1.0f, shortcutIconSize / 100.0f));
+        int maxIconSize = Math.max(1, cellWidth - dpToPx(16));
+        int iconSize = Math.max(1, Math.round(maxIconSize * iconScale));
+        // 以 4 列为基准缩放文字，保证高列数时 emoji / 占位文字 / 名称不溢出
+        int baseCellWidth = availableWidth / 4;
+        int baseMaxIconSize = Math.max(1, baseCellWidth - dpToPx(16));
+        float cellScale = maxIconSize / (float) baseMaxIconSize;
 
         // 判断图标类型
         if ("image".equals(item.getIconType())) {
             // ===== 图片图标（圆角矩形） =====
             FrameLayout iconContainer = new FrameLayout(this);
-            int iconSize = Math.round((cellWidth - dpToPx(16)) * iconScale);
             FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(iconSize, iconSize);
             iconParams.gravity = Gravity.CENTER;
             iconContainer.setLayoutParams(iconParams);
@@ -5641,7 +5657,7 @@ public class FloatWindowService extends Service {
                         ? item.getName().substring(0, 1) : "?";
                 placeholderText.setText(firstChar);
                 placeholderText.setTextColor(0xFFFFFFFF);
-                placeholderText.setTextSize(Math.round(22 * iconScale));
+                placeholderText.setTextSize(Math.max(4, Math.round(22 * iconScale * cellScale)));
                 iconContainer.addView(placeholderText);
             }
             cell.addView(iconContainer);
@@ -5649,7 +5665,7 @@ public class FloatWindowService extends Service {
             // ===== Emoji 图标 =====
             TextView iconView = new TextView(this);
             iconView.setText(item.getIcon() != null ? item.getIcon() : "⚡");
-            iconView.setTextSize(Math.round(30 * iconScale));
+            iconView.setTextSize(Math.max(4, Math.round(30 * iconScale * cellScale)));
             iconView.setGravity(Gravity.CENTER);
             iconView.setPadding(0, 0, 0, dpToPx(4));
             cell.addView(iconView);
@@ -5659,7 +5675,7 @@ public class FloatWindowService extends Service {
         // 名称
         TextView nameView = new TextView(this);
         nameView.setText(item.getName());
-        nameView.setTextSize(Math.max(10, Math.round(11 * iconScale)));
+        nameView.setTextSize(Math.max(8, Math.round(11 * iconScale * cellScale)));
         nameView.setTypeface(Typeface.DEFAULT_BOLD);
         // 根据系统深色模式设置文字颜色
         if (isDarkMode()) {
@@ -5671,7 +5687,7 @@ public class FloatWindowService extends Service {
         nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         nameView.setMaxLines(1);
         LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
         );
         nameParams.topMargin = dpToPx(4);
@@ -7800,7 +7816,11 @@ public class FloatWindowService extends Service {
             shortcutWindowHeight = prefs.getInt("shortcut_window_height", shortcutWindowHeight);
             shortcutWindowPositionY = prefs.getInt("shortcut_window_position_y", shortcutWindowPositionY);
             shortcutCornerRadius = prefs.getInt("shortcut_corner_radius", shortcutCornerRadius);
-            shortcutIconSize = prefs.getInt("shortcut_icon_size", shortcutIconSize);
+            shortcutIconColumns = Math.max(AppConfig.SHORTCUT_ICON_COLUMNS_MIN,
+                    Math.min(AppConfig.SHORTCUT_ICON_COLUMNS_MAX,
+                            prefs.getInt("shortcut_icon_columns", AppConfig.DEFAULT_SHORTCUT_ICON_COLUMNS)));
+            shortcutIconSize = Math.max(50, Math.min(100,
+                    prefs.getInt("shortcut_icon_size", shortcutIconSize)));
             shortcutIconCorner = prefs.getInt("shortcut_icon_corner", shortcutIconCorner);
         tryFullscreenWindowing = prefs.getBoolean("try_fullscreen_windowing", tryFullscreenWindowing);
             // 自定义 windowingMode：留空/非法 → 默认 6

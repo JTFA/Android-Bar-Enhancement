@@ -118,6 +118,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     public static final String EXTRA_AI_BLUR_RADIUS = "ai_blur_radius";
     public static final String EXTRA_AI_OVERLAY_ALPHA = "ai_overlay_alpha";
     // 快捷方式
+    public static final String EXTRA_SHORTCUT_ICON_COLUMNS = "shortcut_icon_columns";
     public static final String EXTRA_SHORTCUT_ICON_SIZE = "shortcut_icon_size";
     public static final String EXTRA_SHORTCUT_ICON_CORNER = "shortcut_icon_corner";
     public static final String EXTRA_SHORTCUT_STYLE = "shortcut_style";
@@ -175,6 +176,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private boolean isTopBarExpanded = false;
     private boolean closeOnOutside, backPrioritizeWebview;
     private String aiUrl;
+    private int shortcutIconColumns = AppConfig.DEFAULT_SHORTCUT_ICON_COLUMNS;
     private int shortcutIconSize, shortcutStyle, shortcutBlurRadius, shortcutOverlayAlpha;
     private int shortcutIconCorner = 16; // 图标圆角（图标边长的百分比 0-50，连续曲率 superellipse）
 
@@ -704,7 +706,18 @@ public class OverlayWindowActivity extends AppCompatActivity {
                 loadWebpageBgTransparentSetting();
             }
         } else {
-            shortcutIconSize = intent.getIntExtra(EXTRA_SHORTCUT_ICON_SIZE, 100);
+            if (intent.hasExtra(EXTRA_SHORTCUT_ICON_COLUMNS)) {
+                shortcutIconColumns = intent.getIntExtra(
+                        EXTRA_SHORTCUT_ICON_COLUMNS, AppConfig.DEFAULT_SHORTCUT_ICON_COLUMNS);
+            } else {
+                SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
+                shortcutIconColumns = prefs.getInt(
+                        "shortcut_icon_columns", AppConfig.DEFAULT_SHORTCUT_ICON_COLUMNS);
+            }
+            shortcutIconColumns = Math.max(AppConfig.SHORTCUT_ICON_COLUMNS_MIN,
+                    Math.min(AppConfig.SHORTCUT_ICON_COLUMNS_MAX, shortcutIconColumns));
+            shortcutIconSize = Math.max(50, Math.min(100,
+                    intent.getIntExtra(EXTRA_SHORTCUT_ICON_SIZE, 100)));
             shortcutIconCorner = intent.getIntExtra(EXTRA_SHORTCUT_ICON_CORNER, 16);
             shortcutStyle = intent.getIntExtra(EXTRA_SHORTCUT_STYLE, 0);
             shortcutBlurRadius = intent.getIntExtra(EXTRA_SHORTCUT_BLUR_RADIUS, 20);
@@ -1162,19 +1175,23 @@ public class OverlayWindowActivity extends AppCompatActivity {
 
         int gridPadding = dpToPx(12);
 
+        int iconColumns = Math.max(AppConfig.SHORTCUT_ICON_COLUMNS_MIN,
+                Math.min(AppConfig.SHORTCUT_ICON_COLUMNS_MAX, shortcutIconColumns));
+
         // 创建 GridLayout
         GridLayout grid = new GridLayout(this);
-        grid.setColumnCount(4);
+        grid.setColumnCount(iconColumns);
         grid.setRowCount(GridLayout.UNDEFINED);
         grid.setPadding(gridPadding, gridPadding, gridPadding, gridPadding);
 
         // 计算均匀分布的单元格宽度
         int containerWidth = container.getLayoutParams().width;
         int maxHeight = container.getLayoutParams().height;
-        int cellWidth = (containerWidth - gridPadding * 2) / 4;
+        int availableWidth = containerWidth - gridPadding * 2;
+        int cellWidth = availableWidth / iconColumns;
 
         for (final ShortcutItem item : shortcuts) {
-            View cell = createShortcutCell(item, cellWidth);
+            View cell = createShortcutCell(item, cellWidth, availableWidth);
             grid.addView(cell);
         }
 
@@ -1590,7 +1607,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         }
     }
 
-    private View createShortcutCell(final ShortcutItem item, int cellWidth) {
+    private View createShortcutCell(final ShortcutItem item, int cellWidth, int availableWidth) {
         LinearLayout cell = new LinearLayout(this);
         cell.setOrientation(LinearLayout.VERTICAL);
         cell.setGravity(Gravity.CENTER);
@@ -1603,9 +1620,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
         cell.setClickable(true);
         cell.setFocusable(true);
 
-        // 图标大小缩放因子
-        final float iconScale = Math.max(0.5f, Math.min(1.5f, shortcutIconSize / 100.0f));
-        int iconSize = Math.round((cellWidth - dpToPx(16)) * iconScale);
+        // 图标大小缩放因子：100% = 当前列数下均分后的最大尺寸
+        final float iconScale = Math.max(0.5f, Math.min(1.0f, shortcutIconSize / 100.0f));
+        int maxIconSize = Math.max(1, cellWidth - dpToPx(16));
+        int iconSize = Math.max(1, Math.round(maxIconSize * iconScale));
+        // 以 4 列为基准缩放文字，保证高列数时 emoji / 占位文字 / 名称不溢出
+        int baseCellWidth = availableWidth / 4;
+        int baseMaxIconSize = Math.max(1, baseCellWidth - dpToPx(16));
+        float cellScale = maxIconSize / (float) baseMaxIconSize;
 
         if ("image".equals(item.getIconType())) {
             // ===== 图片图标（连续曲率 superellipse 圆角，自绘替代 clipToOutline 圆弧拼接） =====
@@ -1619,7 +1641,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         ? item.getName().substring(0, 1) : "?";
                 float textPx = android.util.TypedValue.applyDimension(
                         android.util.TypedValue.COMPLEX_UNIT_SP,
-                        Math.round(22 * iconScale),
+                        Math.max(4, Math.round(22 * iconScale * cellScale)),
                         getResources().getDisplayMetrics());
                 iconView = new SquircleIconView(this, null, getShortcutPlaceholderColor(item.getId()),
                         firstChar, shortcutIconCorner, textPx);
@@ -1632,7 +1654,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
             // ===== Emoji 图标 =====
             TextView iconView = new TextView(this);
             iconView.setText(item.getIcon() != null ? item.getIcon() : "⚡");
-            iconView.setTextSize(Math.round(30 * iconScale));
+            iconView.setTextSize(Math.max(4, Math.round(30 * iconScale * cellScale)));
             iconView.setGravity(Gravity.CENTER);
             iconView.setPadding(0, 0, 0, dpToPx(4));
             cell.addView(iconView);
@@ -1641,7 +1663,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         // 名称
         TextView nameView = new TextView(this);
         nameView.setText(item.getName());
-        nameView.setTextSize(Math.max(10, Math.round(11 * iconScale)));
+        nameView.setTextSize(Math.max(8, Math.round(11 * iconScale * cellScale)));
         nameView.setTypeface(Typeface.DEFAULT_BOLD);
         if (isDarkMode()) {
             nameView.setTextColor(0xFFCCCCCC);
@@ -1652,7 +1674,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
         nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
         nameView.setMaxLines(1);
         LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
         nameParams.topMargin = dpToPx(4);
         nameView.setLayoutParams(nameParams);

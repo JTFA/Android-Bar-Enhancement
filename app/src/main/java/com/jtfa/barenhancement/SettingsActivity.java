@@ -139,6 +139,7 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String KEY_SHORTCUT_CORNER_RADIUS = "shortcut_corner_radius";
     private static final String KEY_SHORTCUT_ICON_SIZE = "shortcut_icon_size";
     private static final String KEY_SHORTCUT_ICON_CORNER = "shortcut_icon_corner";
+    private static final String KEY_SHORTCUT_ICON_COLUMNS = "shortcut_icon_columns";
     private static final String KEY_SHORTCUT_EDGE_BAND = "shortcut_edge_band_dp";
     private static final String KEY_SHORTCUT_EDGE_OPACITY = "shortcut_edge_opacity";
     // 手指光晕参数
@@ -243,6 +244,8 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView textShortcutWindowWidth, textShortcutWindowHeight, textShortcutWindowPositionY;
     private SeekBar seekShortcutCornerRadius;
     private TextView textShortcutCornerRadius;
+    private SeekBar seekShortcutIconColumns;
+    private TextView textShortcutIconColumns;
     private SeekBar seekShortcutIconSize;
     private TextView textShortcutIconSize;
     private SeekBar seekShortcutIconCorner;
@@ -604,6 +607,8 @@ public class SettingsActivity extends AppCompatActivity {
         textShortcutWindowPositionY = findViewById(R.id.text_shortcut_window_position_y);
         seekShortcutCornerRadius = findViewById(R.id.seek_shortcut_corner_radius);
         textShortcutCornerRadius = findViewById(R.id.text_shortcut_corner_radius);
+        seekShortcutIconColumns = findViewById(R.id.seek_shortcut_icon_columns);
+        textShortcutIconColumns = findViewById(R.id.text_shortcut_icon_columns);
         seekShortcutIconSize = findViewById(R.id.seek_shortcut_icon_size);
         textShortcutIconSize = findViewById(R.id.text_shortcut_icon_size);
         seekShortcutIconCorner = findViewById(R.id.seek_shortcut_icon_corner);
@@ -839,7 +844,15 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutCornerRadius.setProgress(shortcutCRadius);
         textShortcutCornerRadius.setText("快捷窗口圆角: " + shortcutCRadius + "dp");
 
+        int shortcutIconColumns = preferences.getInt(
+                KEY_SHORTCUT_ICON_COLUMNS, AppConfig.DEFAULT_SHORTCUT_ICON_COLUMNS);
+        shortcutIconColumns = Math.max(AppConfig.SHORTCUT_ICON_COLUMNS_MIN,
+                Math.min(AppConfig.SHORTCUT_ICON_COLUMNS_MAX, shortcutIconColumns));
+        seekShortcutIconColumns.setProgress(shortcutIconColumns);
+        textShortcutIconColumns.setText("图标列数: " + shortcutIconColumns);
+
         int shortcutIconSize = preferences.getInt(KEY_SHORTCUT_ICON_SIZE, 100);
+        shortcutIconSize = Math.max(50, Math.min(100, shortcutIconSize));
         seekShortcutIconSize.setProgress(shortcutIconSize);
         textShortcutIconSize.setText("图标大小: " + shortcutIconSize + "%");
         int shortcutIconCorner = preferences.getInt(KEY_SHORTCUT_ICON_CORNER, 16);
@@ -1008,6 +1021,7 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putInt(KEY_SHORTCUT_WINDOW_HEIGHT, seekShortcutWindowHeight.getProgress());
         editor.putInt(KEY_SHORTCUT_WINDOW_POSITION_Y, seekShortcutWindowPositionY.getProgress());
         editor.putInt(KEY_SHORTCUT_CORNER_RADIUS, seekShortcutCornerRadius.getProgress());
+        editor.putInt(KEY_SHORTCUT_ICON_COLUMNS, seekShortcutIconColumns.getProgress());
         editor.putInt(KEY_SHORTCUT_ICON_SIZE, seekShortcutIconSize.getProgress());
         editor.putInt(KEY_SHORTCUT_ICON_CORNER, seekShortcutIconCorner.getProgress());
 
@@ -1445,6 +1459,17 @@ public class SettingsActivity extends AppCompatActivity {
             @Override public void onStopTrackingTouch(SeekBar seekBar) { scheduleHideWindowOutlinePreview(); }
         });
         
+        // 快捷方式图标列数 - 实时更新
+        seekShortcutIconColumns.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                textShortcutIconColumns.setText("图标列数: " + progress);
+                onSettingChanged();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
         // 快捷方式图标大小 - 实时更新
         seekShortcutIconSize.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -1885,6 +1910,7 @@ public class SettingsActivity extends AppCompatActivity {
         shortcutIntent.putExtra("shortcut_window_height", seekShortcutWindowHeight.getProgress());
         shortcutIntent.putExtra("shortcut_window_position_y", seekShortcutWindowPositionY.getProgress());
         shortcutIntent.putExtra("shortcut_corner_radius", seekShortcutCornerRadius.getProgress());
+        shortcutIntent.putExtra("shortcut_icon_columns", seekShortcutIconColumns.getProgress());
         shortcutIntent.putExtra("shortcut_icon_size", seekShortcutIconSize.getProgress());
         shortcutIntent.putExtra("shortcut_icon_corner", seekShortcutIconCorner.getProgress());
         shortcutIntent.putExtra("try_fullscreen_windowing", switchTryFullscreenWindowing.isChecked());
