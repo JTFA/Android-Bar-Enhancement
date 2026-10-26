@@ -3,16 +3,21 @@ package com.jtfa.barenhancement;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.DialogInterface;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewGroup.MarginLayoutParams;
+import android.view.WindowInsets;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -36,7 +41,9 @@ import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 设置页面 - AI 悬浮窗配置
@@ -296,6 +303,7 @@ public class SettingsActivity extends AppCompatActivity {
     private boolean uiInitialized = false;
     private boolean suppressCallbacks = false;
     private boolean discardingChanges = false;
+    private boolean activityResumed = false;
     private AlertDialog unsavedDialog;
     private final Handler pendingApplyHandler = new Handler(Looper.getMainLooper());
     private final Runnable pendingApplyRunnable = new Runnable() {
@@ -328,6 +336,32 @@ public class SettingsActivity extends AppCompatActivity {
     // SharedPreferences
     private SharedPreferences preferences;
 
+    // 横竖屏布局与逐项同步
+    private View settingsRoot;
+    private LinearLayout settingsBody;
+    private LinearLayout groupTabsContainer;
+    private View groupTabsDivider;
+    private LinearLayout headerTitleRow;
+    private TextView btnOrientationPortrait;
+    private TextView btnOrientationLandscape;
+    private TextView textLandscapeSyncHint;
+    private TextView textAdvancedSyncNote;
+    private final Map<String, SyncRowLayout> syncRows = new LinkedHashMap<>();
+    private final Map<String, SyncSpec> syncSpecs = new LinkedHashMap<>();
+    private final List<SyncRowLayout> advancedSyncRows = new ArrayList<>();
+    private int previousRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+    private boolean orientationForced = false;
+    private boolean restoringOrientation = false;
+    private boolean changingOrientation = false;
+    private boolean lastLandscape = false;
+    private int orientationRequestSeq = 0;
+    private int statusBarInsetTop = 0;
+    private int navigationBarInsetLeft = 0;
+    private int navigationBarInsetRight = 0;
+    private int navigationBarInsetBottom = 0;
+    private boolean orientationLayoutApplied = false;
+    private long suppressCallbacksUntil = 0;
+
     // 分组锚点（提示条 / 快捷窗口 / 高级）
     private ScrollView settingsScroll;
     private TextView tabTip, tabShortcut, tabAdvanced;
@@ -342,12 +376,37 @@ public class SettingsActivity extends AppCompatActivity {
 
         // 初始化 SharedPreferences
         preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        
+        previousRequestedOrientation = getRequestedOrientation();
+
         initViews();
+        setupSyncSpecs();
+        setupSyncRows();
         applyFeatureFlagVisibility(); // 按总配置隐藏 AI 窗口相关设置
         loadSettings(); // 加载已保存的设置
         setupListeners();
+        setupOrientationToggle();
         setupGroupTabs(); // 顶部三个分组锚点：固定显示 + 滑动高亮
+
+        // 监听器就绪后按当前方向刷新一次控件与标签
+        withSuppressedCallbacks(this::loadCurrentOrientationIntoControls);
+        applyOrientationLayout();
+
+        // 边到边（targetSdk 35+）时顶部标题与内容需避开系统栏；
+        // 横屏状态栏较矮、侧边可能有导航栏，不能沿用竖屏固定值。
+        View insetHost = settingsRoot != null ? settingsRoot : headerTitleRow;
+        if (insetHost != null) {
+            insetHost.setOnApplyWindowInsetsListener((v, insets) -> {
+                android.graphics.Insets status = insets.getInsets(WindowInsets.Type.statusBars());
+                android.graphics.Insets nav = insets.getInsets(WindowInsets.Type.navigationBars());
+                statusBarInsetTop = status.top;
+                navigationBarInsetLeft = nav.left;
+                navigationBarInsetRight = nav.right;
+                navigationBarInsetBottom = nav.bottom;
+                updateHeaderPadding();
+                updateNavigationInsets();
+                return insets;
+            });
+        }
 
         // 快捷窗口轮廓实时预览层：叠加在内容顶层，触摸穿透不阻挡设置操作
         windowOutlineOverlay = new WindowOutlineOverlay(this);
@@ -399,9 +458,10 @@ public class SettingsActivity extends AppCompatActivity {
         hasUnsavedChanges = false;
 
         // 静默从 prefs 重新加载控件，避免监听器把当前修改再次下发
-        suppressCallbacks = true;
-        loadSettings();
-        suppressCallbacks = false;
+        withSuppressedCallbacks(() -> {
+            loadSettings();
+            loadCurrentOrientationIntoControls();
+        });
 
         // 把最后一次保存的状态重新下发给服务
         applyCurrentSettings();
@@ -410,14 +470,20 @@ public class SettingsActivity extends AppCompatActivity {
 
     /** 任意设置发生变化：标记未保存并立即下发到服务（不写 prefs）。 */
     private void onSettingChanged() {
-        if (!uiInitialized || suppressCallbacks || discardingChanges) return;
+        if (!uiInitialized || suppressCallbacks || discardingChanges) {
+            return;
+        }
+        captureCurrentValues(OrientationSettings.isLandscape(this));
         hasUnsavedChanges = true;
         applyCurrentSettings();
     }
 
     /** 文本输入使用防抖，避免每敲一个字符都下发一次。 */
     private void onTextSettingChanged() {
-        if (!uiInitialized || suppressCallbacks || discardingChanges) return;
+        if (!uiInitialized || suppressCallbacks || discardingChanges) {
+            return;
+        }
+        captureCurrentValues(OrientationSettings.isLandscape(this));
         hasUnsavedChanges = true;
         pendingApplyHandler.removeCallbacks(pendingApplyRunnable);
         pendingApplyHandler.postDelayed(pendingApplyRunnable, 350);
@@ -662,11 +728,467 @@ public class SettingsActivity extends AppCompatActivity {
         // 顶部小横条透明度控件
         seekTopBarTransparency = findViewById(R.id.seek_top_bar_transparency);
         textTopBarTransparency = findViewById(R.id.text_top_bar_transparency);
-        
+
+        // 横竖屏布局与逐项同步
+        settingsRoot = findViewById(R.id.settings_root);
+        settingsScroll = findViewById(R.id.settings_scroll);
+        settingsBody = findViewById(R.id.settings_body);
+        groupTabsContainer = findViewById(R.id.group_tabs_container);
+        groupTabsDivider = findViewById(R.id.group_tabs_divider);
+        headerTitleRow = findViewById(R.id.header_title_row);
+        btnOrientationPortrait = findViewById(R.id.btn_orientation_portrait);
+        btnOrientationLandscape = findViewById(R.id.btn_orientation_landscape);
+        textLandscapeSyncHint = findViewById(R.id.text_landscape_sync_hint);
+        textAdvancedSyncNote = findViewById(R.id.text_advanced_sync_note);
+
         // 保存按钮
         btnSave = findViewById(R.id.btn_save_apply);
     }
-    
+
+    // ==================== 横竖屏逐项同步 ====================
+
+    private interface ValueReader {
+        Object read();
+    }
+
+    private interface ValueWriter {
+        void write(Object value);
+    }
+
+    private static class SyncSpec {
+        static final int TYPE_INT = 0;
+        static final int TYPE_STRING = 1;
+        static final int TYPE_BOOLEAN = 2;
+
+        final String key;
+        final int type;
+        final Object defaultValue;
+        final ValueReader reader;
+        final ValueWriter writer;
+        Object portrait;
+        Object landscape;
+        boolean synced = true;
+        SyncRowLayout row;
+
+        SyncSpec(String key, int type, Object defaultValue, ValueReader reader, ValueWriter writer) {
+            this.key = key;
+            this.type = type;
+            this.defaultValue = defaultValue;
+            this.reader = reader;
+            this.writer = writer;
+        }
+
+        Object current(boolean landscapeMode) {
+            if (landscapeMode && !synced) {
+                return landscape != null ? landscape : defaultValue;
+            }
+            return portrait != null ? portrait : defaultValue;
+        }
+
+        void capture(boolean landscapeMode) {
+            if (landscapeMode) {
+                if (!synced) landscape = reader.read();
+            } else {
+                portrait = reader.read();
+            }
+        }
+    }
+
+    private void setupSyncSpecs() {
+        syncSpecs.clear();
+
+        // 提示条：触发区 5 项 + 按下样式 10 项
+        addSeekSpec(KEY_BAR_WIDTH, 355, seekBarWidth);
+        addSeekSpec(KEY_BAR_HEIGHT, 9, seekBarHeight);
+        addSeekSpec(KEY_BAR_POSITION_Y, 391, seekBarPositionY);
+        addSeekSpec(KEY_BAR_CORNER, 30, seekBarCorner);
+        addSeekSpec(KEY_LONG_PRESS_DURATION, 500, seekLongPressDuration);
+        addSwitchSpec(KEY_PRESSED_BAR_ENABLED, true, switchPressedBarEnabled);
+        addSeekSpec(KEY_PRESSED_BAR_WIDTH, 420, seekPressedBarWidth);
+        addSeekSpec(KEY_PRESSED_BAR_HEIGHT, 20, seekPressedBarHeight);
+        addSeekSpec(KEY_PRESSED_BAR_POSITION_Y, 0, seekPressedBarPositionY);
+        addSeekSpec(KEY_PRESSED_BAR_CORNER, 45, seekPressedBarCorner);
+        addSeekSpec(KEY_PRESSED_BAR_ALPHA, 100, seekPressedBarAlpha);
+        addPressedColorModeSpec();
+        addTextSpec(KEY_PRESSED_BAR_COLOR, "#0099dd", editPressedBarColor);
+        addSeekSpec(KEY_PRESSED_BAR_FEATHER, 10, seekPressedBarFeather);
+        addSeekSpec(KEY_PRESSED_BAR_GLOW_RADIUS, 25, seekPressedBarGlowRadius);
+
+        // 快捷窗口：窗口 14 项 + 图标 3 项 + 遮罩 4 项 + 动画 1 项
+        addSeekSpec(KEY_SHORTCUT_WINDOW_WIDTH, 350, seekShortcutWindowWidth);
+        addSeekSpec(KEY_SHORTCUT_WINDOW_HEIGHT, 350, seekShortcutWindowHeight);
+        addSeekSpec(KEY_SHORTCUT_WINDOW_POSITION_Y, 231, seekShortcutWindowPositionY);
+        addSeekSpec(KEY_SHORTCUT_CORNER_RADIUS, 24, seekShortcutCornerRadius);
+        addShortcutStyleSpec();
+        addSeekSpec(KEY_SHORTCUT_BLUR_RADIUS, 20, seekShortcutBlurRadius);
+        addSeekSpec(KEY_SHORTCUT_OVERLAY_ALPHA, 180, seekShortcutOverlayAlpha);
+        addSwitchSpec("shortcut_edge_refraction", true, switchShortcutEdgeRefraction);
+        addSeekSpec(KEY_SHORTCUT_EDGE_BAND, 4, seekShortcutEdgeBand);
+        addSeekSpec(KEY_SHORTCUT_EDGE_OPACITY, 48, seekShortcutEdgeOpacity);
+        addSwitchSpec("shortcut_finger_glow", true, switchShortcutFingerGlow);
+        addSeekSpec(KEY_FINGER_GLOW_BRIGHTNESS, 27, seekFingerGlowBrightness);
+        addSeekSpec(KEY_FINGER_GLOW_SIZE, 100, seekFingerGlowSize);
+        addSwitchSpec("shortcut_drag_stretch", true, switchShortcutDragStretch);
+        addSeekSpec(KEY_SHORTCUT_ICON_COLUMNS, AppConfig.DEFAULT_SHORTCUT_ICON_COLUMNS,
+                seekShortcutIconColumns);
+        addSeekSpec(KEY_SHORTCUT_ICON_SIZE, 100, seekShortcutIconSize);
+        addSeekSpec(KEY_SHORTCUT_ICON_CORNER, 16, seekShortcutIconCorner);
+        addSeekSpec(KEY_OVERLAY_ALPHA, 50, seekOverlayAlpha);
+        addTextSpec(KEY_OVERLAY_COLOR, "#000000", editOverlayColor);
+        addSeekSpec(KEY_OVERLAY_ANIM_DURATION, 100, seekOverlayAnimDuration);
+        addSwitchSpec(KEY_CLOSE_ON_OUTSIDE_CLICK, true, switchCloseOnOutsideClick);
+        addSeekSpec(KEY_ANIM_DURATION, 350, seekAnimDuration);
+    }
+
+    private void addSeekSpec(String key, int def, SeekBar seekBar) {
+        syncSpecs.put(key, new SyncSpec(key, SyncSpec.TYPE_INT, def,
+                seekBar::getProgress,
+                value -> seekBar.setProgress((Integer) value)));
+    }
+
+    private void addSwitchSpec(String key, boolean def, Switch switchView) {
+        syncSpecs.put(key, new SyncSpec(key, SyncSpec.TYPE_BOOLEAN, def,
+                switchView::isChecked,
+                value -> switchView.setChecked((Boolean) value)));
+    }
+
+    private void addTextSpec(String key, String def, EditText editText) {
+        syncSpecs.put(key, new SyncSpec(key, SyncSpec.TYPE_STRING, def,
+                () -> editText.getText().toString().trim(),
+                value -> editText.setText(value == null ? "" : value.toString())));
+    }
+
+    private void addPressedColorModeSpec() {
+        syncSpecs.put(KEY_PRESSED_BAR_COLOR_MODE,
+                new SyncSpec(KEY_PRESSED_BAR_COLOR_MODE, SyncSpec.TYPE_STRING, "rainbow",
+                        this::getPressedColorMode,
+                        value -> radioPressedColorMode.check("color".equals(value)
+                                ? R.id.radio_pressed_color_custom
+                                : R.id.radio_pressed_color_rainbow)));
+    }
+
+    private void addShortcutStyleSpec() {
+        syncSpecs.put(KEY_SHORTCUT_STYLE,
+                new SyncSpec(KEY_SHORTCUT_STYLE, SyncSpec.TYPE_INT, 0,
+                        () -> switchUseExpandDirectly.isChecked()
+                                ? shortcutStyleBeforeFloatMode
+                                : spinnerShortcutStyle.getSelectedItemPosition(),
+                        value -> {
+                            int style = (Integer) value;
+                            shortcutStyleBeforeFloatMode = style;
+                            if (!switchUseExpandDirectly.isChecked()) {
+                                spinnerShortcutStyle.setSelection(style);
+                            }
+                        }));
+    }
+
+    private void setupSyncRows() {
+        syncRows.clear();
+        advancedSyncRows.clear();
+        View content = settingsScroll.getChildAt(0);
+        if (content != null) {
+            collectSyncRows(content);
+        }
+        for (String key : syncSpecs.keySet()) {
+            if (!syncRows.containsKey(key)) {
+                android.util.Log.w("SettingsActivity", "未找到同步行: " + key);
+            }
+        }
+    }
+
+    private void collectSyncRows(View view) {
+        if (view instanceof SyncRowLayout) {
+            SyncRowLayout row = (SyncRowLayout) view;
+            Object tagObject = row.getTag();
+            String tag = tagObject == null ? "" : tagObject.toString();
+            if (tag.startsWith("adv:")) {
+                advancedSyncRows.add(row);
+                row.setSyncUiVisible(false);
+                row.setLocked(false);
+                return;
+            }
+            SyncSpec spec = syncSpecs.get(tag);
+            if (spec != null) {
+                spec.row = row;
+                syncRows.put(tag, row);
+                row.setOnSyncChangedListener((r, checked) -> onSyncRowChanged(spec, checked));
+            }
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectSyncRows(group.getChildAt(i));
+            }
+        }
+    }
+
+    private void onSyncRowChanged(SyncSpec spec, boolean checked) {
+        if (suppressCallbacks || discardingChanges) {
+            return;
+        }
+        boolean landscape = OrientationSettings.isLandscape(this);
+        captureCurrentValues(landscape);
+        spec.synced = checked;
+        // 取消同步时横屏初始值沿用当前竖屏值；勾选同步时横屏直接读竖屏值
+        spec.landscape = spec.portrait;
+        withSuppressedCallbacks(() -> spec.writer.write(spec.current(landscape)));
+        applySyncRowStates();
+        hasUnsavedChanges = true;
+        applyCurrentSettings();
+    }
+
+    private void loadSyncSpecsFromPrefs() {
+        for (SyncSpec spec : syncSpecs.values()) {
+            spec.synced = OrientationSettings.isSynced(preferences, spec.key);
+            spec.portrait = readPrefValue(spec, false);
+            spec.landscape = spec.synced ? spec.portrait : readPrefValue(spec, true);
+        }
+    }
+
+    private Object readPrefValue(SyncSpec spec, boolean landscape) {
+        boolean useLandscapeValue = landscape && !spec.synced;
+        String key = useLandscapeValue ? spec.key + OrientationSettings.LAND_SUFFIX : spec.key;
+        if (spec.type == SyncSpec.TYPE_INT) {
+            int value = preferences.getInt(key, (Integer) spec.defaultValue);
+            if (KEY_SHORTCUT_ICON_COLUMNS.equals(spec.key)) {
+                value = Math.max(AppConfig.SHORTCUT_ICON_COLUMNS_MIN,
+                        Math.min(AppConfig.SHORTCUT_ICON_COLUMNS_MAX, value));
+            } else if (KEY_SHORTCUT_ICON_SIZE.equals(spec.key)) {
+                value = Math.max(50, Math.min(100, value));
+            }
+            return value;
+        } else if (spec.type == SyncSpec.TYPE_BOOLEAN) {
+            return preferences.getBoolean(key, (Boolean) spec.defaultValue);
+        } else {
+            String value = preferences.getString(key, (String) spec.defaultValue);
+            return value != null ? value : spec.defaultValue;
+        }
+    }
+
+    private void loadCurrentOrientationIntoControls() {
+        boolean landscape = OrientationSettings.isLandscape(this);
+        applySyncRowStates();
+        for (SyncSpec spec : syncSpecs.values()) {
+            Object value = spec.current(landscape);
+            if (value != null) {
+                spec.writer.write(value);
+            }
+        }
+        applySyncRowStates();
+        updatePressedColorInputVisibility();
+        updateShortcutStyleVisibility(spinnerShortcutStyle.getSelectedItemPosition());
+        updateEdgeSettingsVisibility(switchShortcutEdgeRefraction.isChecked());
+        updateFingerGlowSettingsVisibility(switchShortcutFingerGlow.isChecked());
+    }
+
+    private void captureCurrentValues(boolean landscape) {
+        for (SyncSpec spec : syncSpecs.values()) {
+            spec.capture(landscape);
+        }
+    }
+
+    private void applySyncRowStates() {
+        boolean landscape = OrientationSettings.isLandscape(this);
+        for (SyncSpec spec : syncSpecs.values()) {
+            if (spec.row != null) {
+                spec.row.setSyncUiVisible(landscape);
+                spec.row.setSynced(spec.synced);
+            }
+        }
+        for (SyncRowLayout row : advancedSyncRows) {
+            row.setSyncUiVisible(landscape);
+            row.setLocked(landscape);
+        }
+        if (textLandscapeSyncHint != null) {
+            textLandscapeSyncHint.setVisibility(landscape ? View.VISIBLE : View.GONE);
+        }
+        if (textAdvancedSyncNote != null) {
+            textAdvancedSyncNote.setVisibility(landscape ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private void withSuppressedCallbacks(Runnable action) {
+        boolean previous = suppressCallbacks;
+        suppressCallbacks = true;
+        suppressCallbacksUntil = System.currentTimeMillis() + 450;
+        try {
+            action.run();
+        } finally {
+            suppressCallbacks = previous;
+        }
+    }
+
+    private void setSyncRowVisibility(String key, boolean visible) {
+        SyncRowLayout row = syncRows.get(key);
+        if (row != null) {
+            row.setVisibility(visible ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private void setupOrientationToggle() {
+        if (btnOrientationPortrait != null) {
+            btnOrientationPortrait.setOnClickListener(v -> requestOrientation(false));
+        }
+        if (btnOrientationLandscape != null) {
+            btnOrientationLandscape.setOnClickListener(v -> requestOrientation(true));
+        }
+    }
+
+    private void requestOrientation(boolean landscape) {
+        if (changingOrientation) return;
+        if (OrientationSettings.isLandscape(this) == landscape) return;
+        captureCurrentValues(OrientationSettings.isLandscape(this));
+        orientationForced = true;
+        changingOrientation = true;
+        final int seq = ++orientationRequestSeq;
+        setRequestedOrientation(landscape
+                ? ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        // 系统若未真正触发旋转，避免方向按钮一直处于锁定状态
+        pendingApplyHandler.postDelayed(() -> {
+            if (seq == orientationRequestSeq && changingOrientation) {
+                changingOrientation = false;
+            }
+        }, 1500);
+    }
+
+    private void applyOrientationLayout() {
+        if (settingsBody == null || groupTabsContainer == null
+                || groupTabsDivider == null || settingsScroll == null) {
+            return;
+        }
+        boolean landscape = OrientationSettings.isLandscape(this);
+
+        settingsBody.setOrientation(landscape ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+
+        LinearLayout.LayoutParams tabsLp =
+                (LinearLayout.LayoutParams) groupTabsContainer.getLayoutParams();
+        if (landscape) {
+            tabsLp.width = dpToPx(150);
+            tabsLp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            tabsLp.weight = 0;
+            groupTabsContainer.setOrientation(LinearLayout.VERTICAL);
+        } else {
+            tabsLp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+            tabsLp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            tabsLp.weight = 0;
+            groupTabsContainer.setOrientation(LinearLayout.HORIZONTAL);
+        }
+        groupTabsContainer.setLayoutParams(tabsLp);
+        updateGroupTabsPadding();
+
+        LinearLayout.LayoutParams dividerLp =
+                (LinearLayout.LayoutParams) groupTabsDivider.getLayoutParams();
+        if (landscape) {
+            dividerLp.width = dpToPx(1);
+            dividerLp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            dividerLp.weight = 0;
+        } else {
+            dividerLp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+            dividerLp.height = dpToPx(1);
+            dividerLp.weight = 0;
+        }
+        groupTabsDivider.setLayoutParams(dividerLp);
+
+        LinearLayout.LayoutParams scrollLp =
+                (LinearLayout.LayoutParams) settingsScroll.getLayoutParams();
+        if (landscape) {
+            scrollLp.width = 0;
+            scrollLp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            scrollLp.weight = 1;
+        } else {
+            scrollLp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+            scrollLp.height = 0;
+            scrollLp.weight = 1;
+        }
+        settingsScroll.setLayoutParams(scrollLp);
+
+        TextView[] tabs = {tabTip, tabShortcut, tabAdvanced};
+        for (int i = 0; i < tabs.length; i++) {
+            TextView tab = tabs[i];
+            if (tab == null) continue;
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) tab.getLayoutParams();
+            if (landscape) {
+                lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                lp.height = dpToPx(44);
+                lp.weight = 0;
+                lp.setMargins(0, 0, 0, dpToPx(8));
+            } else {
+                lp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+                lp.height = dpToPx(32);
+                lp.weight = 0;
+                lp.setMargins(0, 0, i < tabs.length - 1 ? dpToPx(8) : 0, 0);
+            }
+            tab.setLayoutParams(lp);
+            tab.setGravity(Gravity.CENTER);
+        }
+
+        updateHeaderPadding();
+        updateOrientationToggle(landscape);
+        applySyncRowStates();
+        lastLandscape = landscape;
+
+        if (orientationLayoutApplied) {
+            settingsScroll.post(() -> scrollToGroup(activeGroupIndex));
+        }
+        orientationLayoutApplied = true;
+    }
+
+    private void updateHeaderPadding() {
+        if (headerTitleRow == null) return;
+        boolean landscape = OrientationSettings.isLandscape(this);
+        int baseTop = landscape ? dpToPx(12) : dpToPx(46);
+        // 有状态栏 inset 时至少留出 inset + 12dp，避免标题被状态栏遮住
+        int top = Math.max(baseTop, statusBarInsetTop + dpToPx(12));
+        headerTitleRow.setPadding(dpToPx(16), top, dpToPx(16), dpToPx(12));
+    }
+
+    private void updateGroupTabsPadding() {
+        if (groupTabsContainer == null) return;
+        boolean landscape = OrientationSettings.isLandscape(this);
+        int leftInset = navigationBarInsetLeft;
+        if (landscape) {
+            groupTabsContainer.setPadding(dpToPx(8) + leftInset, dpToPx(12),
+                    dpToPx(8), dpToPx(8));
+        } else {
+            groupTabsContainer.setPadding(dpToPx(16) + leftInset, 0,
+                    dpToPx(16), dpToPx(10));
+        }
+    }
+
+    private void updateNavigationInsets() {
+        if (settingsScroll != null) {
+            settingsScroll.setPadding(navigationBarInsetLeft, 0,
+                    navigationBarInsetRight, navigationBarInsetBottom);
+            settingsScroll.setClipToPadding(false);
+        }
+        updateGroupTabsPadding();
+    }
+
+    private void updateOrientationToggle(boolean landscape) {
+        if (btnOrientationPortrait == null || btnOrientationLandscape == null) return;
+        btnOrientationPortrait.setBackgroundResource(landscape
+                ? R.drawable.tab_chip_unselected : R.drawable.tab_chip_selected);
+        btnOrientationPortrait.setTextColor(landscape
+                ? resolveThemeColor(R.attr.textSecondary) : 0xFFFFFFFF);
+        btnOrientationLandscape.setBackgroundResource(landscape
+                ? R.drawable.tab_chip_selected : R.drawable.tab_chip_unselected);
+        btnOrientationLandscape.setTextColor(landscape
+                ? 0xFFFFFFFF : resolveThemeColor(R.attr.textSecondary));
+    }
+
+    private int prefInt(String key, int defValue) {
+        return OrientationSettings.getInt(this, preferences, key, defValue);
+    }
+
+    private String prefString(String key, String defValue) {
+        return OrientationSettings.getString(this, preferences, key, defValue);
+    }
+
+    private boolean prefBoolean(String key, boolean defValue) {
+        return OrientationSettings.getBoolean(this, preferences, key, defValue);
+    }
+
     /**
      * 从 SharedPreferences 加载设置
      */
@@ -676,17 +1198,17 @@ public class SettingsActivity extends AppCompatActivity {
         editAiUrl.setText(aiUrl);
         
         // 加载提示条宽度
-        int barWidth = preferences.getInt(KEY_BAR_WIDTH, 355);
+        int barWidth = prefInt(KEY_BAR_WIDTH, 355);
         seekBarWidth.setProgress(barWidth);
         textWidth.setText("宽度: " + barWidth + "dp");
         
         // 加载提示条高度
-        int barHeight = preferences.getInt(KEY_BAR_HEIGHT, 9);
+        int barHeight = prefInt(KEY_BAR_HEIGHT, 9);
         seekBarHeight.setProgress(barHeight);
         textHeight.setText("高度: " + barHeight + "dp");
         
         // 加载提示条圆角
-        int barCorner = preferences.getInt(KEY_BAR_CORNER, 30);
+        int barCorner = prefInt(KEY_BAR_CORNER, 30);
         seekBarCorner.setProgress(barCorner);
         textCorner.setText("圆角: " + barCorner + "dp");
         
@@ -702,13 +1224,13 @@ public class SettingsActivity extends AppCompatActivity {
         seekWindowHeight.setProgress(windowHeight);
         textWindowHeight.setText("高度: " + windowHeight + "dp");
         
-        int barPosY = preferences.getInt(KEY_BAR_POSITION_Y, 391);
+        int barPosY = prefInt(KEY_BAR_POSITION_Y, 391);
         seekBarPositionY.setProgress(barPosY);
         String posYText = barPosY >= 0 ? "位置 Y: " + barPosY + "dp (向上)" : "位置 Y: " + barPosY + "dp (向下)";
         textPositionY.setText(posYText);
         
         // 加载长按时间
-        int longPressDuration = preferences.getInt(KEY_LONG_PRESS_DURATION, 500);
+        int longPressDuration = prefInt(KEY_LONG_PRESS_DURATION, 500);
         seekLongPressDuration.setProgress(longPressDuration);
         textLongPressDuration.setText("长按触发时间: " + longPressDuration + "ms");
         
@@ -747,7 +1269,7 @@ public class SettingsActivity extends AppCompatActivity {
         switchShowBackButton.setChecked(showBackButton);
         
         // 加载点击窗口外关闭窗口设置
-        boolean closeOnOutsideClick = preferences.getBoolean(KEY_CLOSE_ON_OUTSIDE_CLICK, true);
+        boolean closeOnOutsideClick = prefBoolean(KEY_CLOSE_ON_OUTSIDE_CLICK, true);
         switchCloseOnOutsideClick.setChecked(closeOnOutsideClick);
         
         // 加载侧边返回手势设置
@@ -766,129 +1288,129 @@ public class SettingsActivity extends AppCompatActivity {
         textKeyboardAnimDuration.setText("平移动画时长: " + keyboardAnimDuration + "ms");
         
         // 加载动画速度
-        int animDuration = preferences.getInt(KEY_ANIM_DURATION, 350);
+        int animDuration = prefInt(KEY_ANIM_DURATION, 350);
         seekAnimDuration.setProgress(animDuration);
         textAnimDuration.setText("动画速度: " + animDuration + "ms");
         
         // 加载按下状态样式
-        boolean pressedEnabled = preferences.getBoolean(KEY_PRESSED_BAR_ENABLED, true);
+        boolean pressedEnabled = prefBoolean(KEY_PRESSED_BAR_ENABLED, true);
         switchPressedBarEnabled.setChecked(pressedEnabled);
         
-        int pressedWidth = preferences.getInt(KEY_PRESSED_BAR_WIDTH, 420);
+        int pressedWidth = prefInt(KEY_PRESSED_BAR_WIDTH, 420);
         seekPressedBarWidth.setProgress(pressedWidth);
         textPressedBarWidth.setText("按下时宽度: " + pressedWidth + "dp");
         
-        int pressedHeight = preferences.getInt(KEY_PRESSED_BAR_HEIGHT, 20);
+        int pressedHeight = prefInt(KEY_PRESSED_BAR_HEIGHT, 20);
         seekPressedBarHeight.setProgress(pressedHeight);
         textPressedBarHeight.setText("按下时高度: " + pressedHeight + "dp");
         
-        int pressedCorner = preferences.getInt(KEY_PRESSED_BAR_CORNER, 45);
+        int pressedCorner = prefInt(KEY_PRESSED_BAR_CORNER, 45);
         seekPressedBarCorner.setProgress(pressedCorner);
         textPressedBarCorner.setText("按下时圆角: " + pressedCorner + "dp");
         
-        int pressedAlpha = preferences.getInt(KEY_PRESSED_BAR_ALPHA, 100);
+        int pressedAlpha = prefInt(KEY_PRESSED_BAR_ALPHA, 100);
         seekPressedBarAlpha.setProgress(pressedAlpha);
         textPressedBarAlpha.setText("按下时透明度: " + String.format("%.2f", pressedAlpha / 100.0f));
         
-        String pressedColor = preferences.getString(KEY_PRESSED_BAR_COLOR, "#0099dd");
+        String pressedColor = prefString(KEY_PRESSED_BAR_COLOR, "#0099dd");
         editPressedBarColor.setText(pressedColor);
         
         // 加载羽化宽度
-        int pressedFeather = preferences.getInt(KEY_PRESSED_BAR_FEATHER, 10);
+        int pressedFeather = prefInt(KEY_PRESSED_BAR_FEATHER, 10);
         seekPressedBarFeather.setProgress(pressedFeather);
         textPressedBarFeather.setText("边缘羽化宽度: " + pressedFeather + "dp");
         
         // 加载按下时位置Y
-        int pressedPosY = preferences.getInt(KEY_PRESSED_BAR_POSITION_Y, 0);
+        int pressedPosY = prefInt(KEY_PRESSED_BAR_POSITION_Y, 0);
         seekPressedBarPositionY.setProgress(pressedPosY);
         String pressedPosYText = pressedPosY >= 0 ? "按下时位置Y: " + pressedPosY + "dp (向上)" : "按下时位置Y: " + pressedPosY + "dp (向下)";
         textPressedBarPositionY.setText(pressedPosYText);
 
         // 加载光晕半径
-        int pressedGlow = preferences.getInt(KEY_PRESSED_BAR_GLOW_RADIUS, 25);
+        int pressedGlow = prefInt(KEY_PRESSED_BAR_GLOW_RADIUS, 25);
         seekPressedBarGlowRadius.setProgress(pressedGlow);
         textPressedBarGlowRadius.setText(pressedGlow == 0 ? "光晕半径: 关闭" : "光晕半径: " + pressedGlow + "dp");
 
         // 加载颜色模式
-        String colorMode = preferences.getString(KEY_PRESSED_BAR_COLOR_MODE, "rainbow");
+        String colorMode = prefString(KEY_PRESSED_BAR_COLOR_MODE, "rainbow");
         radioPressedColorMode.check("color".equals(colorMode) ? R.id.radio_pressed_color_custom : R.id.radio_pressed_color_rainbow);
         updatePressedColorInputVisibility();
         
         // 加载按下时位置Y
         // 加载背景遮罩设置
-        int overlayAlpha = preferences.getInt(KEY_OVERLAY_ALPHA, 50);
+        int overlayAlpha = prefInt(KEY_OVERLAY_ALPHA, 50);
         seekOverlayAlpha.setProgress(overlayAlpha);
         textOverlayAlpha.setText("遮罩透明度: " + overlayAlpha + "%");
         
-        String overlayColor = preferences.getString(KEY_OVERLAY_COLOR, "#000000");
+        String overlayColor = prefString(KEY_OVERLAY_COLOR, "#000000");
         editOverlayColor.setText(overlayColor);
         
-        int overlayAnimDuration = preferences.getInt(KEY_OVERLAY_ANIM_DURATION, 100);
+        int overlayAnimDuration = prefInt(KEY_OVERLAY_ANIM_DURATION, 100);
         seekOverlayAnimDuration.setProgress(overlayAnimDuration);
         textOverlayAnimDuration.setText("遮罩渐变时长: " + overlayAnimDuration + "ms");
         
         // 加载快捷方式窗口设置
-        int shortcutWinWidth = preferences.getInt(KEY_SHORTCUT_WINDOW_WIDTH, 350);
+        int shortcutWinWidth = prefInt(KEY_SHORTCUT_WINDOW_WIDTH, 350);
         seekShortcutWindowWidth.setProgress(shortcutWinWidth);
         textShortcutWindowWidth.setText("快捷窗口宽度: " + shortcutWinWidth + "dp");
         
-        int shortcutWinHeight = preferences.getInt(KEY_SHORTCUT_WINDOW_HEIGHT, 350);
+        int shortcutWinHeight = prefInt(KEY_SHORTCUT_WINDOW_HEIGHT, 350);
         seekShortcutWindowHeight.setProgress(shortcutWinHeight);
         textShortcutWindowHeight.setText("快捷窗口最大高度: " + shortcutWinHeight + "dp");
         
-        int shortcutWinPosY = preferences.getInt(KEY_SHORTCUT_WINDOW_POSITION_Y, 231);
+        int shortcutWinPosY = prefInt(KEY_SHORTCUT_WINDOW_POSITION_Y, 231);
         seekShortcutWindowPositionY.setProgress(shortcutWinPosY);
         textShortcutWindowPositionY.setText("快捷窗口位置 Y: " + shortcutWinPosY + " (居中)");
         
-        int shortcutCRadius = preferences.getInt(KEY_SHORTCUT_CORNER_RADIUS, 24);
+        int shortcutCRadius = prefInt(KEY_SHORTCUT_CORNER_RADIUS, 24);
         seekShortcutCornerRadius.setProgress(shortcutCRadius);
         textShortcutCornerRadius.setText("快捷窗口圆角: " + shortcutCRadius + "dp");
 
-        int shortcutIconColumns = preferences.getInt(
+        int shortcutIconColumns = prefInt(
                 KEY_SHORTCUT_ICON_COLUMNS, AppConfig.DEFAULT_SHORTCUT_ICON_COLUMNS);
         shortcutIconColumns = Math.max(AppConfig.SHORTCUT_ICON_COLUMNS_MIN,
                 Math.min(AppConfig.SHORTCUT_ICON_COLUMNS_MAX, shortcutIconColumns));
         seekShortcutIconColumns.setProgress(shortcutIconColumns);
         textShortcutIconColumns.setText("图标列数: " + shortcutIconColumns);
 
-        int shortcutIconSize = preferences.getInt(KEY_SHORTCUT_ICON_SIZE, 100);
+        int shortcutIconSize = prefInt(KEY_SHORTCUT_ICON_SIZE, 100);
         shortcutIconSize = Math.max(50, Math.min(100, shortcutIconSize));
         seekShortcutIconSize.setProgress(shortcutIconSize);
         textShortcutIconSize.setText("图标大小: " + shortcutIconSize + "%");
-        int shortcutIconCorner = preferences.getInt(KEY_SHORTCUT_ICON_CORNER, 16);
+        int shortcutIconCorner = prefInt(KEY_SHORTCUT_ICON_CORNER, 16);
         seekShortcutIconCorner.setProgress(shortcutIconCorner);
         textShortcutIconCorner.setText("图标圆角: " + shortcutIconCorner + "%");
 
-        int style = preferences.getInt(KEY_SHORTCUT_STYLE, 0);
+        int style = prefInt(KEY_SHORTCUT_STYLE, 0);
         shortcutStyleBeforeFloatMode = style;
         spinnerShortcutStyle.setSelection(style);
         spinnerBlurSyncMode.setSelection(preferences.getInt(KEY_BLUR_SYNC_MODE, 0));
-        int blurRadius = preferences.getInt(KEY_SHORTCUT_BLUR_RADIUS, 20);
+        int blurRadius = prefInt(KEY_SHORTCUT_BLUR_RADIUS, 20);
         seekShortcutBlurRadius.setProgress(blurRadius);
         textShortcutBlurRadius.setText("模糊半径: " + blurRadius + "dp");
-        int overlayAlpha1 = preferences.getInt(KEY_SHORTCUT_OVERLAY_ALPHA, 180);
+        int overlayAlpha1 = prefInt(KEY_SHORTCUT_OVERLAY_ALPHA, 180);
         seekShortcutOverlayAlpha.setProgress(overlayAlpha1);
         textShortcutOverlayAlpha.setText("叠加色透明度: " + (overlayAlpha1 * 100 / 255) + "%");
         updateShortcutStyleVisibility(style);
 
         // 加载 ColorOS 风格效果开关（默认开启）
-        switchShortcutEdgeRefraction.setChecked(preferences.getBoolean("shortcut_edge_refraction", true));
-        switchShortcutFingerGlow.setChecked(preferences.getBoolean("shortcut_finger_glow", true));
-        switchShortcutDragStretch.setChecked(preferences.getBoolean("shortcut_drag_stretch", true));
+        switchShortcutEdgeRefraction.setChecked(prefBoolean("shortcut_edge_refraction", true));
+        switchShortcutFingerGlow.setChecked(prefBoolean("shortcut_finger_glow", true));
+        switchShortcutDragStretch.setChecked(prefBoolean("shortcut_drag_stretch", true));
 
         // 加载边缘光参数（默认 4dp / 48%）
-        int edgeBand = preferences.getInt(KEY_SHORTCUT_EDGE_BAND, 4);
+        int edgeBand = prefInt(KEY_SHORTCUT_EDGE_BAND, 4);
         seekShortcutEdgeBand.setProgress(edgeBand);
         textShortcutEdgeBand.setText("边缘光宽度: " + edgeBand + "dp");
-        int edgeOpacity = preferences.getInt(KEY_SHORTCUT_EDGE_OPACITY, 48);
+        int edgeOpacity = prefInt(KEY_SHORTCUT_EDGE_OPACITY, 48);
         seekShortcutEdgeOpacity.setProgress(edgeOpacity);
         textShortcutEdgeOpacity.setText("边缘光透明度: " + edgeOpacity + "%");
         updateEdgeSettingsVisibility(switchShortcutEdgeRefraction.isChecked());
         // 加载手指光晕参数
-        int glowBrightness = preferences.getInt(KEY_FINGER_GLOW_BRIGHTNESS, 27);
+        int glowBrightness = prefInt(KEY_FINGER_GLOW_BRIGHTNESS, 27);
         seekFingerGlowBrightness.setProgress(glowBrightness);
         textFingerGlowBrightness.setText("光晕亮度: " + glowBrightness + "%");
-        int glowSize = preferences.getInt(KEY_FINGER_GLOW_SIZE, 100);
+        int glowSize = prefInt(KEY_FINGER_GLOW_SIZE, 100);
         seekFingerGlowSize.setProgress(glowSize);
         textFingerGlowSize.setText("光晕范围: " + glowSize + "%");
         updateFingerGlowSettingsVisibility(switchShortcutFingerGlow.isChecked());
@@ -934,6 +1456,10 @@ public class SettingsActivity extends AppCompatActivity {
         int topBarTransparency = preferences.getInt(KEY_TOP_BAR_TRANSPARENCY, 40);
         seekTopBarTransparency.setProgress(topBarTransparency);
         textTopBarTransparency.setText("小横条透明度: " + topBarTransparency + "%");
+
+        // 初始化双方向内存模型与勾选框状态
+        loadSyncSpecsFromPrefs();
+        applySyncRowStates();
     }
     
     /**
@@ -949,16 +1475,12 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void persistAllSettings() {
+        // 先把当前方向的最新控件值收进内存模型
+        captureCurrentValues(OrientationSettings.isLandscape(this));
         SharedPreferences.Editor editor = preferences.edit();
 
+        // 非方向同步项：始终保存竖屏值（横屏下这些控件被锁定为竖屏值）
         editor.putString(KEY_AI_URL, getAiUrlSafe());
-
-        // 保存提示条样式
-        editor.putInt(KEY_BAR_WIDTH, seekBarWidth.getProgress());
-        editor.putInt(KEY_BAR_HEIGHT, seekBarHeight.getProgress());
-        editor.putInt(KEY_BAR_CORNER, seekBarCorner.getProgress());
-        editor.putInt(KEY_BAR_POSITION_Y, seekBarPositionY.getProgress());
-        editor.putInt(KEY_LONG_PRESS_DURATION, seekLongPressDuration.getProgress());
 
         // 保存 AI 窗口大小
         editor.putInt(KEY_WINDOW_WIDTH, seekWindowWidth.getProgress());
@@ -980,9 +1502,6 @@ public class SettingsActivity extends AppCompatActivity {
         // 保存显示后退按钮设置
         editor.putBoolean(KEY_SHOW_BACK_BUTTON, switchShowBackButton.isChecked());
 
-        // 保存点击窗口外关闭窗口设置
-        editor.putBoolean(KEY_CLOSE_ON_OUTSIDE_CLICK, switchCloseOnOutsideClick.isChecked());
-
         // 保存侧边返回手势设置
         editor.putBoolean(KEY_BACK_PRIORITIZE_WEBVIEW, switchBackPrioritizeWebview.isChecked());
 
@@ -990,62 +1509,7 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putInt(KEY_KEYBOARD_OFFSET, seekKeyboardOffset.getProgress());
         editor.putInt(KEY_KEYBOARD_ANIM_DURATION, seekKeyboardAnimDuration.getProgress());
 
-        // 保存动画速度
-        editor.putInt(KEY_ANIM_DURATION, seekAnimDuration.getProgress());
-
-        // 保存按下状态样式
-        editor.putBoolean(KEY_PRESSED_BAR_ENABLED, switchPressedBarEnabled.isChecked());
-        editor.putInt(KEY_PRESSED_BAR_WIDTH, seekPressedBarWidth.getProgress());
-        editor.putInt(KEY_PRESSED_BAR_HEIGHT, seekPressedBarHeight.getProgress());
-        editor.putInt(KEY_PRESSED_BAR_CORNER, seekPressedBarCorner.getProgress());
-        editor.putInt(KEY_PRESSED_BAR_ALPHA, seekPressedBarAlpha.getProgress());
-        editor.putString(KEY_PRESSED_BAR_COLOR, getPressedBarColorSafe());
-
-        // 保存羽化宽度
-        editor.putInt(KEY_PRESSED_BAR_FEATHER, seekPressedBarFeather.getProgress());
-
-        // 保存按下时位置Y
-        editor.putInt(KEY_PRESSED_BAR_POSITION_Y, seekPressedBarPositionY.getProgress());
-
-        // 保存光晕半径与颜色模式
-        editor.putInt(KEY_PRESSED_BAR_GLOW_RADIUS, seekPressedBarGlowRadius.getProgress());
-        editor.putString(KEY_PRESSED_BAR_COLOR_MODE, getPressedColorMode());
-
-        // 保存背景遮罩设置
-        editor.putInt(KEY_OVERLAY_ALPHA, seekOverlayAlpha.getProgress());
-        editor.putString(KEY_OVERLAY_COLOR, getOverlayColorSafe());
-        editor.putInt(KEY_OVERLAY_ANIM_DURATION, seekOverlayAnimDuration.getProgress());
-
-        // 保存快捷方式窗口设置
-        editor.putInt(KEY_SHORTCUT_WINDOW_WIDTH, seekShortcutWindowWidth.getProgress());
-        editor.putInt(KEY_SHORTCUT_WINDOW_HEIGHT, seekShortcutWindowHeight.getProgress());
-        editor.putInt(KEY_SHORTCUT_WINDOW_POSITION_Y, seekShortcutWindowPositionY.getProgress());
-        editor.putInt(KEY_SHORTCUT_CORNER_RADIUS, seekShortcutCornerRadius.getProgress());
-        editor.putInt(KEY_SHORTCUT_ICON_COLUMNS, seekShortcutIconColumns.getProgress());
-        editor.putInt(KEY_SHORTCUT_ICON_SIZE, seekShortcutIconSize.getProgress());
-        editor.putInt(KEY_SHORTCUT_ICON_CORNER, seekShortcutIconCorner.getProgress());
-
-        int styleToSave = switchUseExpandDirectly.isChecked()
-                ? shortcutStyleBeforeFloatMode
-                : spinnerShortcutStyle.getSelectedItemPosition();
-        editor.putInt(KEY_SHORTCUT_STYLE, styleToSave);
-        editor.putInt(KEY_BLUR_SYNC_MODE, spinnerBlurSyncMode.getSelectedItemPosition());
-        editor.putInt(KEY_SHORTCUT_BLUR_RADIUS, seekShortcutBlurRadius.getProgress());
-        editor.putInt(KEY_SHORTCUT_OVERLAY_ALPHA, seekShortcutOverlayAlpha.getProgress());
-
-        // 保存 ColorOS 风格效果开关
-        editor.putBoolean("shortcut_edge_refraction", switchShortcutEdgeRefraction.isChecked());
-        editor.putBoolean("shortcut_finger_glow", switchShortcutFingerGlow.isChecked());
-        editor.putBoolean("shortcut_drag_stretch", switchShortcutDragStretch.isChecked());
-
-        // 保存边缘光参数
-        editor.putInt(KEY_SHORTCUT_EDGE_BAND, seekShortcutEdgeBand.getProgress());
-        editor.putInt(KEY_SHORTCUT_EDGE_OPACITY, seekShortcutEdgeOpacity.getProgress());
-        // 保存手指光晕参数
-        editor.putInt(KEY_FINGER_GLOW_BRIGHTNESS, seekFingerGlowBrightness.getProgress());
-        editor.putInt(KEY_FINGER_GLOW_SIZE, seekFingerGlowSize.getProgress());
-
-        // 保存 AI 窗口模糊效果设置
+        // 保存高级 / AI 设置（这些项不参与横屏独立配置）
         editor.putInt(KEY_AI_STYLE, spinnerAiStyle.getSelectedItemPosition());
 
         int aiOverlayAlphaToSave = seekAiOverlayAlpha.getProgress();
@@ -1066,11 +1530,86 @@ public class SettingsActivity extends AppCompatActivity {
         // 保存顶部小横条透明度
         editor.putInt(KEY_TOP_BAR_TRANSPARENCY, seekTopBarTransparency.getProgress());
 
+        editor.putInt(KEY_BLUR_SYNC_MODE, spinnerBlurSyncMode.getSelectedItemPosition());
         editor.putBoolean("use_expand_directly", switchUseExpandDirectly.isChecked());
         editor.putBoolean("try_fullscreen_windowing", switchTryFullscreenWindowing.isChecked());
         editor.putString("custom_windowing_mode", editCustomWindowingMode.getText().toString().trim());
 
+        // 37 个方向同步项：竖屏值 + 同步标记 +（取消同步时）横屏独立值
+        for (SyncSpec spec : syncSpecs.values()) {
+            writeSyncSpec(editor, spec);
+        }
+
         editor.apply();
+    }
+
+    private void writeSyncSpec(SharedPreferences.Editor editor, SyncSpec spec) {
+        Object portraitValue = normalizeSyncValue(spec, spec.portrait);
+        Object landscapeValue = normalizeSyncValue(spec, spec.landscape);
+        if (spec.type == SyncSpec.TYPE_INT) {
+            editor.putInt(spec.key, (Integer) portraitValue);
+            if (spec.synced) {
+                OrientationSettings.markSynced(editor, spec.key);
+            } else {
+                editor.putInt(spec.key + OrientationSettings.LAND_SUFFIX,
+                        (Integer) landscapeValue);
+                editor.putBoolean(spec.key + OrientationSettings.SYNC_SUFFIX, false);
+            }
+        } else if (spec.type == SyncSpec.TYPE_BOOLEAN) {
+            editor.putBoolean(spec.key, (Boolean) portraitValue);
+            if (spec.synced) {
+                OrientationSettings.markSynced(editor, spec.key);
+            } else {
+                editor.putBoolean(spec.key + OrientationSettings.LAND_SUFFIX,
+                        (Boolean) landscapeValue);
+                editor.putBoolean(spec.key + OrientationSettings.SYNC_SUFFIX, false);
+            }
+        } else {
+            editor.putString(spec.key, (String) portraitValue);
+            if (spec.synced) {
+                OrientationSettings.markSynced(editor, spec.key);
+            } else {
+                editor.putString(spec.key + OrientationSettings.LAND_SUFFIX,
+                        (String) landscapeValue);
+                editor.putBoolean(spec.key + OrientationSettings.SYNC_SUFFIX, false);
+            }
+        }
+    }
+
+    private Object normalizeSyncValue(SyncSpec spec, Object value) {
+        if (value == null) return spec.defaultValue;
+        if (spec.type == SyncSpec.TYPE_INT) {
+            int intValue = (Integer) value;
+            if (KEY_SHORTCUT_ICON_COLUMNS.equals(spec.key)) {
+                intValue = clamp(intValue, AppConfig.SHORTCUT_ICON_COLUMNS_MIN,
+                        AppConfig.SHORTCUT_ICON_COLUMNS_MAX);
+            } else if (KEY_SHORTCUT_ICON_SIZE.equals(spec.key)) {
+                intValue = clamp(intValue, 50, 100);
+            }
+            return intValue;
+        }
+        if (spec.type == SyncSpec.TYPE_STRING) {
+            String stringValue = value.toString().trim();
+            if (KEY_PRESSED_BAR_COLOR.equals(spec.key)) {
+                return isValidColor(stringValue) ? stringValue : "#333333";
+            }
+            if (KEY_OVERLAY_COLOR.equals(spec.key)) {
+                return isValidColor(stringValue) ? stringValue : "#000000";
+            }
+            if (KEY_PRESSED_BAR_COLOR_MODE.equals(spec.key)) {
+                return "color".equals(stringValue) ? "color" : "rainbow";
+            }
+            return stringValue;
+        }
+        return value;
+    }
+
+    private int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private boolean isValidColor(String value) {
+        return !TextUtils.isEmpty(value) && value.startsWith("#");
     }
 
     /**
@@ -1373,12 +1912,18 @@ public class SettingsActivity extends AppCompatActivity {
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
+                // 输入颜色后立刻离开时也要弹保存确认，不能等 300ms 防抖回调
+                if (uiInitialized && !suppressCallbacks && !discardingChanges) {
+                    hasUnsavedChanges = true;
+                }
                 if (textTimeout != null) {
                     textHandler.removeCallbacks(textTimeout);
                 }
                 textTimeout = new Runnable() {
                     @Override
                     public void run() {
+                        // 方向切换/放弃修改时正在回填控件，延迟回调不应触发预览
+                        if (System.currentTimeMillis() < suppressCallbacksUntil) return;
                         onTextSettingChanged();
                         triggerPressedPreview();
                     }
@@ -1683,6 +2228,9 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutBlurRadius.setVisibility(show ? View.VISIBLE : View.GONE);
         textShortcutOverlayAlpha.setVisibility(show ? View.VISIBLE : View.GONE);
         seekShortcutOverlayAlpha.setVisibility(show ? View.VISIBLE : View.GONE);
+        // 整行一起隐藏，避免横屏只剩一个没有内容的同步勾选框
+        setSyncRowVisibility(KEY_SHORTCUT_BLUR_RADIUS, show);
+        setSyncRowVisibility(KEY_SHORTCUT_OVERLAY_ALPHA, show);
     }
 
     /**
@@ -1984,6 +2532,8 @@ public class SettingsActivity extends AppCompatActivity {
         if (editPressedBarColor != null) {
             editPressedBarColor.setVisibility(visibility);
         }
+        // 非自定义颜色时整行隐藏，横屏也不会留下空的同步勾选框
+        setSyncRowVisibility(KEY_PRESSED_BAR_COLOR, custom);
     }
 
     private String getPressedBarColorSafe() {
@@ -2022,6 +2572,8 @@ public class SettingsActivity extends AppCompatActivity {
      * 触发按下样式预览（自动显示按下样式覆盖层，1秒无操作后自动隐藏）
      */
     private void triggerPressedPreview() {
+        // 回填控件/放弃修改时不要触发预览
+        if (suppressCallbacks || discardingChanges) return;
         Intent intent = new Intent(this, FloatWindowService.class);
         intent.setAction("UPDATE_STYLE");
         intent.putExtra("show_pressed_preview", true);
@@ -2029,8 +2581,48 @@ public class SettingsActivity extends AppCompatActivity {
     }
     
     @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (isFinishing() || restoringOrientation) return;
+
+        boolean newLandscape = newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE;
+        // 只处理真正的横竖屏切换；键盘/深色模式等配置变化不重载控件
+        if (newLandscape == lastLandscape) {
+            return;
+        }
+        // 先按旧方向把控件值收进模型，再切换布局
+        captureCurrentValues(lastLandscape);
+        lastLandscape = newLandscape;
+        changingOrientation = false;
+        orientationRequestSeq++;
+
+        applyOrientationLayout();
+        withSuppressedCallbacks(this::loadCurrentOrientationIntoControls);
+        applySyncRowStates();
+        if (activityResumed) {
+            applyCurrentSettings();
+        }
+        // 若轮廓预览正显示，按新方向刷新几何
+        if (windowOutlineOverlay != null && windowOutlineOverlay.getAlpha() > 0f) {
+            refreshWindowOutlinePreview();
+        }
+    }
+
+    @Override
+    public void finish() {
+        if (orientationForced) {
+            orientationForced = false;
+            restoringOrientation = true;
+            setRequestedOrientation(previousRequestedOrientation);
+        }
+        super.finish();
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
+        activityResumed = true;
+        FloatWindowService.sSettingsActivityOpen = true;
         // 回到设置页：重新把当前（可能是未保存的）设置下发给服务
         if (!discardingChanges) {
             flushPendingApply();
@@ -2070,6 +2662,7 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        activityResumed = false;
         // 离开设置页时立即隐藏快捷窗口轮廓预览，避免残留
         if (windowOutlineOverlay != null) windowOutlineOverlay.hideNow();
 
@@ -2104,6 +2697,12 @@ public class SettingsActivity extends AppCompatActivity {
         // 离开设置页：取消重试并立即熄灭触发区预览
         previewRetryHandler.removeCallbacks(previewRetryRunnable);
         FloatWindowService.setTriggerAreaPreview(false);
+        FloatWindowService.sSettingsActivityOpen = false;
+        // 真正退出时（保存/放弃/直接返回）让服务按最终方向重新读取落盘值，
+        // 避免退出瞬间方向恢复与服务配置变化时序错位。
+        if (isFinishing()) {
+            FloatWindowService.reloadSettingsForCurrentOrientation();
+        }
     }
 
     @Override

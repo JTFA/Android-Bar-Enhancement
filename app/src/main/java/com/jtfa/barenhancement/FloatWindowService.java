@@ -153,9 +153,34 @@ public class FloatWindowService extends Service {
     // 服务实例（同进程静态直连，供设置页控制触发区预览）
     private static volatile FloatWindowService sInstance;
 
+    /** 设置页是否在前台：此时方向切换以设置页内存值为准，避免服务回读 prefs 覆盖未保存修改。 */
+    public static volatile boolean sSettingsActivityOpen = false;
+
     /** 服务是否正在运行（同进程静态实例是否存活） */
     public static boolean isRunning() {
         return sInstance != null;
+    }
+
+    /**
+     * 设置页退出后让服务按当前方向重新读取已保存值。
+     * 退出时可能刚恢复系统方向，单靠 onConfigurationChanged 的时序不够稳定。
+     */
+    public static void reloadSettingsForCurrentOrientation() {
+        final FloatWindowService svc = sInstance;
+        if (svc == null) return;
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    svc.loadSettings();
+                    if (svc.isCollapsedBar()) {
+                        svc.applyStyleChanges();
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "退出设置页后重新加载设置失败", e);
+                }
+            }
+        });
     }
 
     /**
@@ -655,6 +680,23 @@ public class FloatWindowService extends Service {
         }
 
         Log.d(TAG, "========================================");
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // 设置页在前台时以它下发的未保存值为准，服务不要回读 prefs 覆盖；
+        // 设置页关闭后再按当前方向读取持久化值。
+        if (!sSettingsActivityOpen) {
+            loadSettings();
+        }
+        try {
+            if (isCollapsedBar()) {
+                applyStyleChanges();
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "方向变化后刷新提示条失败", e);
+        }
     }
 
     /**
@@ -7685,15 +7727,15 @@ public class FloatWindowService extends Service {
         try {
             android.content.SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
 
-            // 加载提示条样式
-            currentWidth = prefs.getInt("bar_width", currentWidth);
-            currentHeight = prefs.getInt("bar_height", currentHeight);
-            currentCornerRadius = prefs.getInt("bar_corner", currentCornerRadius);
+            // 加载提示条样式（横屏按同步标记读取竖屏值或横屏独立值）
+            currentWidth = OrientationSettings.getInt(this, prefs, "bar_width", currentWidth);
+            currentHeight = OrientationSettings.getInt(this, prefs, "bar_height", currentHeight);
+            currentCornerRadius = OrientationSettings.getInt(this, prefs, "bar_corner", currentCornerRadius);
             // 关键修复：SettingsActivity 以 int(0~100) 保存，不能直接用 getFloat 读取
             currentAlpha = prefs.getInt("bar_alpha", 0) / 100.0f;
             barPositionX = prefs.getInt("bar_position_x", barPositionX);
-            barPositionY = prefs.getInt("bar_position_y", barPositionY);
-            longPressDuration = prefs.getInt("long_press_duration", longPressDuration);
+            barPositionY = OrientationSettings.getInt(this, prefs, "bar_position_y", barPositionY);
+            longPressDuration = OrientationSettings.getInt(this, prefs, "long_press_duration", longPressDuration);
 
             // 加载 AI 窗口设置
             int windowWidth = prefs.getInt("window_width", 350);
@@ -7741,7 +7783,8 @@ public class FloatWindowService extends Service {
             keyboardAnimDuration = prefs.getInt("keyboard_anim_duration", keyboardAnimDuration);
 
             // 加载点击窗口外关闭窗口设置
-            closeOnOutsideClick = prefs.getBoolean("close_on_outside_click", true);
+            closeOnOutsideClick = OrientationSettings.getBoolean(
+                    this, prefs, "close_on_outside_click", true);
 
             // 加载侧边返回手势设置
             backPrioritizeWebview = prefs.getBoolean("back_prioritize_webview", true);
@@ -7789,40 +7832,61 @@ public class FloatWindowService extends Service {
             longPressVibrate = prefs.getBoolean("long_press_vibrate_enabled", false);
 
             // 加载动画速度
-            animationDuration = prefs.getInt("anim_duration", animationDuration);
-            overlayAnimDuration = prefs.getInt("overlay_anim_duration", overlayAnimDuration);
+            animationDuration = OrientationSettings.getInt(
+                    this, prefs, "anim_duration", animationDuration);
+            overlayAnimDuration = OrientationSettings.getInt(
+                    this, prefs, "overlay_anim_duration", overlayAnimDuration);
 
             // 加载按下状态样式
-            pressedBarEnabled = prefs.getBoolean("pressed_bar_enabled", pressedBarEnabled);
-            pressedBarColor = prefs.getString("pressed_bar_color", pressedBarColor);
-            pressedBarAlpha = prefs.getInt("pressed_bar_alpha", pressedBarAlpha);
-            pressedBarWidth = prefs.getInt("pressed_bar_width", pressedBarWidth);
-            pressedBarHeight = prefs.getInt("pressed_bar_height", pressedBarHeight);
-            pressedBarCorner = prefs.getInt("pressed_bar_corner", pressedBarCorner);
-            pressedBarFeatherWidth = prefs.getInt("pressed_bar_feather_width", pressedBarFeatherWidth);
-            pressedBarPositionY = prefs.getInt("pressed_bar_position_y", pressedBarPositionY);
-            pressedBarGlowRadius = prefs.getInt("pressed_bar_glow_radius", pressedBarGlowRadius);
-            pressedBarColorMode = prefs.getString("pressed_bar_color_mode", pressedBarColorMode);
+            pressedBarEnabled = OrientationSettings.getBoolean(
+                    this, prefs, "pressed_bar_enabled", pressedBarEnabled);
+            pressedBarColor = OrientationSettings.getString(
+                    this, prefs, "pressed_bar_color", pressedBarColor);
+            pressedBarAlpha = OrientationSettings.getInt(
+                    this, prefs, "pressed_bar_alpha", pressedBarAlpha);
+            pressedBarWidth = OrientationSettings.getInt(
+                    this, prefs, "pressed_bar_width", pressedBarWidth);
+            pressedBarHeight = OrientationSettings.getInt(
+                    this, prefs, "pressed_bar_height", pressedBarHeight);
+            pressedBarCorner = OrientationSettings.getInt(
+                    this, prefs, "pressed_bar_corner", pressedBarCorner);
+            pressedBarFeatherWidth = OrientationSettings.getInt(
+                    this, prefs, "pressed_bar_feather_width", pressedBarFeatherWidth);
+            pressedBarPositionY = OrientationSettings.getInt(
+                    this, prefs, "pressed_bar_position_y", pressedBarPositionY);
+            pressedBarGlowRadius = OrientationSettings.getInt(
+                    this, prefs, "pressed_bar_glow_radius", pressedBarGlowRadius);
+            pressedBarColorMode = OrientationSettings.getString(
+                    this, prefs, "pressed_bar_color_mode", pressedBarColorMode);
 
             // 加载背景遮罩设置
-            overlayColor = prefs.getString("overlay_color", overlayColor);
-            overlayAlpha = prefs.getInt("overlay_alpha", overlayAlpha);
+            overlayColor = OrientationSettings.getString(
+                    this, prefs, "overlay_color", overlayColor);
+            overlayAlpha = OrientationSettings.getInt(
+                    this, prefs, "overlay_alpha", overlayAlpha);
 
             // 加载遮罩渐变时长
-            overlayAnimDuration = prefs.getInt("overlay_anim_duration", overlayAnimDuration);
+            overlayAnimDuration = OrientationSettings.getInt(
+                    this, prefs, "overlay_anim_duration", overlayAnimDuration);
 
             // 加载快捷方式窗口设置
-            shortcutWindowWidth = prefs.getInt("shortcut_window_width", shortcutWindowWidth);
-            shortcutWindowHeight = prefs.getInt("shortcut_window_height", shortcutWindowHeight);
-            shortcutWindowPositionY = prefs.getInt("shortcut_window_position_y", shortcutWindowPositionY);
-            shortcutCornerRadius = prefs.getInt("shortcut_corner_radius", shortcutCornerRadius);
+            shortcutWindowWidth = OrientationSettings.getInt(
+                    this, prefs, "shortcut_window_width", shortcutWindowWidth);
+            shortcutWindowHeight = OrientationSettings.getInt(
+                    this, prefs, "shortcut_window_height", shortcutWindowHeight);
+            shortcutWindowPositionY = OrientationSettings.getInt(
+                    this, prefs, "shortcut_window_position_y", shortcutWindowPositionY);
+            shortcutCornerRadius = OrientationSettings.getInt(
+                    this, prefs, "shortcut_corner_radius", shortcutCornerRadius);
             shortcutIconColumns = Math.max(AppConfig.SHORTCUT_ICON_COLUMNS_MIN,
                     Math.min(AppConfig.SHORTCUT_ICON_COLUMNS_MAX,
-                            prefs.getInt("shortcut_icon_columns", AppConfig.DEFAULT_SHORTCUT_ICON_COLUMNS)));
+                            OrientationSettings.getInt(this, prefs, "shortcut_icon_columns",
+                                    AppConfig.DEFAULT_SHORTCUT_ICON_COLUMNS)));
             shortcutIconSize = Math.max(50, Math.min(100,
-                    prefs.getInt("shortcut_icon_size", shortcutIconSize)));
-            shortcutIconCorner = prefs.getInt("shortcut_icon_corner", shortcutIconCorner);
-        tryFullscreenWindowing = prefs.getBoolean("try_fullscreen_windowing", tryFullscreenWindowing);
+                    OrientationSettings.getInt(this, prefs, "shortcut_icon_size", shortcutIconSize)));
+            shortcutIconCorner = OrientationSettings.getInt(
+                    this, prefs, "shortcut_icon_corner", shortcutIconCorner);
+            tryFullscreenWindowing = prefs.getBoolean("try_fullscreen_windowing", tryFullscreenWindowing);
             // 自定义 windowingMode：留空/非法 → 默认 6
             String customWm = prefs.getString("custom_windowing_mode", "");
             if (!TextUtils.isEmpty(customWm)) {
@@ -7832,17 +7896,26 @@ public class FloatWindowService extends Service {
                     customWindowingMode = 6;
                 }
             }
-            shortcutStyle = prefs.getInt("shortcut_style", 0);
-            shortcutBlurRadius = prefs.getInt("shortcut_blur_radius", 20);
-            shortcutOverlayAlpha = prefs.getInt("shortcut_overlay_alpha", 180);
+            shortcutStyle = OrientationSettings.getInt(this, prefs, "shortcut_style", 0);
+            shortcutBlurRadius = OrientationSettings.getInt(
+                    this, prefs, "shortcut_blur_radius", 20);
+            shortcutOverlayAlpha = OrientationSettings.getInt(
+                    this, prefs, "shortcut_overlay_alpha", 180);
             blurSyncMode = prefs.getInt("blur_sync_mode", 0);
-            shortcutEdgeRefraction = prefs.getBoolean("shortcut_edge_refraction", true);
-            shortcutFingerGlow = prefs.getBoolean("shortcut_finger_glow", true);
-            shortcutDragStretch = prefs.getBoolean("shortcut_drag_stretch", true);
-            shortcutEdgeBandDp = prefs.getInt("shortcut_edge_band_dp", 4);
-            shortcutEdgeOpacity = prefs.getInt("shortcut_edge_opacity", 48);
-            fingerGlowBrightness = prefs.getInt("finger_glow_brightness", 27);
-            fingerGlowSize = prefs.getInt("finger_glow_size", 100);
+            shortcutEdgeRefraction = OrientationSettings.getBoolean(
+                    this, prefs, "shortcut_edge_refraction", true);
+            shortcutFingerGlow = OrientationSettings.getBoolean(
+                    this, prefs, "shortcut_finger_glow", true);
+            shortcutDragStretch = OrientationSettings.getBoolean(
+                    this, prefs, "shortcut_drag_stretch", true);
+            shortcutEdgeBandDp = OrientationSettings.getInt(
+                    this, prefs, "shortcut_edge_band_dp", 4);
+            shortcutEdgeOpacity = OrientationSettings.getInt(
+                    this, prefs, "shortcut_edge_opacity", 48);
+            fingerGlowBrightness = OrientationSettings.getInt(
+                    this, prefs, "finger_glow_brightness", 27);
+            fingerGlowSize = OrientationSettings.getInt(
+                    this, prefs, "finger_glow_size", 100);
             
             // 加载 AI 窗口模糊效果设置
             aiStyle = prefs.getInt("ai_style", 0);

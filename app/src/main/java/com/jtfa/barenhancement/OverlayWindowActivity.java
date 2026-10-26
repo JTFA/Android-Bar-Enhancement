@@ -711,7 +711,7 @@ public class OverlayWindowActivity extends AppCompatActivity {
                         EXTRA_SHORTCUT_ICON_COLUMNS, AppConfig.DEFAULT_SHORTCUT_ICON_COLUMNS);
             } else {
                 SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
-                shortcutIconColumns = prefs.getInt(
+                shortcutIconColumns = OrientationSettings.getInt(this, prefs,
                         "shortcut_icon_columns", AppConfig.DEFAULT_SHORTCUT_ICON_COLUMNS);
             }
             shortcutIconColumns = Math.max(AppConfig.SHORTCUT_ICON_COLUMNS_MIN,
@@ -752,13 +752,20 @@ public class OverlayWindowActivity extends AppCompatActivity {
     private void loadShortcutEffectSettings() {
         try {
             SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
-            shortcutEdgeRefraction = prefs.getBoolean("shortcut_edge_refraction", true);
-            shortcutFingerGlow = prefs.getBoolean("shortcut_finger_glow", true);
-            shortcutDragStretch = prefs.getBoolean("shortcut_drag_stretch", true);
-            shortcutEdgeBandDp = prefs.getInt("shortcut_edge_band_dp", 4);
-            shortcutEdgeOpacity = prefs.getInt("shortcut_edge_opacity", 48);
-            fingerGlowBrightness = prefs.getInt("finger_glow_brightness", 27);
-            fingerGlowSize = prefs.getInt("finger_glow_size", 100);
+            shortcutEdgeRefraction = OrientationSettings.getBoolean(
+                    this, prefs, "shortcut_edge_refraction", true);
+            shortcutFingerGlow = OrientationSettings.getBoolean(
+                    this, prefs, "shortcut_finger_glow", true);
+            shortcutDragStretch = OrientationSettings.getBoolean(
+                    this, prefs, "shortcut_drag_stretch", true);
+            shortcutEdgeBandDp = OrientationSettings.getInt(
+                    this, prefs, "shortcut_edge_band_dp", 4);
+            shortcutEdgeOpacity = OrientationSettings.getInt(
+                    this, prefs, "shortcut_edge_opacity", 48);
+            fingerGlowBrightness = OrientationSettings.getInt(
+                    this, prefs, "finger_glow_brightness", 27);
+            fingerGlowSize = OrientationSettings.getInt(
+                    this, prefs, "finger_glow_size", 100);
         } catch (Exception e) {
             Log.e(TAG, "加载快捷方式效果开关失败", e);
         }
@@ -814,14 +821,14 @@ public class OverlayWindowActivity extends AppCompatActivity {
             SharedPreferences prefs = getSharedPreferences("ai_window_settings", MODE_PRIVATE);
             overlayAlpha = intent.hasExtra(EXTRA_OVERLAY_ALPHA)
                     ? intent.getIntExtra(EXTRA_OVERLAY_ALPHA, 50)
-                    : prefs.getInt("overlay_alpha", 50);
+                    : OrientationSettings.getInt(this, prefs, "overlay_alpha", 50);
             overlayColor = intent.hasExtra(EXTRA_OVERLAY_COLOR)
                     ? intent.getStringExtra(EXTRA_OVERLAY_COLOR)
-                    : prefs.getString("overlay_color", "#000000");
+                    : OrientationSettings.getString(this, prefs, "overlay_color", "#000000");
             if (overlayColor == null) overlayColor = "#000000";
             overlayAnimDuration = intent.hasExtra(EXTRA_OVERLAY_ANIM_DURATION)
                     ? intent.getIntExtra(EXTRA_OVERLAY_ANIM_DURATION, 100)
-                    : prefs.getInt("overlay_anim_duration", 100);
+                    : OrientationSettings.getInt(this, prefs, "overlay_anim_duration", 100);
             // 模糊层同步模式：强制「均衡」档时忽略用户存储值（存储值不覆写，恢复开关后原档位生效）
             // blur_sync_entries：0 精确同步 / 1 均衡 / 2 性能优先
             int requestedBlurSync = intent.hasExtra(EXTRA_BLUR_SYNC_MODE)
