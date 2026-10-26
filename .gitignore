@@ -7,6 +7,7 @@
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+/.idea/misc.xml
 .DS_Store
 /build
 /captures
@@ -24,6 +25,8 @@ keystore.properties
 
 # 本地文档/临时脚本（不入库）
 *.md
+# 仓库说明文档需要入库
+!README.md
 *.py
 *.ps1
 compile_output.txt
