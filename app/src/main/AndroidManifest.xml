@@ -135,6 +135,7 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:resizeableActivity="false"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
             android:taskAffinity="com.jtfa.barenhancement.floating" />
 
         <activity

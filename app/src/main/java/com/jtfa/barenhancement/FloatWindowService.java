@@ -161,20 +161,8 @@ public class FloatWindowService extends Service {
         return sInstance != null;
     }
 
-    /**
-     * 设置页退出后让服务按当前方向重新读取已保存值。
-     * 退出时可能刚恢复系统方向，单靠 onConfigurationChanged 的时序不够稳定。
-     */
-    public static void reloadSettingsForCurrentOrientation() {
-        final FloatWindowService svc = sInstance;
-        if (svc == null) return;
-        new Handler(Looper.getMainLooper()).post(new Runnable() {
-            @Override
-            public void run() {
-                svc.reloadSettingsForCurrentDisplayNow();
-            }
-        });
-    }
+    /** 重载请求序号：只有最新一次请求才允许落地，避免退出设置页时旧方向的值覆盖新方向。 */
+    private int settingsReloadSeq = 0;
 
     /**
      * 按明确的目标方向重读落盘值。
@@ -183,9 +171,14 @@ public class FloatWindowService extends Service {
     public static void reloadSettingsForOrientation(final boolean landscape) {
         final FloatWindowService svc = sInstance;
         if (svc == null) return;
+        final int seq = ++svc.settingsReloadSeq;
         new Handler(Looper.getMainLooper()).post(new Runnable() {
             @Override
             public void run() {
+                if (seq != svc.settingsReloadSeq) {
+                    DiagLog.log(svc, "跳过过期的设置重载: landscape=" + landscape);
+                    return;
+                }
                 svc.applyReloadedSettings(landscape);
             }
         });
@@ -194,16 +187,25 @@ public class FloatWindowService extends Service {
     /**
      * 延迟到显示方向稳定后，再按实际显示方向重读落盘值。
      * 用于设置页退出时方向恢复较慢、或用户期间又物理旋转了设备的兜底。
+     * 不自增序号：期间若已有更新的重载请求（设置页再次打开/系统方向回调），本次自动放弃。
      */
     public static void reloadSettingsForCurrentDisplay(long delayMs) {
         final FloatWindowService svc = sInstance;
         if (svc == null) return;
+        final int seq = svc.settingsReloadSeq;
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
+                if (seq != svc.settingsReloadSeq || sSettingsActivityOpen) return;
                 svc.reloadSettingsForCurrentDisplayNow();
             }
         }, Math.max(0L, delayMs));
+    }
+
+    /** 设置页重新打开：作废所有在途的重载请求，避免离开时的补正覆盖未保存的预览值。 */
+    public static void onSettingsOpened() {
+        final FloatWindowService svc = sInstance;
+        if (svc != null) svc.settingsReloadSeq++;
     }
 
     private void reloadSettingsForCurrentDisplayNow() {
@@ -213,12 +215,32 @@ public class FloatWindowService extends Service {
     private void applyReloadedSettings(boolean landscape) {
         try {
             loadSettings(landscape);
-            if (isCollapsedBar()) {
-                applyStyleChanges();
-            }
+            refreshBarWindowAfterReload();
         } catch (Exception e) {
             Log.w(TAG, "退出设置页后重新加载设置失败", e);
         }
+    }
+
+    /**
+     * 重载设置后把提示条窗口复位并重绘。
+     *
+     * 不能只看 isCollapsedBar()：退出设置页时窗口可能残留展开态的尺寸/重力/软键盘模式，
+     * 只改 x/y 而保留旧参数会让提示条"偶尔出现在错误位置"。因此收起态统一走
+     * applyCollapsedBarLayout() 全量复位；异常残留态走完整恢复；有窗口 Activity 时
+     * 窗口参数由展开流程管理，只更新字段不动窗口。
+     */
+    private void refreshBarWindowAfterReload() {
+        if (barContainer == null || barLayoutParams == null || windowManager == null) return;
+        if (sOverlayWindowOpen) {
+            Log.d(TAG, "窗口 Activity 前台，重载后仅更新字段");
+            return;
+        }
+        if (!isCollapsedBar()) {
+            restoreBarWindowAfterFailure("设置重载: 提示条不在收起态");
+            return;
+        }
+        applyCollapsedBarLayout();
+        applyStyleChanges();
     }
 
     /** 当前实际显示方向（不依赖可能尚未更新的 Service Configuration）。 */
@@ -737,14 +759,15 @@ public class FloatWindowService extends Service {
         // 设置页在前台时以它下发的未保存值为准，服务不要回读 prefs 覆盖；
         // 设置页关闭后再按当前方向读取持久化值。
         if (!sSettingsActivityOpen) {
-            loadSettings();
-        }
-        try {
-            if (isCollapsedBar()) {
+            // 系统方向回调是权威来源：作废设置页退出时按目标方向排队的旧重载
+            settingsReloadSeq++;
+            applyReloadedSettings(newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE);
+        } else {
+            try {
                 applyStyleChanges();
+            } catch (Exception e) {
+                Log.w(TAG, "方向变化后刷新提示条失败", e);
             }
-        } catch (Exception e) {
-            Log.w(TAG, "方向变化后刷新提示条失败", e);
         }
     }
 

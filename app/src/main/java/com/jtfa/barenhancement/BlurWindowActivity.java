@@ -44,7 +44,19 @@ public class BlurWindowActivity extends Activity {
     
     private BroadcastReceiver sizeUpdateReceiver;
     private int originalBlurRadius = 25;
-    private int originalY = 0; // 保存原始 Y 位置
+    // 最近一次下发的窗口参数 x/y（平移以此为基准）
+    private int appliedParamsX = 0;
+    private int appliedParamsY = 0;
+    // 模糊窗口自身在屏幕上的原点。横屏刘海/挖孔屏上窗口 frame 会被 inset 到安全区，
+    // 此时 params.x/y 是相对 frame 的，必须减去该原点才是真正的屏幕坐标。
+    private int windowOriginX = 0;
+    private int windowOriginY = 0;
+    // 最近一次请求的屏幕矩形（配置变化后重新校准用）
+    private int lastScreenX, lastScreenY, lastScreenW, lastScreenH, lastCornerRadius;
+    private boolean hasScreenRect = false;
+    // frame 原点只测一次（创建时按 0,0 摆放后测量）：逐帧测量会因 WMS 异步摆放而抖动
+    private boolean originDirty = true;
+    private final int[] tmpLoc = new int[2];
     private FrameLayout root;
     // 窗口圆角背景复用（拖动期间会被逐帧 UPDATE_BLUR_WINDOW_SIZE 调用，避免每帧 new 对象）
     private android.graphics.drawable.GradientDrawable windowBackgroundDrawable;
@@ -134,29 +146,64 @@ public class BlurWindowActivity extends Activity {
 
     /**
      * 应用窗口矩形/透明度（广播接收与直连静态调用共用的实现）。
+     * 入参是**屏幕坐标**；内部换算成相对窗口 frame 的坐标后下发。
      * @param alpha 透明度；&lt; 0 表示保持现值
      */
     private void applyWindowRect(int x, int y, int w, int h, int cornerRadius, float alpha) {
+        lastScreenX = x;
+        lastScreenY = y;
+        lastScreenW = w;
+        lastScreenH = h;
+        lastCornerRadius = cornerRadius;
+        hasScreenRect = true;
+
+        int paramsX;
+        int paramsY;
+        if (originDirty) {
+            // 还没完成原点校准：先摆在 frame 原点（alpha 为 0，不可见），
+            // 等首次布局完成后由 root.post 校准并定位。
+            paramsX = 0;
+            paramsY = 0;
+        } else {
+            paramsX = x - windowOriginX;
+            paramsY = y - windowOriginY;
+        }
+
         WindowManager.LayoutParams params = getWindow().getAttributes();
-        params.x = x;
-        params.y = y;
+        params.x = paramsX;
+        params.y = paramsY;
         params.width = w;
         params.height = h;
         if (alpha >= 0f) {
             params.alpha = alpha;
         }
         getWindow().setAttributes(params);
+        appliedParamsX = paramsX;
+        appliedParamsY = paramsY;
         // 更新窗口圆角背景（复用 Drawable，半径未变时早退，避免每帧失效重绘）
         applyWindowCornerRadius(cornerRadius);
     }
 
     /**
+     * 测量本窗口 frame 在屏幕上的原点（相对窗口 frame 的偏移）。
+     * 正常情况下为 (0,0)；横屏刘海机型上 frame 被 inset 时不为 0。
+     * 注意 getLocationOnScreen() 已包含当前 params.x/y，必须减掉才是 frame 原点。
+     */
+    private void updateWindowOrigin() {
+        if (root == null || root.getWidth() <= 0 || root.getHeight() <= 0) return;
+        root.getLocationOnScreen(tmpLoc);
+        windowOriginX = tmpLoc[0] - root.getLeft() - appliedParamsX;
+        windowOriginY = tmpLoc[1] - root.getTop() - appliedParamsY;
+        originDirty = false;
+    }
+
+    /**
      * 平移模糊窗口：translationY 是 contentContainer 相对于原始位置的偏移量，
-     * 新的 y = originalY + translationY（广播接收与直连调用共用）
+     * 新的 y = 基准 y + translationY（广播接收与直连调用共用）
      */
     private void applyWindowTranslate(float translationY) {
         WindowManager.LayoutParams params = getWindow().getAttributes();
-        params.y = originalY + (int) translationY;
+        params.y = appliedParamsY + (int) translationY;
         getWindow().setAttributes(params);
     }
 
@@ -199,6 +246,20 @@ public class BlurWindowActivity extends Activity {
         }
     }
 
+    /**
+     * 允许窗口铺满刘海/挖孔区域。
+     * 非浮动窗口在横屏时默认不进挖孔区，窗口 frame 会被 inset 一段（左横屏即左侧状态栏宽度），
+     * 导致 params.x/y 的原点与 getLocationOnScreen() 的屏幕坐标不一致——模糊层整体偏移。
+     */
+    private void applyCutoutMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            WindowManager.LayoutParams lp = getWindow().getAttributes();
+            lp.layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+            getWindow().setAttributes(lp);
+        }
+    }
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -238,6 +299,8 @@ public class BlurWindowActivity extends Activity {
                             | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                             | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         }
+        // 横屏挖孔/刘海区同样铺满，避免 frame 被 inset 后 x/y 原点偏移
+        applyCutoutMode();
         
         // 关键：设置窗口背景为圆角矩形（半透明或完全透明）
         // 这样模糊效果会透过这个圆角背景显示出来
@@ -259,20 +322,36 @@ public class BlurWindowActivity extends Activity {
         wmParams.flags |= WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                 | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
         wmParams.gravity = Gravity.TOP | Gravity.START;
-        wmParams.x = blurX;
-        wmParams.y = blurY;
-        wmParams.width = blurWidth;
-        wmParams.height = blurHeight;
-        // 初始透明度为 0，由 OverlayWindowActivity 展开动画逐帧广播的 blur_alpha 驱动显示
         wmParams.alpha = 0f;
-
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            wmParams.layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        }
         getWindow().setAttributes(wmParams);
 
+        // 统一走屏幕坐标换算（内部减去本窗口 frame 原点），初始透明度为 0，
+        // 由 OverlayWindowActivity 展开动画逐帧下发的 blur_alpha 驱动显示
+        applyWindowRect(blurX, blurY, blurWidth, blurHeight, cornerRadius, 0f);
+
         Log.d(TAG, "窗口位置: (" + blurX + "," + blurY + ") 尺寸: " + blurWidth + "x" + blurHeight);
-        
-        // 保存原始 Y 位置
-        originalY = blurY;
-        
+
+        // 首次布局完成后 frame 原点才可测量（横屏挖孔 inset）：重新校准一次，
+        // 否则启动瞬间的初始矩形会整体偏移一个 inset 宽度。
+        root.post(new Runnable() {
+            @Override
+            public void run() {
+                if (isFinishing() || !hasScreenRect) return;
+                // 此时窗口按 (0,0) 完成首次布局，测得的才是真正的 frame 原点
+                updateWindowOrigin();
+                // 极端情况下未布局成功也要放行，退化为原点 (0,0)，避免逐帧定位被跳过
+                originDirty = false;
+                applyWindowRect(lastScreenX, lastScreenY, lastScreenW, lastScreenH,
+                        lastCornerRadius, -1f);
+                Log.d(TAG, "布局后校准模糊窗口原点: (" + windowOriginX + "," + windowOriginY
+                        + ") params=(" + appliedParamsX + "," + appliedParamsY + ")");
+            }
+        });
+
         // 注册广播接收器，用于接收快捷窗口的模糊窗口大小更新
         sizeUpdateReceiver = new BroadcastReceiver() {
             @Override

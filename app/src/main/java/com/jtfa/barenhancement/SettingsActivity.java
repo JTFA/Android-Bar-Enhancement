@@ -356,6 +356,8 @@ public class SettingsActivity extends AppCompatActivity {
     private boolean restoringOrientation = false;
     private boolean changingOrientation = false;
     private boolean lastLandscape = false;
+    // 退出重载只下发一次（onPause 可能被多次触发）
+    private boolean exitReloadPosted = false;
     private int orientationRequestSeq = 0;
     private int statusBarInsetTop = 0;
     private int navigationBarInsetLeft = 0;
@@ -2645,6 +2647,8 @@ public class SettingsActivity extends AppCompatActivity {
         super.onResume();
         activityResumed = true;
         FloatWindowService.sSettingsActivityOpen = true;
+        // 设置页重新打开：作废退出时的延迟重载，避免它覆盖本页未保存的预览值
+        FloatWindowService.onSettingsOpened();
         // 回到设置页：重新把当前（可能是未保存的）设置下发给服务
         if (!discardingChanges) {
             flushPendingApply();
@@ -2724,11 +2728,16 @@ public class SettingsActivity extends AppCompatActivity {
         FloatWindowService.sSettingsActivityOpen = false;
         // 真正退出时（保存/放弃/直接返回）让服务按最终方向重新读取落盘值，
         // 避免退出瞬间方向恢复与服务配置变化时序错位。
-        if (isFinishing()) {
+        if (isFinishing() && !exitReloadPosted) {
+            exitReloadPosted = true;
             boolean targetLandscape = exitTargetLandscape != null
                     ? exitTargetLandscape
                     : OrientationSettings.isLandscape(this);
+            // 1) 按退出目标方向立即重载（方向恢复是异步的，不能等服务 Configuration）
             FloatWindowService.reloadSettingsForOrientation(targetLandscape);
+            // 2) 方向恢复动画结束后再按真实显示方向补一次：
+            //    退出瞬间的窗口参数可能仍按旧方向排布，导致提示条偶尔停在错误位置
+            FloatWindowService.reloadSettingsForCurrentDisplay(600);
         }
     }
 

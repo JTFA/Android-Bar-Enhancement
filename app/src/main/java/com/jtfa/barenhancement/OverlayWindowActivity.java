@@ -378,6 +378,30 @@ public class OverlayWindowActivity extends AppCompatActivity {
     }
 
     @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // 旋转后屏幕尺寸/窗口 frame 原点都会变化：刷新尺寸并立刻把模糊层
+        // 对齐到内容区当前的屏幕矩形，避免静止状态下模糊层停留在旧坐标。
+        DisplayMetrics dm = new DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getRealMetrics(dm);
+        screenWidth = dm.widthPixels;
+        screenHeight = dm.heightPixels;
+        if (contentContainer == null) return;
+        contentContainer.post(() -> {
+            if (isFinishing() || contentContainer == null) return;
+            int w = contentContainer.getWidth();
+            int h = contentContainer.getHeight();
+            if (w <= 0 || h <= 0) return;
+            int[] loc = new int[2];
+            contentContainer.getLocationOnScreen(loc);
+            // 拖动/展开动画的基准坐标同步刷新，后续逐帧同步不会跳回旧位置
+            layoutBaseLeft = loc[0];
+            layoutBaseTop = loc[1];
+            sendBlurRect(loc[0], loc[1], w, h, -1f, false);
+        });
+    }
+
+    @Override
     protected void onDestroy() {
         // 通知下层模糊窗口关闭
         BlurWindowActivity.finishIfAlive();
@@ -561,6 +585,15 @@ public class OverlayWindowActivity extends AppCompatActivity {
                     window.getDecorView().getSystemUiVisibility()
                             | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                             | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        }
+        // 横屏时非浮动窗口默认不进挖孔区，窗口 frame 会被 inset（左横屏即左侧一条），
+        // 使 getLocationOnScreen() 的屏幕坐标与模糊窗口 params.x/y 的原点不一致。
+        // 两个窗口都铺满挖孔区，坐标系统一为整块屏幕。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            WindowManager.LayoutParams lp = window.getAttributes();
+            lp.layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+            window.setAttributes(lp);
         }
     }
 
@@ -1227,10 +1260,13 @@ public class OverlayWindowActivity extends AppCompatActivity {
         container.setLayoutParams(containerLp);
 
         // 【关键修复】快捷窗口需要根据实际高度和位置更新模糊窗口
-        // 等待布局完成后获取真实坐标
+        // 等待布局完成后获取真实坐标。必须用 getLocationOnScreen()：横屏挖孔/系统栏
+        // inset 时 getLeft()/getTop() 只是窗口内坐标，与模糊窗口的屏幕坐标原点不一致。
         container.post(() -> {
-            int blurX = container.getLeft();
-            int blurY = container.getTop();
+            int[] loc = new int[2];
+            container.getLocationOnScreen(loc);
+            int blurX = loc[0];
+            int blurY = loc[1];
             int blurWidth = container.getWidth();
             int blurHeight = container.getHeight();
             try {
