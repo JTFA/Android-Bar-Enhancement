@@ -252,6 +252,13 @@ public class SettingsActivity extends AppCompatActivity {
     private LinearLayout layoutBlurSyncMode;
     private SeekBar seekShortcutBlurRadius, seekShortcutOverlayAlpha;
     private TextView textShortcutBlurRadius, textShortcutOverlayAlpha;
+    private View textShortcutStyleLabel;
+    private View containerShortcutStyle;
+    private LinearLayout rowShortcutEdgeRefraction;
+    private LinearLayout rowShortcutFingerGlow;
+    private LinearLayout rowShortcutDragStretch;
+    private int shortcutStyleBeforeFloatMode = 0;
+    private boolean floatingModeRestricted = false;
     
     // AI 窗口模糊效果控件
     private Spinner spinnerAiStyle;
@@ -507,6 +514,11 @@ public class SettingsActivity extends AppCompatActivity {
 
 
         spinnerShortcutStyle = findViewById(R.id.spinner_shortcut_style);
+        textShortcutStyleLabel = findViewById(R.id.text_shortcut_style_label);
+        containerShortcutStyle = findViewById(R.id.container_shortcut_style);
+        rowShortcutEdgeRefraction = findViewById(R.id.row_shortcut_edge_refraction);
+        rowShortcutFingerGlow = findViewById(R.id.row_shortcut_finger_glow);
+        rowShortcutDragStretch = findViewById(R.id.row_shortcut_drag_stretch);
         spinnerBlurSyncMode = findViewById(R.id.spinner_blur_sync_mode);
         layoutBlurSyncMode = findViewById(R.id.layout_blur_sync_mode);
         seekShortcutBlurRadius = findViewById(R.id.seek_shortcut_blur_radius);
@@ -738,6 +750,7 @@ public class SettingsActivity extends AppCompatActivity {
         textShortcutIconCorner.setText("图标圆角: " + shortcutIconCorner + "%");
 
         int style = preferences.getInt(KEY_SHORTCUT_STYLE, 0);
+        shortcutStyleBeforeFloatMode = style;
         spinnerShortcutStyle.setSelection(style);
         spinnerBlurSyncMode.setSelection(preferences.getInt(KEY_BLUR_SYNC_MODE, 0));
         int blurRadius = preferences.getInt(KEY_SHORTCUT_BLUR_RADIUS, 20);
@@ -799,6 +812,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         boolean useExpand = preferences.getBoolean("use_expand_directly", false);
         switchUseExpandDirectly.setChecked(useExpand);
+        updateFloatingWindowModeRestrictions(useExpand);
         switchTryFullscreenWindowing.setChecked(
                 preferences.getBoolean("try_fullscreen_windowing", false));
         // 自定义 windowingMode（留空 = 默认 6）
@@ -911,7 +925,10 @@ public class SettingsActivity extends AppCompatActivity {
         editor.putInt(KEY_SHORTCUT_ICON_SIZE, seekShortcutIconSize.getProgress());
         editor.putInt(KEY_SHORTCUT_ICON_CORNER, seekShortcutIconCorner.getProgress());
 
-        editor.putInt(KEY_SHORTCUT_STYLE, spinnerShortcutStyle.getSelectedItemPosition());
+        int styleToSave = switchUseExpandDirectly.isChecked()
+                ? shortcutStyleBeforeFloatMode
+                : spinnerShortcutStyle.getSelectedItemPosition();
+        editor.putInt(KEY_SHORTCUT_STYLE, styleToSave);
         editor.putInt(KEY_BLUR_SYNC_MODE, spinnerBlurSyncMode.getSelectedItemPosition());
         editor.putInt(KEY_SHORTCUT_BLUR_RADIUS, seekShortcutBlurRadius.getProgress());
         editor.putInt(KEY_SHORTCUT_OVERLAY_ALPHA, seekShortcutOverlayAlpha.getProgress());
@@ -1068,7 +1085,8 @@ public class SettingsActivity extends AppCompatActivity {
         shortcutIntent.putExtra("shortcut_icon_corner", seekShortcutIconCorner.getProgress());
         shortcutIntent.putExtra("try_fullscreen_windowing", switchTryFullscreenWindowing.isChecked());
         shortcutIntent.putExtra("custom_windowing_mode", parseCustomWindowingMode());
-        shortcutIntent.putExtra("shortcut_style", spinnerShortcutStyle.getSelectedItemPosition());
+        shortcutIntent.putExtra("shortcut_style",
+                switchUseExpandDirectly.isChecked() ? 0 : spinnerShortcutStyle.getSelectedItemPosition());
         shortcutIntent.putExtra("shortcut_blur_radius", seekShortcutBlurRadius.getProgress());
         shortcutIntent.putExtra("shortcut_overlay_alpha", seekShortcutOverlayAlpha.getProgress());
         startService(shortcutIntent);
@@ -1556,11 +1574,20 @@ public class SettingsActivity extends AppCompatActivity {
             updateCustomWindowingModeVisibility(); // 开关开启时显示自定义 windowingMode 输入框
             applyCurrentSettings();
         });
+
+        // 悬浮窗模式：开启后快捷窗口固定不透明，透明相关设置置灰
+        switchUseExpandDirectly.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            updateFloatingWindowModeRestrictions(isChecked);
+            applyCurrentSettings();
+        });
         
         spinnerShortcutStyle.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 updateShortcutStyleVisibility(position);
+                if (!switchUseExpandDirectly.isChecked()) {
+                    shortcutStyleBeforeFloatMode = position;
+                }
                 applyCurrentSettings();
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
@@ -1641,6 +1668,103 @@ public class SettingsActivity extends AppCompatActivity {
         seekShortcutBlurRadius.setVisibility(show ? View.VISIBLE : View.GONE);
         textShortcutOverlayAlpha.setVisibility(show ? View.VISIBLE : View.GONE);
         seekShortcutOverlayAlpha.setVisibility(show ? View.VISIBLE : View.GONE);
+    }
+
+    /**
+     * 悬浮窗模式限制：快捷窗口固定不透明，背景样式与透明/动效相关设置置灰。
+     * 只改变界面展示和当前有效样式，不覆盖用户保存的背景样式，关闭悬浮窗模式后恢复。
+     */
+    private void updateFloatingWindowModeRestrictions(boolean enabled) {
+        if (enabled) {
+            if (!floatingModeRestricted) {
+                int current = spinnerShortcutStyle.getSelectedItemPosition();
+                if (current < 0) {
+                    current = shortcutStyleBeforeFloatMode;
+                }
+                shortcutStyleBeforeFloatMode = current;
+                floatingModeRestricted = true;
+            }
+            if (spinnerShortcutStyle.getSelectedItemPosition() != 0) {
+                spinnerShortcutStyle.setSelection(0);
+            }
+            updateShortcutStyleVisibility(0);
+            setShortcutStyleControlsEnabled(false);
+        } else {
+            if (floatingModeRestricted) {
+                spinnerShortcutStyle.setSelection(shortcutStyleBeforeFloatMode);
+                updateShortcutStyleVisibility(shortcutStyleBeforeFloatMode);
+                floatingModeRestricted = false;
+            }
+            setShortcutStyleControlsEnabled(true);
+        }
+    }
+
+    /**
+     * 统一置灰/恢复快捷窗口的透明与动效设置。
+     * 置灰时禁用实际控件，并在行/参数容器上挂点击拦截，点击时提示不支持。
+     */
+    private void setShortcutStyleControlsEnabled(boolean enabled) {
+        float alpha = enabled ? 1f : 0.5f;
+        if (textShortcutStyleLabel != null) {
+            textShortcutStyleLabel.setAlpha(alpha);
+            setUnsupportedClickInterceptor(textShortcutStyleLabel, !enabled);
+        }
+        if (containerShortcutStyle != null) {
+            containerShortcutStyle.setAlpha(alpha);
+            setUnsupportedClickInterceptor(containerShortcutStyle, !enabled);
+        }
+        setControlEnabled(spinnerShortcutStyle, enabled);
+
+        if (rowShortcutEdgeRefraction != null) {
+            rowShortcutEdgeRefraction.setAlpha(alpha);
+            setUnsupportedClickInterceptor(rowShortcutEdgeRefraction, !enabled);
+        }
+        setControlEnabled(switchShortcutEdgeRefraction, enabled);
+        if (containerShortcutEdgeSettings != null) {
+            containerShortcutEdgeSettings.setAlpha(alpha);
+            setUnsupportedClickInterceptor(containerShortcutEdgeSettings, !enabled);
+        }
+        setControlEnabled(seekShortcutEdgeBand, enabled);
+        setControlEnabled(seekShortcutEdgeOpacity, enabled);
+
+        if (rowShortcutFingerGlow != null) {
+            rowShortcutFingerGlow.setAlpha(alpha);
+            setUnsupportedClickInterceptor(rowShortcutFingerGlow, !enabled);
+        }
+        setControlEnabled(switchShortcutFingerGlow, enabled);
+        if (containerFingerGlowSettings != null) {
+            containerFingerGlowSettings.setAlpha(alpha);
+            setUnsupportedClickInterceptor(containerFingerGlowSettings, !enabled);
+        }
+        setControlEnabled(seekFingerGlowBrightness, enabled);
+        setControlEnabled(seekFingerGlowSize, enabled);
+
+        if (rowShortcutDragStretch != null) {
+            rowShortcutDragStretch.setAlpha(alpha);
+            setUnsupportedClickInterceptor(rowShortcutDragStretch, !enabled);
+        }
+        setControlEnabled(switchShortcutDragStretch, enabled);
+    }
+
+    /**
+     * 禁用时同时关闭 clickable，避免禁用控件吞掉触摸导致外层提示不触发。
+     */
+    private void setControlEnabled(View view, boolean enabled) {
+        view.setEnabled(enabled);
+        view.setClickable(enabled);
+    }
+
+    private void setUnsupportedClickInterceptor(View view, boolean disabled) {
+        if (disabled) {
+            view.setOnClickListener(v -> showFloatingWindowUnsupportedToast());
+        } else {
+            view.setOnClickListener(null);
+            view.setClickable(false);
+        }
+    }
+
+    private void showFloatingWindowUnsupportedToast() {
+        Toast.makeText(this, "悬浮窗模式暂不支持该功能", Toast.LENGTH_SHORT).show();
     }
 
     /**
@@ -1774,7 +1898,8 @@ public class SettingsActivity extends AppCompatActivity {
         shortcutIntent.putExtra("shortcut_icon_corner", seekShortcutIconCorner.getProgress());
         shortcutIntent.putExtra("try_fullscreen_windowing", switchTryFullscreenWindowing.isChecked());
         shortcutIntent.putExtra("custom_windowing_mode", parseCustomWindowingMode());
-        shortcutIntent.putExtra("shortcut_style", spinnerShortcutStyle.getSelectedItemPosition());
+        shortcutIntent.putExtra("shortcut_style",
+                switchUseExpandDirectly.isChecked() ? 0 : spinnerShortcutStyle.getSelectedItemPosition());
         shortcutIntent.putExtra("shortcut_blur_radius", seekShortcutBlurRadius.getProgress());
         shortcutIntent.putExtra("shortcut_overlay_alpha", seekShortcutOverlayAlpha.getProgress());
         startService(shortcutIntent);

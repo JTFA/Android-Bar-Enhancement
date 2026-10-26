@@ -1106,6 +1106,7 @@
 
             <!-- 快捷方式背景样式 -->
             <TextView
+                android:id="@+id/text_shortcut_style_label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="背景样式"
@@ -1114,14 +1115,21 @@
                 android:layout_marginTop="8dp"
                 android:layout_marginBottom="8dp" />
 
-            <Spinner
-                android:id="@+id/spinner_shortcut_style"
+            <FrameLayout
+                android:id="@+id/container_shortcut_style"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:entries="@array/shortcut_style_entries"
-                android:background="@drawable/spinner_background"
-                android:paddingHorizontal="12dp"
-                android:layout_marginBottom="16dp" />
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp">
+
+                <Spinner
+                    android:id="@+id/spinner_shortcut_style"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:entries="@array/shortcut_style_entries"
+                    android:background="@drawable/spinner_background"
+                    android:paddingHorizontal="12dp" />
+
+            </FrameLayout>
 
             <!-- 模糊半径（仅当样式非不透明时显示） -->
             <TextView
@@ -1165,6 +1173,7 @@
 
             <!-- ColorOS 风格效果开关：边缘折射光 -->
             <LinearLayout
+                android:id="@+id/row_shortcut_edge_refraction"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
@@ -1251,6 +1260,7 @@
 
             <!-- ColorOS 风格效果开关：手指光晕 -->
             <LinearLayout
+                android:id="@+id/row_shortcut_finger_glow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
@@ -1337,6 +1347,7 @@
 
             <!-- ColorOS 风格效果开关：拖动拉伸回弹 -->
             <LinearLayout
+                android:id="@+id/row_shortcut_drag_stretch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
@@ -1640,7 +1651,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="启用悬浮窗展开/收起动画"
+                        android:text="若快捷方式窗口开闭动画存在问题，可使用该功能，但会导致透明效果不可用"
                         android:textSize="12sp"
                         android:textColor="#9E9E9E" />
 

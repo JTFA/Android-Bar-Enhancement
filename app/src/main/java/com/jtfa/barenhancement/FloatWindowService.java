@@ -2789,8 +2789,9 @@ public class FloatWindowService extends Service {
         int sTargetWidth = dpToPx(shortcutWindowWidth);
         int sTargetHeight = dpToPx(shortcutWindowHeight);  // 最大高度
         
-        // 样式=0（不透明）时不启动模糊窗口
-        if (shortcutStyle != 0) {
+        // 样式=0（不透明）时不启动模糊窗口；悬浮窗模式强制不透明
+        int effectiveStyle = getEffectiveShortcutStyle();
+        if (effectiveStyle != 0) {
             startBlurWindow(sTargetWidth, sTargetHeight, 0, shortcutWindowPositionY, shortcutCornerRadius, shortcutBlurRadius);
         }
 
@@ -2813,7 +2814,7 @@ public class FloatWindowService extends Service {
         intent.putExtra(OverlayWindowActivity.EXTRA_BACK_PRIORITIZE_WEBVIEW, backPrioritizeWebview);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_ICON_SIZE, shortcutIconSize);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_ICON_CORNER, shortcutIconCorner);
-        intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_STYLE, shortcutStyle);
+        intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_STYLE, effectiveStyle);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_BLUR_RADIUS, shortcutBlurRadius);
         intent.putExtra(OverlayWindowActivity.EXTRA_SHORTCUT_OVERLAY_ALPHA, shortcutOverlayAlpha);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
@@ -5298,6 +5299,8 @@ public class FloatWindowService extends Service {
         bgContainer.setLayoutParams(bgParams);
 
         float cornerPx = dpToPx(shortcutCornerRadius);
+        // 悬浮窗模式下强制不透明，避免窗口后内容无法模糊导致透明效果失效
+        int effectiveStyle = getEffectiveShortcutStyle();
         // 背景颜色（半透明或不透明）
         int bgColor = computeShortcutBgColor();
 //        if (shortcutStyle == 2) {
@@ -5317,10 +5320,10 @@ public class FloatWindowService extends Service {
 //        } else {
 //            bgContainer.setBackgroundColor(bgColor);
 //        }
-        if (shortcutStyle == 0) {
+        if (effectiveStyle == 0) {
             // 不透明或半透明纯色（无效果）
             bgContainer.setBackgroundColor(bgColor);
-        } else if (shortcutStyle == 1) {
+        } else if (effectiveStyle == 1) {
             // 亚克力风格：半透明底色 + 噪点 + 高光
             LayerDrawable layers = new LayerDrawable(new Drawable[] {
                     createBaseGradient(bgColor, cornerPx),
@@ -5328,7 +5331,7 @@ public class FloatWindowService extends Service {
                     createHighlightDrawable(cornerPx)
             });
             bgContainer.setBackground(layers);
-        } else if (shortcutStyle == 2) {
+        } else if (effectiveStyle == 2) {
             // 液态玻璃风格：更通透的底色 + 强高光 + 轻微阴影
             int glassColor = adjustBrightness(bgColor, 1.2f); // 提亮
             LayerDrawable layers = new LayerDrawable(new Drawable[] {
@@ -5350,7 +5353,7 @@ public class FloatWindowService extends Service {
         }
 
         // 应用模糊效果（仅对背景层，不影响上层内容清晰度）
-        applyShortcutBlurEffect(bgContainer, shortcutStyle != 0, shortcutBlurRadius);
+        applyShortcutBlurEffect(bgContainer, effectiveStyle != 0, shortcutBlurRadius);
 
         // 先添加背景层
         contentContainer.addView(bgContainer);
@@ -5459,7 +5462,8 @@ public class FloatWindowService extends Service {
         View bgLayer = ((ViewGroup) shortcutContentContainer).getChildAt(0);
         if (bgLayer != null) {
             int bgColor = computeShortcutBgColor();
-            if (shortcutStyle == 2) {
+            int effectiveStyle = getEffectiveShortcutStyle();
+            if (effectiveStyle == 2) {
                 // 重新生成液态玻璃 Drawable
                 GradientDrawable gd = new GradientDrawable(
                         GradientDrawable.Orientation.TL_BR,
@@ -5471,7 +5475,7 @@ public class FloatWindowService extends Service {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     bgLayer.setRenderEffect(null); // 清除模糊
                 }
-            } else if (shortcutStyle == 1) {
+            } else if (effectiveStyle == 1) {
                 bgLayer.setBackgroundColor(bgColor);
                 applyShortcutBlurEffect(bgLayer, true, shortcutBlurRadius);
             } else {
@@ -7766,13 +7770,23 @@ public class FloatWindowService extends Service {
     }
 
     private int computeShortcutBgColor() {
-        if (shortcutStyle == 0) {
-            return getWindowBgColor();
+        if (getEffectiveShortcutStyle() == 0) {
+            // 不透明样式：使用不带 alpha 的基础色，确保悬浮窗模式下真正不透明
+            return isDarkMode() ? Color.parseColor("#2B2B2B") : Color.WHITE;
         } else {
             int baseColor = getWindowBgColor();
             int alpha = Math.min(255, Math.max(0, shortcutOverlayAlpha));
             return Color.argb(alpha, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor));
         }
+    }
+
+    /**
+     * 当前实际生效的快捷窗口背景样式。
+     * 悬浮窗模式无法使用窗口后模糊，因此强制按不透明样式渲染；
+     * 用户保存的 shortcutStyle 保持不变，关闭悬浮窗模式后自动恢复。
+     */
+    private int getEffectiveShortcutStyle() {
+        return useExpandDirectly ? 0 : shortcutStyle;
     }
 
     /**
