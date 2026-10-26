@@ -64,10 +64,8 @@ public class ShortcutEditActivity extends AppCompatActivity {
     private String editingShortcutId = null;
     // 对话框内的控件引用（更新用）
     private ImageView dialogImagePreview;
+    private TextView dialogEmojiPreview;
     private EditText dialogIconPathInput;
-    private EditText dialogIconInput; // emoji 输入框
-    private TextView dialogTypeIndicator; // 图标类型指示
-    private boolean dialogIsImageMode = false;
 
     // 长按拖动排序相关
     private int draggingFromIndex = -1;
@@ -470,116 +468,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         formLayout.setOrientation(LinearLayout.VERTICAL);
         formLayout.setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16));
 
-        // 名称
-        TextView nameLabel = new TextView(this);
-        nameLabel.setText("名称");
-        nameLabel.setTextSize(14);
-        nameLabel.setTextColor(resolveThemeColor(R.attr.textPrimary));
-        nameLabel.setPadding(0, 0, 0, dpToPx(6));
-        formLayout.addView(nameLabel);
-
-        EditText nameInput = new EditText(this);
-        nameInput.setHint("输入快捷方式名称");
-        nameInput.setText(existing != null ? existing.getName() : "");
-        nameInput.setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12));
-        nameInput.setBackground(createInputBackground());
-        nameInput.setTextSize(14);
-        formLayout.addView(nameInput);
-
-        // 间距
-        TextView spacer1 = new TextView(this);
-        spacer1.setText("");
-        spacer1.setPadding(0, dpToPx(16), 0, 0);
-        formLayout.addView(spacer1);
-
-        // ===== 图标区域 =====
-        TextView iconLabel = new TextView(this);
-        iconLabel.setText("图标");
-        iconLabel.setTextSize(14);
-        iconLabel.setTextColor(resolveThemeColor(R.attr.textPrimary));
-        iconLabel.setPadding(0, 0, 0, dpToPx(6));
-        formLayout.addView(iconLabel);
-
-        final boolean existingIsImage = existing != null && "image".equals(existing.getIconType());
-
-        // 显示当前图标类型的提示
-        dialogTypeIndicator = new TextView(this);
-        dialogTypeIndicator.setText(existingIsImage ? "当前：图片图标" : "当前：Emoji 图标");
-        dialogTypeIndicator.setTextSize(12);
-        dialogTypeIndicator.setTextColor(resolveThemeColor(R.attr.textHint));
-        dialogTypeIndicator.setPadding(0, 0, 0, dpToPx(8));
-        formLayout.addView(dialogTypeIndicator);
-
-        // Emoji 输入
-        dialogIconInput = new EditText(this);
-        dialogIconInput.setHint("输入 Emoji 图标（如 🔍），留空则使用图片");
-        dialogIconInput.setText(!existingIsImage && existing != null ? existing.getIcon() : "");
-        dialogIconInput.setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12));
-        dialogIconInput.setBackground(createInputBackground());
-        dialogIconInput.setTextSize(14);
-        formLayout.addView(dialogIconInput);
-
-        // 选择图片按钮
-        LinearLayout imageRow = new LinearLayout(this);
-        imageRow.setOrientation(LinearLayout.HORIZONTAL);
-        imageRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        imageRow.setPadding(0, dpToPx(8), 0, 0);
-
-        Button selectImageBtn = new Button(this);
-        selectImageBtn.setText("选择图片");
-        selectImageBtn.setTextSize(14);
-        selectImageBtn.setTextColor(0xFFFFFFFF);
-        selectImageBtn.setBackground(createRoundedButtonBg(resolveThemeColor(R.attr.colorPrimaryBrand), dpToPx(10)));
-        selectImageBtn.setPadding(dpToPx(16), dpToPx(10), dpToPx(16), dpToPx(10));
-        selectImageBtn.setStateListAnimator(null);
-
-        // 图片预览
-        dialogImagePreview = new ImageView(this);
-        int previewSize = dpToPx(48);
-        LinearLayout.LayoutParams previewLp = new LinearLayout.LayoutParams(previewSize, previewSize);
-        previewLp.setMargins(dpToPx(12), 0, 0, 0);
-        dialogImagePreview.setLayoutParams(previewLp);
-        dialogImagePreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        GradientDrawable previewBg = new GradientDrawable();
-        previewBg.setShape(GradientDrawable.RECTANGLE);
-        previewBg.setCornerRadius(dpToPx(8));
-        previewBg.setColor(resolveThemeColor(R.attr.bgPage));
-        dialogImagePreview.setBackground(previewBg);
-        dialogImagePreview.setVisibility(View.GONE);
-
-        // 图片路径（隐藏的输入框，用于存储路径）
-        dialogIconPathInput = new EditText(this);
-        dialogIconPathInput.setVisibility(View.GONE);
-        String existingPath = (existingIsImage && existing != null && existing.getIconPath() != null)
-                ? existing.getIconPath() : "";
-        dialogIconPathInput.setText(existingPath);
-
-        // 如果有已有图片路径，加载预览
-        if (!TextUtils.isEmpty(existingPath)) {
-            Bitmap bmp = loadIconBitmap(existingPath);
-            if (bmp != null) {
-                dialogImagePreview.setImageBitmap(bmp);
-                dialogImagePreview.setVisibility(View.VISIBLE);
-            }
-        }
-
-        final String shortcutId = existing != null ? existing.getId() : "sc_" + System.currentTimeMillis();
-        selectImageBtn.setOnClickListener(v -> {
-            editingShortcutId = shortcutId;
-            imagePickerLauncher.launch("image/*");
-        });
-
-        imageRow.addView(selectImageBtn);
-        imageRow.addView(dialogImagePreview);
-        formLayout.addView(imageRow);
-
-        // 间距
-        TextView spacer2 = new TextView(this);
-        spacer2.setText("");
-        spacer2.setPadding(0, dpToPx(16), 0, 0);
-        formLayout.addView(spacer2);
-
-        // 包名
+        // ===== 应用包名 =====
         TextView pkgLabel = new TextView(this);
         pkgLabel.setText("应用包名");
         pkgLabel.setTextSize(14);
@@ -587,19 +476,24 @@ public class ShortcutEditActivity extends AppCompatActivity {
         pkgLabel.setPadding(0, 0, 0, dpToPx(6));
         formLayout.addView(pkgLabel);
 
-        // 类名（提前声明，以便在包名选择按钮中使用）
-        TextView clsLabel = new TextView(this);
-        clsLabel.setText("Activity 类名");
-        clsLabel.setTextSize(14);
-        clsLabel.setTextColor(resolveThemeColor(R.attr.textPrimary));
-        clsLabel.setPadding(0, 0, 0, dpToPx(6));
+        // 名称输入框（先创建，供选择应用回填名称使用）
+        EditText nameInput = new EditText(this);
+        nameInput.setHint("输入快捷方式名称");
+        nameInput.setText(existing != null ? existing.getName() : "");
+        nameInput.setPadding(dpToPx(12), 0, dpToPx(12), 0);
+        nameInput.setBackground(createInputBackground());
+        nameInput.setTextSize(14);
+        nameInput.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        nameInput.setSingleLine(true);
 
+        // Activity 类名输入框（先创建，供选择应用回填类名使用）
         EditText clsInput = new EditText(this);
         clsInput.setHint("输入 Activity 完整类名");
         clsInput.setText(existing != null ? existing.getClassName() : "");
         clsInput.setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12));
         clsInput.setBackground(createInputBackground());
         clsInput.setTextSize(14);
+        clsInput.setSingleLine(true);
 
         // 包名输入行（包含输入框和选择按钮）
         LinearLayout pkgRow = new LinearLayout(this);
@@ -613,6 +507,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
         pkgInput.setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12));
         pkgInput.setBackground(createInputBackground());
         pkgInput.setTextSize(14);
+        pkgInput.setSingleLine(true);
         LinearLayout.LayoutParams pkgLp = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
         pkgInput.setLayoutParams(pkgLp);
@@ -629,24 +524,180 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         btnLp.setMargins(dpToPx(8), 0, 0, 0);
         selectAppBtn.setLayoutParams(btnLp);
-        
-        // 点击选择应用按钮
-        selectAppBtn.setOnClickListener(v -> {
-            showAppPickerForShortcut(pkgInput, nameInput, dialogIconPathInput, dialogImagePreview, clsInput);
-        });
-        
         pkgRow.addView(selectAppBtn);
         formLayout.addView(pkgRow);
 
         // 间距
-        TextView spacer3 = new TextView(this);
-        spacer3.setText("");
-        spacer3.setPadding(0, dpToPx(16), 0, 0);
-        formLayout.addView(spacer3);
+        TextView spacer1 = new TextView(this);
+        spacer1.setText("");
+        spacer1.setPadding(0, dpToPx(16), 0, 0);
+        formLayout.addView(spacer1);
 
-        // 添加类名标签和输入框
+        // ===== 名称和图标 =====
+        TextView nameLabel = new TextView(this);
+        nameLabel.setText("名称和图标");
+        nameLabel.setTextSize(14);
+        nameLabel.setTextColor(resolveThemeColor(R.attr.textPrimary));
+        nameLabel.setPadding(0, 0, 0, dpToPx(6));
+        formLayout.addView(nameLabel);
+
+        LinearLayout nameIconRow = new LinearLayout(this);
+        nameIconRow.setOrientation(LinearLayout.HORIZONTAL);
+        nameIconRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        nameInput.setLayoutParams(new LinearLayout.LayoutParams(
+                0, dpToPx(44), 1));
+        nameIconRow.addView(nameInput);
+
+        final boolean existingIsImage = existing != null && "image".equals(existing.getIconType());
+
+        // 图标预览（图片；旧数据的 emoji 只读显示）
+        FrameLayout previewBox = new FrameLayout(this);
+        int previewSize = dpToPx(44);
+        LinearLayout.LayoutParams previewLp = new LinearLayout.LayoutParams(previewSize, previewSize);
+        previewLp.setMargins(dpToPx(8), 0, 0, 0);
+        previewBox.setLayoutParams(previewLp);
+        GradientDrawable previewBg = new GradientDrawable();
+        previewBg.setShape(GradientDrawable.RECTANGLE);
+        previewBg.setCornerRadius(dpToPx(8));
+        previewBg.setColor(resolveThemeColor(R.attr.bgPage));
+        previewBox.setBackground(previewBg);
+        previewBox.setClipToOutline(true);
+
+        dialogImagePreview = new ImageView(this);
+        dialogImagePreview.setLayoutParams(new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        dialogImagePreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        dialogImagePreview.setVisibility(View.GONE);
+        previewBox.addView(dialogImagePreview);
+
+        dialogEmojiPreview = new TextView(this);
+        dialogEmojiPreview.setLayoutParams(new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        dialogEmojiPreview.setGravity(android.view.Gravity.CENTER);
+        dialogEmojiPreview.setTextSize(22);
+        dialogEmojiPreview.setTextColor(resolveThemeColor(R.attr.textPrimary));
+        dialogEmojiPreview.setVisibility(View.GONE);
+        previewBox.addView(dialogEmojiPreview);
+        nameIconRow.addView(previewBox);
+
+        // 图片路径（隐藏输入框，仅用于存储路径）
+        dialogIconPathInput = new EditText(this);
+        dialogIconPathInput.setVisibility(View.GONE);
+        String existingPath = (existingIsImage && existing != null && existing.getIconPath() != null)
+                ? existing.getIconPath() : "";
+        dialogIconPathInput.setText(existingPath);
+
+        // 选择图片（两行文字，压缩宽度）
+        Button selectImageBtn = new Button(this);
+        selectImageBtn.setText("选择\n图片");
+        selectImageBtn.setTextSize(11);
+        selectImageBtn.setTextColor(0xFFFFFFFF);
+        selectImageBtn.setBackground(createRoundedButtonBg(resolveThemeColor(R.attr.colorPrimaryBrand), dpToPx(9)));
+        selectImageBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
+        selectImageBtn.setStateListAnimator(null);
+        selectImageBtn.setSingleLine(false);
+        selectImageBtn.setMaxLines(2);
+        selectImageBtn.setGravity(android.view.Gravity.CENTER);
+        selectImageBtn.setIncludeFontPadding(false);
+        selectImageBtn.setMinWidth(0);
+        selectImageBtn.setMinimumWidth(0);
+        selectImageBtn.setMinHeight(0);
+        selectImageBtn.setMinimumHeight(0);
+        LinearLayout.LayoutParams selectImageLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        selectImageLp.setMargins(dpToPx(6), 0, 0, 0);
+        selectImageBtn.setLayoutParams(selectImageLp);
+        nameIconRow.addView(selectImageBtn);
+
+        // 恢复默认图标（两行文字）
+        Button resetBtn = new Button(this);
+        resetBtn.setText("恢复默认\n图标");
+        resetBtn.setTextSize(11);
+        resetBtn.setTextColor(0xFFFFFFFF);
+        resetBtn.setBackground(createRoundedButtonBg(0xFF4CAF50, dpToPx(9)));
+        resetBtn.setPadding(dpToPx(6), dpToPx(4), dpToPx(6), dpToPx(4));
+        resetBtn.setStateListAnimator(null);
+        resetBtn.setSingleLine(false);
+        resetBtn.setMaxLines(2);
+        resetBtn.setGravity(android.view.Gravity.CENTER);
+        resetBtn.setIncludeFontPadding(false);
+        resetBtn.setMinWidth(0);
+        resetBtn.setMinimumWidth(0);
+        resetBtn.setMinHeight(0);
+        resetBtn.setMinimumHeight(0);
+        LinearLayout.LayoutParams resetLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        resetLp.setMargins(dpToPx(6), 0, 0, 0);
+        resetBtn.setLayoutParams(resetLp);
+        nameIconRow.addView(resetBtn);
+
+        formLayout.addView(nameIconRow);
+
+        // 初始化预览
+        if (!TextUtils.isEmpty(existingPath)) {
+            updateDialogIconPreview(existingPath, "");
+        } else if (existing != null && !TextUtils.isEmpty(existing.getIcon())) {
+            updateDialogIconPreview("", existing.getIcon());
+        } else {
+            updateDialogIconPreview("", "⚡");
+        }
+
+        final String shortcutId = existing != null ? existing.getId() : "sc_" + System.currentTimeMillis();
+
+        selectImageBtn.setOnClickListener(v -> {
+            editingShortcutId = shortcutId;
+            imagePickerLauncher.launch("image/*");
+        });
+
+        resetBtn.setOnClickListener(v -> {
+            if (existing != null && isDefaultShortcutId(existing.getId())) {
+                restoreBundledIcon(existing.getId());
+            } else {
+                restoreAppIcon(pkgInput);
+            }
+        });
+
+        selectAppBtn.setOnClickListener(v ->
+                showAppPickerForShortcut(pkgInput, nameInput, dialogIconPathInput, dialogImagePreview, clsInput));
+
+        // 间距
+        TextView spacer2 = new TextView(this);
+        spacer2.setText("");
+        spacer2.setPadding(0, dpToPx(16), 0, 0);
+        formLayout.addView(spacer2);
+
+        // ===== Activity 类名 =====
+        TextView clsLabel = new TextView(this);
+        clsLabel.setText("Activity 类名");
+        clsLabel.setTextSize(14);
+        clsLabel.setTextColor(resolveThemeColor(R.attr.textPrimary));
+        clsLabel.setPadding(0, 0, 0, dpToPx(6));
         formLayout.addView(clsLabel);
-        formLayout.addView(clsInput);
+
+        LinearLayout clsRow = new LinearLayout(this);
+        clsRow.setOrientation(LinearLayout.HORIZONTAL);
+        clsRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        clsInput.setLayoutParams(new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        clsRow.addView(clsInput);
+
+        Button pickActivityBtn = new Button(this);
+        pickActivityBtn.setText("选择 Activity");
+        pickActivityBtn.setTextSize(13);
+        pickActivityBtn.setTextColor(0xFFFFFFFF);
+        pickActivityBtn.setBackground(createRoundedButtonBg(resolveThemeColor(R.attr.colorPrimaryBrand), dpToPx(10)));
+        pickActivityBtn.setPadding(dpToPx(12), dpToPx(10), dpToPx(12), dpToPx(10));
+        pickActivityBtn.setStateListAnimator(null);
+        pickActivityBtn.setSingleLine(true);
+        LinearLayout.LayoutParams pickLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        pickLp.setMargins(dpToPx(8), 0, 0, 0);
+        pickActivityBtn.setLayoutParams(pickLp);
+        pickActivityBtn.setOnClickListener(v ->
+                GestureLaunchConfigDialog.showActivityPicker(
+                        this, pkgInput.getText().toString().trim(), clsInput));
+        clsRow.addView(pickActivityBtn);
+        formLayout.addView(clsRow);
 
         // ========== 分隔 + 启动方式配置 ==========
         final ShortcutLaunchConfig launchConfig = ShortcutLaunchConfig.load(
@@ -866,63 +917,6 @@ public class ShortcutEditActivity extends AppCompatActivity {
             extraTypeSpinners.get(lastIdx).setSelection("boolean".equals(launchConfig.extraType) ? 1 : 0);
         }
 
-        // "恢复默认"按钮（仅4个默认快捷方式）
-        if (existing != null) {
-            boolean isDefaultSc = false;
-            String[] defIds = {"alipay_scan", "alipay_pay", "wechat_scan", "wechat_pay"};
-            for (String did : defIds) {
-                if (did.equals(existing.getId())) { isDefaultSc = true; break; }
-            }
-            if (isDefaultSc) {
-                Button resetBtn = new Button(this);
-                resetBtn.setText("恢复默认图标");
-                resetBtn.setTextSize(14);
-                resetBtn.setTextColor(0xFFFFFFFF);
-                resetBtn.setBackground(createRoundedButtonBg(0xFF4CAF50, dpToPx(10)));
-                resetBtn.setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(12));
-                resetBtn.setStateListAnimator(null);
-                LinearLayout.LayoutParams resetLp = new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                resetLp.setMargins(0, dpToPx(16), 0, 0);
-                resetBtn.setLayoutParams(resetLp);
-                resetBtn.setOnClickListener(v -> {
-                    int resId = getResources().getIdentifier(existing.getId(), "drawable", getPackageName());
-                    if (resId == 0) {
-                        Toast.makeText(this, "未找到默认图标资源", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    try {
-                        File iconsDir = new File(getFilesDir(), ICONS_DIR);
-                        if (!iconsDir.exists()) iconsDir.mkdirs();
-                        File destFile = new File(iconsDir, existing.getId() + ".png");
-                        InputStream in = getResources().openRawResource(resId);
-                        FileOutputStream out = new FileOutputStream(destFile);
-                        byte[] buffer = new byte[4096];
-                        int bytesRead;
-                        while ((bytesRead = in.read(buffer)) != -1) {
-                            out.write(buffer, 0, bytesRead);
-                        }
-                        out.close();
-                        in.close();
-
-                        String savedPath = destFile.getAbsolutePath();
-                        dialogIconPathInput.setText(savedPath);
-                        dialogIconInput.setText("");
-                        dialogTypeIndicator.setText("当前：图片图标");
-                        Bitmap bmp = loadIconBitmap(savedPath);
-                        if (bmp != null) {
-                            dialogImagePreview.setImageBitmap(bmp);
-                            dialogImagePreview.setVisibility(View.VISIBLE);
-                        }
-                        Toast.makeText(this, "已恢复默认图标", Toast.LENGTH_SHORT).show();
-                    } catch (Exception e) {
-                        android.util.Log.e("ShortcutEdit", "恢复默认图标失败", e);
-                    }
-                });
-                formLayout.addView(resetBtn);
-            }
-        }
-
         // 模式切换时更新可见性
         spinnerMode.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
@@ -1036,19 +1030,27 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 return;
             }
 
-            // 判断图标类型
-            String emojiText = dialogIconInput.getText().toString().trim();
+            // 判断图标类型（不再支持输入 emoji，只有图片或保留原图标）
             String iconPath = dialogIconPathInput.getText().toString().trim();
             String iconType;
             String icon;
 
-            if (!TextUtils.isEmpty(emojiText)) {
-                iconType = "emoji";
-                icon = emojiText;
-                iconPath = "";
-            } else if (!TextUtils.isEmpty(iconPath)) {
+            if (!TextUtils.isEmpty(iconPath)) {
                 iconType = "image";
                 icon = "";
+            } else if (existing != null) {
+                String oldPath = existing.getIconPath() != null ? existing.getIconPath() : "";
+                if (!TextUtils.isEmpty(oldPath)) {
+                    iconType = "image";
+                    icon = "";
+                    iconPath = oldPath;
+                } else if (!TextUtils.isEmpty(existing.getIcon())) {
+                    iconType = "emoji";
+                    icon = existing.getIcon();
+                } else {
+                    iconType = "emoji";
+                    icon = "⚡";
+                }
             } else {
                 iconType = "emoji";
                 icon = "⚡";
@@ -1138,16 +1140,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 // 更新对话框中的预览和路径
                 final String savedPath = destFile.getAbsolutePath();
                 dialogIconPathInput.setText(savedPath);
-
-                Bitmap bmp = loadIconBitmap(savedPath);
-                if (bmp != null) {
-                    dialogImagePreview.setImageBitmap(bmp);
-                    dialogImagePreview.setVisibility(View.VISIBLE);
-                }
-
-                // 清除 emoji 输入提示
-                dialogIconInput.setText("");
-                dialogTypeIndicator.setText("当前：图片图标");
+                updateDialogIconPreview(savedPath, "");
 
                 Toast.makeText(this, "图标已选择", Toast.LENGTH_SHORT).show();
             }
@@ -1171,6 +1164,92 @@ public class ShortcutEditActivity extends AppCompatActivity {
             android.util.Log.e("ShortcutEdit", "加载图标失败: " + path, e);
         }
         return null;
+    }
+
+    /**
+     * 更新对话框里的图标预览：有图片显示图片，否则显示 emoji（旧数据只读兜底）
+     */
+    private void updateDialogIconPreview(String path, String emoji) {
+        if (dialogImagePreview == null || dialogEmojiPreview == null) return;
+        Bitmap bmp = loadIconBitmap(path);
+        if (bmp != null) {
+            dialogImagePreview.setImageBitmap(bmp);
+            dialogImagePreview.setVisibility(View.VISIBLE);
+            dialogEmojiPreview.setVisibility(View.GONE);
+        } else {
+            dialogImagePreview.setImageDrawable(null);
+            dialogImagePreview.setVisibility(View.GONE);
+            dialogEmojiPreview.setText(TextUtils.isEmpty(emoji) ? "⚡" : emoji);
+            dialogEmojiPreview.setVisibility(View.VISIBLE);
+        }
+    }
+
+    /**
+     * 是否为内置的四个默认快捷方式
+     */
+    private boolean isDefaultShortcutId(String id) {
+        if (id == null) return false;
+        return "alipay_scan".equals(id) || "alipay_pay".equals(id)
+                || "wechat_scan".equals(id) || "wechat_pay".equals(id);
+    }
+
+    /**
+     * 恢复内置默认图标（仅四个默认快捷方式）
+     */
+    private void restoreBundledIcon(String id) {
+        int resId = getResources().getIdentifier(id, "drawable", getPackageName());
+        if (resId == 0) {
+            Toast.makeText(this, "未找到默认图标资源", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            File iconsDir = new File(getFilesDir(), ICONS_DIR);
+            if (!iconsDir.exists()) iconsDir.mkdirs();
+            File destFile = new File(iconsDir, id + ".png");
+            InputStream in = getResources().openRawResource(resId);
+            FileOutputStream out = new FileOutputStream(destFile);
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            while ((bytesRead = in.read(buffer)) != -1) {
+                out.write(buffer, 0, bytesRead);
+            }
+            out.close();
+            in.close();
+
+            String savedPath = destFile.getAbsolutePath();
+            dialogIconPathInput.setText(savedPath);
+            updateDialogIconPreview(savedPath, "");
+            Toast.makeText(this, "已恢复默认图标", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            android.util.Log.e("ShortcutEdit", "恢复默认图标失败", e);
+            Toast.makeText(this, "恢复默认图标失败", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * 恢复为所选应用本身的图标（非默认快捷方式）
+     */
+    private void restoreAppIcon(EditText pkgInput) {
+        String pkg = pkgInput.getText().toString().trim();
+        if (TextUtils.isEmpty(pkg)) {
+            Toast.makeText(this, "请先选择应用", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            android.graphics.drawable.Drawable icon = getPackageManager().getApplicationIcon(pkg);
+            saveAppIconToStorage(pkg, icon);
+            String savedPath = getSavedIconPath(pkg);
+            if (TextUtils.isEmpty(savedPath)) {
+                Toast.makeText(this, "获取应用图标失败", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            dialogIconPathInput.setText(savedPath);
+            updateDialogIconPreview(savedPath, "");
+            Toast.makeText(this, "已恢复默认图标", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            android.util.Log.e("ShortcutEdit", "获取应用图标失败", e);
+            Toast.makeText(this, "获取应用图标失败", Toast.LENGTH_SHORT).show();
+        }
     }
 
     /**
@@ -1523,11 +1602,7 @@ public class ShortcutEditActivity extends AppCompatActivity {
                 String savedIconPath = getSavedIconPath(pkg);
                 if (!TextUtils.isEmpty(savedIconPath)) {
                     iconPathInput.setText(savedIconPath);
-                    Bitmap bmp = loadIconBitmap(savedIconPath);
-                    if (bmp != null) {
-                        imagePreview.setImageBitmap(bmp);
-                        imagePreview.setVisibility(View.VISIBLE);
-                    }
+                    updateDialogIconPreview(savedIconPath, "");
                 }
                 
                 Toast.makeText(ShortcutEditActivity.this, "已选择: " + name, Toast.LENGTH_SHORT).show();
@@ -1555,9 +1630,14 @@ public class ShortcutEditActivity extends AppCompatActivity {
             if (drawable instanceof android.graphics.drawable.BitmapDrawable) {
                 bitmap = ((android.graphics.drawable.BitmapDrawable) drawable).getBitmap();
             } else {
+                int width = drawable.getIntrinsicWidth();
+                int height = drawable.getIntrinsicHeight();
+                if (width <= 0 || height <= 0) {
+                    width = height = dpToPx(96);
+                }
                 bitmap = android.graphics.Bitmap.createBitmap(
-                        drawable.getIntrinsicWidth(),
-                        drawable.getIntrinsicHeight(),
+                        width,
+                        height,
                         android.graphics.Bitmap.Config.ARGB_8888);
                 android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
                 drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());

@@ -21,6 +21,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RadioGroup;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.Switch;
@@ -195,33 +196,8 @@ public class SettingsActivity extends AppCompatActivity {
     private LinearLayout layoutCustomWindowingMode;
     private EditText editCustomWindowingMode;
     
-    // 提示条触发行为配置
-    private Spinner spinnerClickAction, spinnerDoubleClickAction, spinnerLongPressAction;
-    private LinearLayout layoutClickApp, layoutDoubleClickApp, layoutLongPressApp;
-    private TextView textClickSelectedApp, textDoubleClickSelectedApp, textLongPressSelectedApp;
-    private String clickAction = "";
-    private String doubleClickAction = "";
-    private String longPressAction = "";
-    private String clickAppPackage = "";
-    private String clickAppName = "";
-    private String clickAppClass = "";
-    private String doubleClickAppPackage = "";
-    private String doubleClickAppName = "";
-    private String doubleClickAppClass = "";
-    private String longPressAppPackage = "";
-    private String longPressAppName = "";
-    private String longPressAppClass = "";
-    private LinearLayout layoutClickOpenInWindow, layoutDoubleClickOpenInWindow, layoutLongPressOpenInWindow;
-    private Switch switchClickOpenInWindow, switchDoubleClickOpenInWindow, switchLongPressOpenInWindow;
-    // 触发时振动开关
-    private LinearLayout layoutClickVibrate, layoutDoubleClickVibrate, layoutLongPressVibrate;
-    private Switch switchClickVibrate, switchDoubleClickVibrate, switchLongPressVibrate;
-    // 启动配置行（URL Scheme / Intent Extra / 显式组件）
-    private LinearLayout layoutClickLaunch, layoutDoubleClickLaunch, layoutLongPressLaunch;
-    private TextView textClickLaunchSummary, textDoubleClickLaunchSummary, textLongPressLaunchSummary;
-    private boolean isAppPickerSelecting = false;  // 防止重复弹出/选择的标记
-    private String appPickerTarget = ""; // 当前正在选择的应用所属手势
-    
+    // 提示条触发行为已搬到首页，由 TriggerActionsController 负责
+
     // 输入法避让控件
     private SeekBar seekKeyboardOffset;
     private TextView textKeyboardOffset;
@@ -237,6 +213,7 @@ public class SettingsActivity extends AppCompatActivity {
     private SeekBar seekPressedBarWidth, seekPressedBarHeight, seekPressedBarCorner, seekPressedBarAlpha;
     private TextView textPressedBarWidth, textPressedBarHeight, textPressedBarCorner, textPressedBarAlpha;
     private EditText editPressedBarColor;
+    private TextView textPressedBarColorLabel;
     
     // 羽化宽度控件
     private SeekBar seekPressedBarFeather;
@@ -265,7 +242,6 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView textShortcutWindowWidth, textShortcutWindowHeight, textShortcutWindowPositionY;
     private SeekBar seekShortcutCornerRadius;
     private TextView textShortcutCornerRadius;
-    private Button btnEditShortcuts;
     private SeekBar seekShortcutIconSize;
     private TextView textShortcutIconSize;
     private SeekBar seekShortcutIconCorner;
@@ -319,6 +295,13 @@ public class SettingsActivity extends AppCompatActivity {
     // SharedPreferences
     private SharedPreferences preferences;
 
+    // 分组锚点（提示条 / 快捷窗口 / 高级）
+    private ScrollView settingsScroll;
+    private TextView tabTip, tabShortcut, tabAdvanced;
+    private View groupTip, groupShortcut, groupAdvanced;
+    private int activeGroupIndex = 0;
+    private long suppressScrollUntil = 0;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -331,6 +314,7 @@ public class SettingsActivity extends AppCompatActivity {
         applyFeatureFlagVisibility(); // 按总配置隐藏 AI 窗口相关设置
         loadSettings(); // 加载已保存的设置
         setupListeners();
+        setupGroupTabs(); // 顶部三个分组锚点：固定显示 + 滑动高亮
 
         // 快捷窗口轮廓实时预览层：叠加在内容顶层，触摸穿透不阻挡设置操作
         windowOutlineOverlay = new WindowOutlineOverlay(this);
@@ -401,34 +385,6 @@ public class SettingsActivity extends AppCompatActivity {
         // 隐藏「窗口设置」「AI 窗口模糊效果（含输入法避让）」两张卡片
         findViewById(R.id.card_window_settings).setVisibility(View.GONE);
         findViewById(R.id.card_ai_blur_card).setVisibility(View.GONE);
-
-        // 手势行为下拉框隐藏「打开AI窗口」选项（该选项在数组末尾，前 3 项索引不变）
-        String[] labels = {
-            getString(R.string.action_none),
-            getString(R.string.action_open_app),
-            getString(R.string.action_open_shortcut)
-        };
-        spinnerClickAction.setAdapter(newActionAdapter(labels));
-        spinnerDoubleClickAction.setAdapter(newActionAdapter(labels));
-        spinnerLongPressAction.setAdapter(newActionAdapter(labels));
-    }
-
-    private ArrayAdapter<String> newActionAdapter(String[] labels) {
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item, labels);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        return adapter;
-    }
-
-    /**
-     * AI 窗口功能隐藏期间，把 ai 行为回退为「无」（仅运行时，不覆写存储值，
-     * 恢复配置后原保存行为自动重新生效）
-     */
-    private String resolveEnabledAction(String action) {
-        if (!AppConfig.AI_WINDOW_ENABLED && ACTION_AI.equals(action)) {
-            return ACTION_NONE;
-        }
-        return action;
     }
     
     /**
@@ -489,44 +445,8 @@ public class SettingsActivity extends AppCompatActivity {
         // 侧边返回手势行为开关
         switchBackPrioritizeWebview = findViewById(R.id.switch_back_prioritize_webview);
         
-        // 提示条触发行为配置
-        spinnerClickAction = findViewById(R.id.spinner_click_action);
-        layoutClickApp = findViewById(R.id.layout_click_app);
-        textClickSelectedApp = findViewById(R.id.text_click_selected_app);
-        
-        spinnerDoubleClickAction = findViewById(R.id.spinner_double_click_action);
-        layoutDoubleClickApp = findViewById(R.id.layout_double_click_app);
-        textDoubleClickSelectedApp = findViewById(R.id.text_double_click_selected_app);
-        
-        spinnerLongPressAction = findViewById(R.id.spinner_long_press_action);
-        layoutLongPressApp = findViewById(R.id.layout_long_press_app);
-        textLongPressSelectedApp = findViewById(R.id.text_long_press_selected_app);
-        
-        // 窗口打开开关
-        layoutClickOpenInWindow = findViewById(R.id.layout_click_open_in_window);
-        switchClickOpenInWindow = findViewById(R.id.switch_click_open_in_window);
-        layoutDoubleClickOpenInWindow = findViewById(R.id.layout_double_click_open_in_window);
-        switchDoubleClickOpenInWindow = findViewById(R.id.switch_double_click_open_in_window);
-        layoutLongPressOpenInWindow = findViewById(R.id.layout_long_press_open_in_window);
-        switchLongPressOpenInWindow = findViewById(R.id.switch_long_press_open_in_window);
-        
-        // 触发时振动开关
-        layoutClickVibrate = findViewById(R.id.layout_click_vibrate);
-        switchClickVibrate = findViewById(R.id.switch_click_vibrate);
-        layoutDoubleClickVibrate = findViewById(R.id.layout_double_click_vibrate);
-        switchDoubleClickVibrate = findViewById(R.id.switch_double_click_vibrate);
-        layoutLongPressVibrate = findViewById(R.id.layout_long_press_vibrate);
-        switchLongPressVibrate = findViewById(R.id.switch_long_press_vibrate);
-        
-        // 启动配置行
-        layoutClickLaunch = findViewById(R.id.layout_click_launch);
-        textClickLaunchSummary = findViewById(R.id.text_click_launch_summary);
-        layoutDoubleClickLaunch = findViewById(R.id.layout_double_click_launch);
-        textDoubleClickLaunchSummary = findViewById(R.id.text_double_click_launch_summary);
-        layoutLongPressLaunch = findViewById(R.id.layout_long_press_launch);
-        textLongPressLaunchSummary = findViewById(R.id.text_long_press_launch_summary);
-        
-        // 输入法避让控件
+        // 提示条触发行为已搬到首页（TriggerActionsController）
+
         seekKeyboardOffset = findViewById(R.id.seek_keyboard_offset);
         textKeyboardOffset = findViewById(R.id.text_keyboard_offset);
         seekKeyboardAnimDuration = findViewById(R.id.seek_keyboard_anim_duration);
@@ -547,6 +467,7 @@ public class SettingsActivity extends AppCompatActivity {
         textPressedBarCorner = findViewById(R.id.text_pressed_bar_corner);
         textPressedBarAlpha = findViewById(R.id.text_pressed_bar_alpha);
         editPressedBarColor = findViewById(R.id.edit_pressed_bar_color);
+        textPressedBarColorLabel = findViewById(R.id.text_pressed_bar_color_label);
         
         // 羽化宽度控件
         seekPressedBarFeather = findViewById(R.id.seek_pressed_bar_feather);
@@ -583,7 +504,6 @@ public class SettingsActivity extends AppCompatActivity {
         textShortcutIconSize = findViewById(R.id.text_shortcut_icon_size);
         seekShortcutIconCorner = findViewById(R.id.seek_shortcut_icon_corner);
         textShortcutIconCorner = findViewById(R.id.text_shortcut_icon_corner);
-        btnEditShortcuts = findViewById(R.id.btn_edit_shortcuts);
 
 
         spinnerShortcutStyle = findViewById(R.id.spinner_shortcut_style);
@@ -720,72 +640,7 @@ public class SettingsActivity extends AppCompatActivity {
         boolean backPrioritizeWebview = preferences.getBoolean(KEY_BACK_PRIORITIZE_WEBVIEW, false);
         switchBackPrioritizeWebview.setChecked(backPrioritizeWebview);
         
-        // ===== 加载提示条触发行为设置 =====
-        // 单击行为
-        clickAction = preferences.getString(KEY_CLICK_ACTION, "");
-        // 向后兼容：如果未设置新行为但已配置应用，则默认为"打开指定应用"
-        if (TextUtils.isEmpty(clickAction)) {
-            String savedPkg = preferences.getString(KEY_CLICK_APP_PACKAGE, "");
-            clickAction = TextUtils.isEmpty(savedPkg) ? ACTION_NONE : ACTION_APP;
-        }
-        clickAction = resolveEnabledAction(clickAction);
-        spinnerClickAction.setSelection(getActionIndex(clickAction));
-        
-        // 双击行为（向后兼容：默认快捷方式）
-        doubleClickAction = resolveEnabledAction(
-                preferences.getString(KEY_DOUBLE_CLICK_ACTION, ACTION_SHORTCUT));
-        spinnerDoubleClickAction.setSelection(getActionIndex(doubleClickAction));
-        
-        // 长按行为（向后兼容：默认AI窗口；AI窗口功能隐藏期间默认为「无」）
-        longPressAction = preferences.getString(KEY_LONG_PRESS_ACTION,
-                AppConfig.AI_WINDOW_ENABLED ? ACTION_AI : ACTION_NONE);
-        longPressAction = resolveEnabledAction(longPressAction);
-        spinnerLongPressAction.setSelection(getActionIndex(longPressAction));
-        
-        // 加载单击打开的应用
-        clickAppPackage = preferences.getString(KEY_CLICK_APP_PACKAGE, "");
-        clickAppName = preferences.getString(KEY_CLICK_APP_NAME, "");
-        clickAppClass = preferences.getString(KEY_CLICK_APP_CLASS, "");
-        if (!TextUtils.isEmpty(clickAppName)) {
-            textClickSelectedApp.setText(clickAppName);
-        } else {
-            textClickSelectedApp.setText(R.string.not_selected);
-        }
-        
-        // 加载双击打开的应用
-        doubleClickAppPackage = preferences.getString(KEY_DOUBLE_CLICK_APP_PACKAGE, "");
-        doubleClickAppName = preferences.getString(KEY_DOUBLE_CLICK_APP_NAME, "");
-        doubleClickAppClass = preferences.getString(KEY_DOUBLE_CLICK_APP_CLASS, "");
-        if (!TextUtils.isEmpty(doubleClickAppName)) {
-            textDoubleClickSelectedApp.setText(doubleClickAppName);
-        } else {
-            textDoubleClickSelectedApp.setText(R.string.not_selected);
-        }
-        
-        // 加载长按打开的应用
-        longPressAppPackage = preferences.getString(KEY_LONG_PRESS_APP_PACKAGE, "");
-        longPressAppName = preferences.getString(KEY_LONG_PRESS_APP_NAME, "");
-        longPressAppClass = preferences.getString(KEY_LONG_PRESS_APP_CLASS, "");
-        if (!TextUtils.isEmpty(longPressAppName)) {
-            textLongPressSelectedApp.setText(longPressAppName);
-        } else {
-            textLongPressSelectedApp.setText(R.string.not_selected);
-        }
-        
-        // 加载窗口打开开关
-        switchClickOpenInWindow.setChecked(preferences.getBoolean(KEY_CLICK_OPEN_IN_WINDOW, false));
-        switchDoubleClickOpenInWindow.setChecked(preferences.getBoolean(KEY_DOUBLE_CLICK_OPEN_IN_WINDOW, false));
-        switchLongPressOpenInWindow.setChecked(preferences.getBoolean(KEY_LONG_PRESS_OPEN_IN_WINDOW, false));
-        
-        // 加载触发时振动开关
-        switchClickVibrate.setChecked(preferences.getBoolean(KEY_CLICK_VIBRATE, false));
-        switchDoubleClickVibrate.setChecked(preferences.getBoolean(KEY_DOUBLE_CLICK_VIBRATE, false));
-        switchLongPressVibrate.setChecked(preferences.getBoolean(KEY_LONG_PRESS_VIBRATE, false));
-        
-        // 加载启动配置摘要
-        updateLaunchConfigSummaries();
-        
-        updateAppSelectorVisibility();
+        // 提示条触发行为已搬到首页，由 TriggerActionsController 负责
         
         // 加载输入法避让设置
         int keyboardOffset = preferences.getInt(KEY_KEYBOARD_OFFSET, 397);
@@ -843,6 +698,7 @@ public class SettingsActivity extends AppCompatActivity {
         // 加载颜色模式
         String colorMode = preferences.getString(KEY_PRESSED_BAR_COLOR_MODE, "rainbow");
         radioPressedColorMode.check("color".equals(colorMode) ? R.id.radio_pressed_color_custom : R.id.radio_pressed_color_rainbow);
+        updatePressedColorInputVisibility();
         
         // 加载按下时位置Y
         // 加载背景遮罩设置
@@ -1008,36 +864,6 @@ public class SettingsActivity extends AppCompatActivity {
         // 保存侧边返回手势设置
         editor.putBoolean(KEY_BACK_PRIORITIZE_WEBVIEW, switchBackPrioritizeWebview.isChecked());
         
-        // ===== 保存提示条触发行为设置 =====
-        editor.putString(KEY_CLICK_ACTION, clickAction);
-        editor.putString(KEY_DOUBLE_CLICK_ACTION, doubleClickAction);
-        editor.putString(KEY_LONG_PRESS_ACTION, longPressAction);
-        
-        // 保存单击打开的应用
-        editor.putString(KEY_CLICK_APP_PACKAGE, clickAppPackage);
-        editor.putString(KEY_CLICK_APP_NAME, clickAppName);
-        editor.putString(KEY_CLICK_APP_CLASS, clickAppClass);
-        
-        // 保存双击打开的应用
-        editor.putString(KEY_DOUBLE_CLICK_APP_PACKAGE, doubleClickAppPackage);
-        editor.putString(KEY_DOUBLE_CLICK_APP_NAME, doubleClickAppName);
-        editor.putString(KEY_DOUBLE_CLICK_APP_CLASS, doubleClickAppClass);
-        
-        // 保存长按打开的应用
-        editor.putString(KEY_LONG_PRESS_APP_PACKAGE, longPressAppPackage);
-        editor.putString(KEY_LONG_PRESS_APP_NAME, longPressAppName);
-        editor.putString(KEY_LONG_PRESS_APP_CLASS, longPressAppClass);
-        
-        // 保存窗口打开开关
-        editor.putBoolean(KEY_CLICK_OPEN_IN_WINDOW, switchClickOpenInWindow.isChecked());
-        editor.putBoolean(KEY_DOUBLE_CLICK_OPEN_IN_WINDOW, switchDoubleClickOpenInWindow.isChecked());
-        editor.putBoolean(KEY_LONG_PRESS_OPEN_IN_WINDOW, switchLongPressOpenInWindow.isChecked());
-        
-        // 保存触发时振动开关
-        editor.putBoolean(KEY_CLICK_VIBRATE, switchClickVibrate.isChecked());
-        editor.putBoolean(KEY_DOUBLE_CLICK_VIBRATE, switchDoubleClickVibrate.isChecked());
-        editor.putBoolean(KEY_LONG_PRESS_VIBRATE, switchLongPressVibrate.isChecked());
-        
         // 保存输入法避让设置
         editor.putInt(KEY_KEYBOARD_OFFSET, seekKeyboardOffset.getProgress());
         editor.putInt(KEY_KEYBOARD_ANIM_DURATION, seekKeyboardAnimDuration.getProgress());
@@ -1191,24 +1017,6 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("back_prioritize_webview", switchBackPrioritizeWebview.isChecked()); // 侧边返回手势行为
         sizeIntent.putExtra("overlay_color", editOverlayColor.getText().toString().trim());
         sizeIntent.putExtra("overlay_alpha", seekOverlayAlpha.getProgress());
-        sizeIntent.putExtra("click_app_package", clickAppPackage);
-        sizeIntent.putExtra("click_app_name", clickAppName);
-        sizeIntent.putExtra("click_app_class", clickAppClass);
-        sizeIntent.putExtra("click_action", clickAction);
-        sizeIntent.putExtra("double_click_action", doubleClickAction);
-        sizeIntent.putExtra("long_press_action", longPressAction);
-        sizeIntent.putExtra("double_click_app_package", doubleClickAppPackage);
-        sizeIntent.putExtra("double_click_app_name", doubleClickAppName);
-        sizeIntent.putExtra("double_click_app_class", doubleClickAppClass);
-        sizeIntent.putExtra("long_press_app_package", longPressAppPackage);
-        sizeIntent.putExtra("long_press_app_name", longPressAppName);
-        sizeIntent.putExtra("long_press_app_class", longPressAppClass);
-        sizeIntent.putExtra("click_open_in_window", switchClickOpenInWindow.isChecked());
-        sizeIntent.putExtra("double_click_open_in_window", switchDoubleClickOpenInWindow.isChecked());
-        sizeIntent.putExtra("long_press_open_in_window", switchLongPressOpenInWindow.isChecked());
-        sizeIntent.putExtra("click_vibrate", switchClickVibrate.isChecked());
-        sizeIntent.putExtra("double_click_vibrate", switchDoubleClickVibrate.isChecked());
-        sizeIntent.putExtra("long_press_vibrate", switchLongPressVibrate.isChecked());
         sizeIntent.putExtra("use_expand_directly", switchUseExpandDirectly.isChecked());
         startService(sizeIntent);
         
@@ -1572,6 +1380,7 @@ public class SettingsActivity extends AppCompatActivity {
         radioPressedColorMode.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(RadioGroup group, int checkedId) {
+                updatePressedColorInputVisibility();
                 applyCurrentSettings();
                 triggerPressedPreview();
             }
@@ -1734,15 +1543,6 @@ public class SettingsActivity extends AppCompatActivity {
         switchShortcutFingerGlow.setOnCheckedChangeListener((buttonView, isChecked) ->
                 updateFingerGlowSettingsVisibility(isChecked));
 
-        // 编辑快捷方式内容按钮
-        btnEditShortcuts.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(SettingsActivity.this, ShortcutEditActivity.class);
-                startActivity(intent);
-            }
-        });
-        
         // 保存并应用按钮
         btnSave.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -1751,94 +1551,12 @@ public class SettingsActivity extends AppCompatActivity {
             }
         });
         
-        // ===== 提示条触发行为Spinner监听器 =====
-        final String[] actionKeys = {ACTION_NONE, ACTION_APP, ACTION_SHORTCUT, ACTION_AI};
-        
-        AdapterView.OnItemSelectedListener actionListener = new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                int spinnerId = parent.getId();
-                String selectedAction = actionKeys[position];
-                if (spinnerId == R.id.spinner_click_action) {
-                    clickAction = selectedAction;
-                } else if (spinnerId == R.id.spinner_double_click_action) {
-                    doubleClickAction = selectedAction;
-                } else if (spinnerId == R.id.spinner_long_press_action) {
-                    longPressAction = selectedAction;
-                }
-                updateAppSelectorVisibility();
-                applyCurrentSettings();
-            }
-            @Override public void onNothingSelected(AdapterView<?> parent) {}
-        };
-        
-        spinnerClickAction.setOnItemSelectedListener(actionListener);
-        spinnerDoubleClickAction.setOnItemSelectedListener(actionListener);
-        spinnerLongPressAction.setOnItemSelectedListener(actionListener);
-        
-        // 触发时振动开关 - 实时下发
-        switchClickVibrate.setOnCheckedChangeListener((buttonView, isChecked) -> applyCurrentSettings());
-        switchDoubleClickVibrate.setOnCheckedChangeListener((buttonView, isChecked) -> applyCurrentSettings());
-        switchLongPressVibrate.setOnCheckedChangeListener((buttonView, isChecked) -> applyCurrentSettings());
         // 尝试消除授权弹窗开关 - 实时下发（手势路径）
         switchTryFullscreenWindowing.setOnCheckedChangeListener((buttonView, isChecked) -> {
             updateCustomWindowingModeVisibility(); // 开关开启时显示自定义 windowingMode 输入框
             applyCurrentSettings();
         });
         
-        // 单击应用选择
-        layoutClickApp.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                appPickerTarget = "click";
-                boolean firstTimeShown = preferences.getBoolean(KEY_APP_SELECTOR_SHOWN, false);
-                if (!firstTimeShown) {
-                    showPermissionExplanation();
-                } else {
-                    showAppPicker();
-                }
-            }
-        });
-        
-        // 双击应用选择
-        layoutDoubleClickApp.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                appPickerTarget = "double_click";
-                boolean firstTimeShown = preferences.getBoolean(KEY_APP_SELECTOR_SHOWN, false);
-                if (!firstTimeShown) {
-                    showPermissionExplanation();
-                } else {
-                    showAppPicker();
-                }
-            }
-        });
-        
-        // 长按应用选择
-        layoutLongPressApp.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                appPickerTarget = "long_press";
-                boolean firstTimeShown = preferences.getBoolean(KEY_APP_SELECTOR_SHOWN, false);
-                if (!firstTimeShown) {
-                    showPermissionExplanation();
-                } else {
-                    showAppPicker();
-                }
-            }
-        });
-
-        // 启动配置（URL Scheme / Intent Extra / 显式组件）
-        layoutClickLaunch.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { openLaunchConfig("click"); }
-        });
-        layoutDoubleClickLaunch.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { openLaunchConfig("double_click"); }
-        });
-        layoutLongPressLaunch.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { openLaunchConfig("long_press"); }
-        });
-
         spinnerShortcutStyle.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
@@ -2012,24 +1730,6 @@ public class SettingsActivity extends AppCompatActivity {
         sizeIntent.putExtra("back_prioritize_webview", switchBackPrioritizeWebview.isChecked()); // 侧边返回手势行为
         sizeIntent.putExtra("overlay_color", editOverlayColor.getText().toString().trim());
         sizeIntent.putExtra("overlay_alpha", seekOverlayAlpha.getProgress());
-        sizeIntent.putExtra("click_app_package", clickAppPackage);
-        sizeIntent.putExtra("click_app_name", clickAppName);
-        sizeIntent.putExtra("click_app_class", clickAppClass);
-        sizeIntent.putExtra("click_action", clickAction);
-        sizeIntent.putExtra("double_click_action", doubleClickAction);
-        sizeIntent.putExtra("long_press_action", longPressAction);
-        sizeIntent.putExtra("double_click_app_package", doubleClickAppPackage);
-        sizeIntent.putExtra("double_click_app_name", doubleClickAppName);
-        sizeIntent.putExtra("double_click_app_class", doubleClickAppClass);
-        sizeIntent.putExtra("long_press_app_package", longPressAppPackage);
-        sizeIntent.putExtra("long_press_app_name", longPressAppName);
-        sizeIntent.putExtra("long_press_app_class", longPressAppClass);
-        sizeIntent.putExtra("click_open_in_window", switchClickOpenInWindow.isChecked());
-        sizeIntent.putExtra("double_click_open_in_window", switchDoubleClickOpenInWindow.isChecked());
-        sizeIntent.putExtra("long_press_open_in_window", switchLongPressOpenInWindow.isChecked());
-        sizeIntent.putExtra("click_vibrate", switchClickVibrate.isChecked());
-        sizeIntent.putExtra("double_click_vibrate", switchDoubleClickVibrate.isChecked());
-        sizeIntent.putExtra("long_press_vibrate", switchLongPressVibrate.isChecked());
         sizeIntent.putExtra("use_expand_directly", switchUseExpandDirectly.isChecked());
         startService(sizeIntent);
         
@@ -2094,6 +1794,18 @@ public class SettingsActivity extends AppCompatActivity {
                 ? "color" : "rainbow";
     }
 
+    /** 仅「自定义颜色」模式显示颜色输入框 */
+    private void updatePressedColorInputVisibility() {
+        boolean custom = radioPressedColorMode.getCheckedRadioButtonId() == R.id.radio_pressed_color_custom;
+        int visibility = custom ? View.VISIBLE : View.GONE;
+        if (textPressedBarColorLabel != null) {
+            textPressedBarColorLabel.setVisibility(visibility);
+        }
+        if (editPressedBarColor != null) {
+            editPressedBarColor.setVisibility(visibility);
+        }
+    }
+
     private String getPressedBarColorSafe() {
         String color = editPressedBarColor.getText().toString().trim();
         if (TextUtils.isEmpty(color) || !color.startsWith("#")) {
@@ -2110,654 +1822,6 @@ public class SettingsActivity extends AppCompatActivity {
         intent.setAction("UPDATE_STYLE");
         intent.putExtra("show_pressed_preview", true);
         startService(intent);
-    }
-    
-    /**
-     * 显示应用读取权限说明（首次打开时调用）
-     */
-    private void showPermissionExplanation() {
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.app_permission_title)
-                .setMessage(R.string.app_permission_message)
-                .setPositiveButton(R.string.confirm, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        // 标记已显示过权限说明
-                        preferences.edit().putBoolean(KEY_APP_SELECTOR_SHOWN, true).apply();
-                        // 打开应用选择器
-                        showAppPicker();
-                    }
-                })
-                .setNegativeButton(R.string.cancel, null)
-                .show();
-    }
-    
-    // 应用选择器相关成员变量
-    private AlertDialog currentAppPickerDialog = null;
-    private android.widget.ListView currentAppPickerListView = null;
-    private AppPickerAdapter currentAppPickerAdapter = null;
-    
-    /**
-     * 显示已安装应用列表供用户选择
-     * 根据 appPickerTarget 确定设置哪个手势的应用
-     */
-    private void showAppPicker() {
-        // 防止重复弹出
-        if (isAppPickerSelecting) {
-            return;
-        }
-        isAppPickerSelecting = true;
-        
-        // 创建加载对话框
-        final AlertDialog loadingDialog = new AlertDialog.Builder(this)
-                .setTitle(R.string.select_app)
-                .setMessage("正在加载应用列表...")
-                .setCancelable(false)
-                .create();
-        loadingDialog.show();
-        
-        // 在后台线程中查询应用列表
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    // 查询所有可启动的应用
-                    PackageManager pm = getPackageManager();
-                    Intent mainIntent = new Intent(Intent.ACTION_MAIN);
-                    mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-                    List<ResolveInfo> apps = pm.queryIntentActivities(mainIntent, 0);
-                    
-                    // 过滤系统应用（默认不读取）
-                    boolean includeSystemApps = preferences.getBoolean("include_system_apps", false);
-                    List<ResolveInfo> filteredApps = new ArrayList<>();
-                    for (ResolveInfo app : apps) {
-                        if (includeSystemApps || !isSystemApp(pm, app)) {
-                            filteredApps.add(app);
-                        }
-                    }
-                    
-                    // 按应用名排序（使用中文排序器，中文按拼音首字母排列）
-                    final Collator collator = Collator.getInstance(java.util.Locale.CHINESE);
-                    Collections.sort(filteredApps, new Comparator<ResolveInfo>() {
-                        @Override
-                        public int compare(ResolveInfo a, ResolveInfo b) {
-                            String labelA = a.loadLabel(pm).toString();
-                            String labelB = b.loadLabel(pm).toString();
-                            return collator.compare(labelA, labelB);
-                        }
-                    });
-                    
-                    // 准备列表数据
-                    final String[] appNames = new String[filteredApps.size()];
-                    final String[] appPackages = new String[filteredApps.size()];
-                    final String[] appClasses = new String[filteredApps.size()];
-                    final android.graphics.drawable.Drawable[] appIcons = new android.graphics.drawable.Drawable[filteredApps.size()];
-                    for (int i = 0; i < filteredApps.size(); i++) {
-                        appNames[i] = filteredApps.get(i).loadLabel(pm).toString();
-                        appPackages[i] = filteredApps.get(i).activityInfo.packageName;
-                        appClasses[i] = filteredApps.get(i).activityInfo.name;
-                        appIcons[i] = filteredApps.get(i).loadIcon(pm);
-                    }
-                    
-                    // 在主线程中显示对话框
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            loadingDialog.dismiss();
-                            showAppPickerDialog(appNames, appPackages, appClasses, appIcons);
-                        }
-                    });
-                } catch (Exception e) {
-                    android.util.Log.e("SettingsActivity", "加载应用列表失败", e);
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            loadingDialog.dismiss();
-                            Toast.makeText(SettingsActivity.this, "加载应用列表失败", Toast.LENGTH_SHORT).show();
-                            isAppPickerSelecting = false;
-                        }
-                    });
-                }
-            }
-        }).start();
-    }
-    
-    /**
-     * 判断是否为系统应用
-     */
-    private boolean isSystemApp(PackageManager pm, ResolveInfo resolveInfo) {
-        try {
-            android.content.pm.ApplicationInfo appInfo = pm.getApplicationInfo(resolveInfo.activityInfo.packageName, 0);
-            return (appInfo.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-    
-    /**
-     * 自定义适配器类
-     */
-    private class AppPickerAdapter extends android.widget.BaseAdapter {
-        private String[] appNames;
-        private String[] appPackages;
-        private String[] appClasses;
-        private android.graphics.drawable.Drawable[] appIcons;
-        
-        public AppPickerAdapter(String[] names, String[] packages, String[] classes, android.graphics.drawable.Drawable[] icons) {
-            this.appNames = names;
-            this.appPackages = packages;
-            this.appClasses = classes;
-            this.appIcons = icons;
-        }
-        
-        @Override
-        public int getCount() {
-            return appNames.length;
-        }
-        
-        @Override
-        public Object getItem(int position) {
-            return null;
-        }
-        
-        @Override
-        public long getItemId(int position) {
-            return position;
-        }
-        
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            if (convertView == null) {
-                LinearLayout itemLayout = new LinearLayout(SettingsActivity.this);
-                itemLayout.setOrientation(LinearLayout.HORIZONTAL);
-                itemLayout.setGravity(android.view.Gravity.CENTER_VERTICAL);
-                itemLayout.setPadding(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8));
-                
-                // 图标
-                ImageView iconView = new ImageView(SettingsActivity.this);
-                iconView.setId(View.generateViewId());
-                iconView.setLayoutParams(new LinearLayout.LayoutParams(dpToPx(40), dpToPx(40)));
-                iconView.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                itemLayout.addView(iconView);
-                
-                // 名称
-                TextView nameView = new TextView(SettingsActivity.this);
-                nameView.setId(View.generateViewId());
-                nameView.setTextSize(14);
-                nameView.setTextColor(0xFF333333);
-                nameView.setPadding(dpToPx(12), 0, 0, 0);
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
-                nameView.setLayoutParams(lp);
-                itemLayout.addView(nameView);
-                
-                convertView = itemLayout;
-            }
-            
-            LinearLayout itemLayout = (LinearLayout) convertView;
-            ImageView iconView = (ImageView) itemLayout.getChildAt(0);
-            TextView nameView = (TextView) itemLayout.getChildAt(1);
-            
-            iconView.setImageDrawable(appIcons[position]);
-            nameView.setText(appNames[position]);
-            
-            return convertView;
-        }
-        
-        /**
-         * 更新数据
-         */
-        public void updateData(String[] names, String[] packages, String[] classes, android.graphics.drawable.Drawable[] icons) {
-            this.appNames = names;
-            this.appPackages = packages;
-            this.appClasses = classes;
-            this.appIcons = icons;
-            notifyDataSetChanged();
-        }
-    }
-    
-    /**
-     * 显示应用选择对话框（带图标和系统应用开关）
-     */
-    private void showAppPickerDialog(final String[] appNames, final String[] appPackages, 
-                                     final String[] appClasses, final android.graphics.drawable.Drawable[] appIcons) {
-        // 创建自定义视图
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(dpToPx(16), dpToPx(8), dpToPx(16), dpToPx(8));
-        
-        // 系统应用开关
-        Switch switchSystemApps = new Switch(this);
-        switchSystemApps.setText("显示系统应用");
-        switchSystemApps.setChecked(preferences.getBoolean("include_system_apps", false));
-        switchSystemApps.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            preferences.edit().putBoolean("include_system_apps", isChecked).apply();
-            // 在同一个对话框中重新加载列表
-            reloadAppListInDialog();
-        });
-        layout.addView(switchSystemApps);
-        
-        // 创建 ListView
-        android.widget.ListView listView = new android.widget.ListView(this);
-        listView.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-        
-        // 保存引用以便后续更新
-        currentAppPickerListView = listView;
-        currentAppPickerAdapter = new AppPickerAdapter(appNames, appPackages, appClasses, appIcons);
-        listView.setAdapter(currentAppPickerAdapter);
-        
-        layout.addView(listView);
-        
-        // 根据 appPickerTarget 找到当前选中的应用
-        final String currentPkg = getGestureAppPackage(appPickerTarget);
-        int checkedItem = -1;
-        if (!TextUtils.isEmpty(currentPkg)) {
-            for (int i = 0; i < appPackages.length; i++) {
-                if (appPackages[i].equals(currentPkg)) {
-                    checkedItem = i;
-                    break;
-                }
-            }
-        }
-        
-        // 创建对话框
-        AlertDialog.Builder builder = new AlertDialog.Builder(this)
-                .setTitle(R.string.select_app)
-                .setView(layout)
-                .setNegativeButton(R.string.cancel, null);
-        
-        AlertDialog dialog = builder.create();
-        currentAppPickerDialog = dialog;
-        
-        // 设置列表项点击事件
-        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                if (!isAppPickerSelecting) {
-                    return;
-                }
-                
-                String pkg = currentAppPickerAdapter.appPackages[position];
-                String name = currentAppPickerAdapter.appNames[position];
-                String cls = currentAppPickerAdapter.appClasses[position];
-                setGestureApp(appPickerTarget, pkg, name, cls);
-                // 保存并通知服务
-                saveGestureAppSetting(appPickerTarget);
-                dialog.dismiss();
-            }
-        });
-        
-        // 弹窗关闭时重置标记
-        dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
-            @Override
-            public void onDismiss(DialogInterface d) {
-                isAppPickerSelecting = false;
-                currentAppPickerDialog = null;
-                currentAppPickerListView = null;
-                currentAppPickerAdapter = null;
-            }
-        });
-        
-        dialog.show();
-    }
-    
-    /**
-     * 在对话框中重新加载应用列表（不关闭对话框）
-     */
-    private void reloadAppListInDialog() {
-        if (currentAppPickerDialog == null || currentAppPickerAdapter == null) {
-            return;
-        }
-        
-        // 显示加载状态（可选）
-        currentAppPickerDialog.setTitle("正在刷新...");
-        
-        // 在后台线程中重新查询
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    PackageManager pm = getPackageManager();
-                    Intent mainIntent = new Intent(Intent.ACTION_MAIN);
-                    mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-                    List<ResolveInfo> apps = pm.queryIntentActivities(mainIntent, 0);
-                    
-                    // 过滤系统应用
-                    boolean includeSystemApps = preferences.getBoolean("include_system_apps", false);
-                    List<ResolveInfo> filteredApps = new ArrayList<>();
-                    for (ResolveInfo app : apps) {
-                        if (includeSystemApps || !isSystemApp(pm, app)) {
-                            filteredApps.add(app);
-                        }
-                    }
-                    
-                    // 排序
-                    final Collator collator = Collator.getInstance(java.util.Locale.CHINESE);
-                    Collections.sort(filteredApps, new Comparator<ResolveInfo>() {
-                        @Override
-                        public int compare(ResolveInfo a, ResolveInfo b) {
-                            String labelA = a.loadLabel(pm).toString();
-                            String labelB = b.loadLabel(pm).toString();
-                            return collator.compare(labelA, labelB);
-                        }
-                    });
-                    
-                    // 准备数据
-                    final String[] appNames = new String[filteredApps.size()];
-                    final String[] appPackages = new String[filteredApps.size()];
-                    final String[] appClasses = new String[filteredApps.size()];
-                    final android.graphics.drawable.Drawable[] appIcons = new android.graphics.drawable.Drawable[filteredApps.size()];
-                    for (int i = 0; i < filteredApps.size(); i++) {
-                        appNames[i] = filteredApps.get(i).loadLabel(pm).toString();
-                        appPackages[i] = filteredApps.get(i).activityInfo.packageName;
-                        appClasses[i] = filteredApps.get(i).activityInfo.name;
-                        appIcons[i] = filteredApps.get(i).loadIcon(pm);
-                    }
-                    
-                    // 更新UI
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            currentAppPickerAdapter.updateData(appNames, appPackages, appClasses, appIcons);
-                            currentAppPickerDialog.setTitle(R.string.select_app);
-                        }
-                    });
-                } catch (Exception e) {
-                    android.util.Log.e("SettingsActivity", "刷新应用列表失败", e);
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            currentAppPickerDialog.setTitle(R.string.select_app);
-                            Toast.makeText(SettingsActivity.this, "刷新失败", Toast.LENGTH_SHORT).show();
-                        }
-                    });
-                }
-            }
-        }).start();
-    }
-    
-    /**
-     * 保存指定手势的应用设置并通知服务
-     */
-    private void saveGestureAppSetting(String gesture) {
-        String pkg = getGestureAppPackage(gesture);
-        String name = getGestureAppName(gesture);
-        String cls = getGestureAppClass(gesture);
-        
-        // 保存到 SharedPreferences
-        SharedPreferences.Editor editor = preferences.edit();
-        if ("click".equals(gesture)) {
-            editor.putString(KEY_CLICK_APP_PACKAGE, pkg);
-            editor.putString(KEY_CLICK_APP_NAME, name);
-            editor.putString(KEY_CLICK_APP_CLASS, cls);
-        } else if ("double_click".equals(gesture)) {
-            editor.putString(KEY_DOUBLE_CLICK_APP_PACKAGE, pkg);
-            editor.putString(KEY_DOUBLE_CLICK_APP_NAME, name);
-            editor.putString(KEY_DOUBLE_CLICK_APP_CLASS, cls);
-        } else if ("long_press".equals(gesture)) {
-            editor.putString(KEY_LONG_PRESS_APP_PACKAGE, pkg);
-            editor.putString(KEY_LONG_PRESS_APP_NAME, name);
-            editor.putString(KEY_LONG_PRESS_APP_CLASS, cls);
-        }
-        editor.commit();
-        
-        // 通知服务更新
-        Intent intent = new Intent(this, FloatWindowService.class);
-        intent.setAction("UPDATE_TRIGGER_ACTIONS");
-        intent.putExtra("click_action", clickAction);
-        intent.putExtra("double_click_action", doubleClickAction);
-        intent.putExtra("long_press_action", longPressAction);
-        intent.putExtra("click_app_package", clickAppPackage);
-        intent.putExtra("click_app_name", clickAppName);
-        intent.putExtra("click_app_class", clickAppClass);
-        intent.putExtra("double_click_app_package", doubleClickAppPackage);
-        intent.putExtra("double_click_app_name", doubleClickAppName);
-        intent.putExtra("double_click_app_class", doubleClickAppClass);
-        intent.putExtra("long_press_app_package", longPressAppPackage);
-        intent.putExtra("long_press_app_name", longPressAppName);
-        intent.putExtra("long_press_app_class", longPressAppClass);
-        intent.putExtra("click_open_in_window", switchClickOpenInWindow.isChecked());
-        intent.putExtra("double_click_open_in_window", switchDoubleClickOpenInWindow.isChecked());
-        intent.putExtra("long_press_open_in_window", switchLongPressOpenInWindow.isChecked());
-        intent.putExtra("click_vibrate", switchClickVibrate.isChecked());
-        intent.putExtra("double_click_vibrate", switchDoubleClickVibrate.isChecked());
-        intent.putExtra("long_press_vibrate", switchLongPressVibrate.isChecked());
-        startService(intent);
-    }
-    
-    /**
-     * 显示行为类型选择对话框
-     */
-    private void showActionPicker(final String gesture) {
-        final String[] actionKeys = AppConfig.AI_WINDOW_ENABLED
-                ? new String[]{ACTION_NONE, ACTION_APP, ACTION_SHORTCUT, ACTION_AI}
-                : new String[]{ACTION_NONE, ACTION_APP, ACTION_SHORTCUT};
-        final String[] actionLabels = AppConfig.AI_WINDOW_ENABLED
-                ? new String[]{
-                    getString(R.string.action_none),
-                    getString(R.string.action_open_app),
-                    getString(R.string.action_open_shortcut),
-                    getString(R.string.action_open_ai)
-                }
-                : new String[]{
-                    getString(R.string.action_none),
-                    getString(R.string.action_open_app),
-                    getString(R.string.action_open_shortcut)
-                };
-        
-        // 获取当前选中的行为
-        final String currentAction = getGestureAction(gesture);
-        int checkedItem = 0;
-        for (int i = 0; i < actionKeys.length; i++) {
-            if (actionKeys[i].equals(currentAction)) {
-                checkedItem = i;
-                break;
-            }
-        }
-        
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.select_action)
-                .setSingleChoiceItems(actionLabels, checkedItem, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        String selectedAction = actionKeys[which];
-                        setGestureAction(gesture, selectedAction);
-                        dialog.dismiss();
-                    }
-                })
-                .setNegativeButton(R.string.cancel, null)
-                .show();
-    }
-    
-    /**
-     * 获取指定手势当前的行为类型
-     */
-    private String getGestureAction(String gesture) {
-        if ("click".equals(gesture)) return clickAction;
-        else if ("double_click".equals(gesture)) return doubleClickAction;
-        else if ("long_press".equals(gesture)) return longPressAction;
-        return ACTION_NONE;
-    }
-    
-    /**
-     * 设置指定手势的行为类型并更新UI
-     */
-    private void setGestureAction(String gesture, String action) {
-        if ("click".equals(gesture)) {
-            clickAction = action;
-            spinnerClickAction.setSelection(getActionIndex(action));
-        } else if ("double_click".equals(gesture)) {
-            doubleClickAction = action;
-            spinnerDoubleClickAction.setSelection(getActionIndex(action));
-        } else if ("long_press".equals(gesture)) {
-            longPressAction = action;
-            spinnerLongPressAction.setSelection(getActionIndex(action));
-        }
-        updateAppSelectorVisibility();
-        applyCurrentSettings();
-    }
-    
-    /**
-     * 获取行为类型对应的Spinner索引
-     */
-    private int getActionIndex(String action) {
-        if (ACTION_NONE.equals(action)) return 0;
-        else if (ACTION_APP.equals(action)) return 1;
-        else if (ACTION_SHORTCUT.equals(action)) return 2;
-        else if (ACTION_AI.equals(action)) return AppConfig.AI_WINDOW_ENABLED ? 3 : 0;
-        return 0;
-    }
-    
-    /**
-     * 获取行为类型对应的显示名称
-     */
-    private String getActionDisplayName(String action) {
-        if (!AppConfig.AI_WINDOW_ENABLED && ACTION_AI.equals(action)) action = ACTION_NONE;
-        if (ACTION_NONE.equals(action)) return getString(R.string.action_none);
-        else if (ACTION_APP.equals(action)) return getString(R.string.action_open_app);
-        else if (ACTION_SHORTCUT.equals(action)) return getString(R.string.action_open_shortcut);
-        else if (ACTION_AI.equals(action)) return getString(R.string.action_open_ai);
-        return action;
-    }
-    
-    /**
-     * 根据手势获取对应的应用包名
-     */
-    private String getGestureAppPackage(String gesture) {
-        if ("click".equals(gesture)) return clickAppPackage;
-        else if ("double_click".equals(gesture)) return doubleClickAppPackage;
-        else if ("long_press".equals(gesture)) return longPressAppPackage;
-        return "";
-    }
-    
-    /**
-     * 根据手势获取对应的应用名称
-     */
-    private String getGestureAppName(String gesture) {
-        if ("click".equals(gesture)) return clickAppName;
-        else if ("double_click".equals(gesture)) return doubleClickAppName;
-        else if ("long_press".equals(gesture)) return longPressAppName;
-        return "";
-    }
-    
-    /**
-     * 根据手势获取对应的应用类名
-     */
-    private String getGestureAppClass(String gesture) {
-        if ("click".equals(gesture)) return clickAppClass;
-        else if ("double_click".equals(gesture)) return doubleClickAppClass;
-        else if ("long_press".equals(gesture)) return longPressAppClass;
-        return "";
-    }
-    
-    /**
-     * 设置指定手势的应用信息并更新UI
-     * 更换应用时重置该手势的启动配置（避免残留旧应用的 URL/Extra）
-     */
-    private void setGestureApp(String gesture, String pkg, String name, String cls) {
-        String oldPkg = getGestureAppPackage(gesture);
-        String oldCls = getGestureAppClass(gesture);
-
-        if ("click".equals(gesture)) {
-            clickAppPackage = pkg;
-            clickAppName = name;
-            clickAppClass = cls;
-            textClickSelectedApp.setText(name);
-        } else if ("double_click".equals(gesture)) {
-            doubleClickAppPackage = pkg;
-            doubleClickAppName = name;
-            doubleClickAppClass = cls;
-            textDoubleClickSelectedApp.setText(name);
-        } else if ("long_press".equals(gesture)) {
-            longPressAppPackage = pkg;
-            longPressAppName = name;
-            longPressAppClass = cls;
-            textLongPressSelectedApp.setText(name);
-        }
-
-        if (!TextUtils.equals(oldPkg, pkg) || !TextUtils.equals(oldCls, cls)) {
-            ShortcutLaunchConfig.resetGesture(preferences.edit(), gesture).apply();
-        }
-        updateLaunchConfigSummary(gesture);
-    }
-    
-    /**
-     * 更新应用选择器的可见性
-     * 仅当手势行为为"打开指定应用"时显示对应的应用选择器
-     */
-    private void updateAppSelectorVisibility() {
-        layoutClickApp.setVisibility(ACTION_APP.equals(clickAction) ? View.VISIBLE : View.GONE);
-        layoutDoubleClickApp.setVisibility(ACTION_APP.equals(doubleClickAction) ? View.VISIBLE : View.GONE);
-        layoutLongPressApp.setVisibility(ACTION_APP.equals(longPressAction) ? View.VISIBLE : View.GONE);
-        layoutClickLaunch.setVisibility(ACTION_APP.equals(clickAction) ? View.VISIBLE : View.GONE);
-        layoutDoubleClickLaunch.setVisibility(ACTION_APP.equals(doubleClickAction) ? View.VISIBLE : View.GONE);
-        layoutLongPressLaunch.setVisibility(ACTION_APP.equals(longPressAction) ? View.VISIBLE : View.GONE);
-        layoutClickOpenInWindow.setVisibility(ACTION_APP.equals(clickAction) ? View.VISIBLE : View.GONE);
-        layoutDoubleClickOpenInWindow.setVisibility(ACTION_APP.equals(doubleClickAction) ? View.VISIBLE : View.GONE);
-        layoutLongPressOpenInWindow.setVisibility(ACTION_APP.equals(longPressAction) ? View.VISIBLE : View.GONE);
-        // 触发时振动开关：行为为「无」时隐藏（其余行为均显示；服务端对所有非「无」行为统一振动，新增动作无需适配）
-        layoutClickVibrate.setVisibility(ACTION_NONE.equals(clickAction) ? View.GONE : View.VISIBLE);
-        layoutDoubleClickVibrate.setVisibility(ACTION_NONE.equals(doubleClickAction) ? View.GONE : View.VISIBLE);
-        layoutLongPressVibrate.setVisibility(ACTION_NONE.equals(longPressAction) ? View.GONE : View.VISIBLE);
-    }
-
-    /**
-     * 打开指定手势的启动配置弹窗
-     */
-    private void openLaunchConfig(String gesture) {
-        GestureLaunchConfigDialog.show(this, gesture,
-                getGestureAppPackage(gesture),
-                getGestureAppClass(gesture),
-                getGestureAppName(gesture),
-                preferences,
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        updateLaunchConfigSummary(gesture);
-                    }
-                });
-    }
-
-    /**
-     * 刷新三个手势的启动配置摘要
-     */
-    private void updateLaunchConfigSummaries() {
-        updateLaunchConfigSummary("click");
-        updateLaunchConfigSummary("double_click");
-        updateLaunchConfigSummary("long_press");
-    }
-
-    /**
-     * 刷新指定手势的启动配置摘要（未自定义时显示「默认 · xxx」）
-     */
-    private void updateLaunchConfigSummary(String gesture) {
-        TextView target;
-        if ("click".equals(gesture)) target = textClickLaunchSummary;
-        else if ("double_click".equals(gesture)) target = textDoubleClickLaunchSummary;
-        else target = textLongPressLaunchSummary;
-        if (target == null) return;
-
-        ShortcutLaunchConfig config = ShortcutLaunchConfig.loadGesture(preferences, gesture,
-                getGestureAppPackage(gesture), getGestureAppClass(gesture),
-                getGestureOpenInWindowPref(gesture));
-
-        String summary = GestureLaunchConfigDialog.summarize(this, config);
-        if (!preferences.contains(ShortcutLaunchConfig.gestureKey(gesture))) {
-            summary = getString(R.string.launch_config_default) + " · " + summary;
-        }
-        target.setText(summary);
-    }
-
-    /**
-     * 读取指定手势的「窗口打开」开关（与 KEY_*_OPEN_IN_WINDOW 一致）
-     */
-    private boolean getGestureOpenInWindowPref(String gesture) {
-        if ("click".equals(gesture)) return preferences.getBoolean(KEY_CLICK_OPEN_IN_WINDOW, false);
-        if ("double_click".equals(gesture)) return preferences.getBoolean(KEY_DOUBLE_CLICK_OPEN_IN_WINDOW, false);
-        if ("long_press".equals(gesture)) return preferences.getBoolean(KEY_LONG_PRESS_OPEN_IN_WINDOW, false);
-        return false;
     }
     
     @Override
@@ -2826,6 +1890,80 @@ public class SettingsActivity extends AppCompatActivity {
         // 离开设置页：取消重试并立即熄灭触发区预览
         previewRetryHandler.removeCallbacks(previewRetryRunnable);
         FloatWindowService.setTriggerAreaPreview(false);
+    }
+
+    /**
+     * 绑定顶部三个分组锚点：点击滚动到分组，滑动时切换高亮。
+     * 锚点栏在标题栏内，不随内容滚动，始终可见。
+     */
+    private void setupGroupTabs() {
+        settingsScroll = findViewById(R.id.settings_scroll);
+        tabTip = findViewById(R.id.tab_tip);
+        tabShortcut = findViewById(R.id.tab_shortcut);
+        tabAdvanced = findViewById(R.id.tab_advanced);
+        groupTip = findViewById(R.id.group_tip);
+        groupShortcut = findViewById(R.id.group_shortcut);
+        groupAdvanced = findViewById(R.id.group_advanced);
+
+        tabTip.setOnClickListener(v -> scrollToGroup(0));
+        tabShortcut.setOnClickListener(v -> scrollToGroup(1));
+        tabAdvanced.setOnClickListener(v -> scrollToGroup(2));
+
+        settingsScroll.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) ->
+                updateActiveGroupByScroll());
+        settingsScroll.post(this::updateActiveGroupByScroll);
+    }
+
+    private View groupAt(int index) {
+        if (index == 0) return groupTip;
+        if (index == 1) return groupShortcut;
+        return groupAdvanced;
+    }
+
+    private void scrollToGroup(int index) {
+        View target = groupAt(index);
+        if (target == null) return;
+        suppressScrollUntil = System.currentTimeMillis() + 600;
+        setActiveGroup(index);
+        settingsScroll.smoothScrollTo(0, Math.max(0, target.getTop() - dpToPx(8)));
+    }
+
+    /** 以「分组标题滚到顶部」为界，取最后一个已经到顶的分组 */
+    private void updateActiveGroupByScroll() {
+        if (System.currentTimeMillis() < suppressScrollUntil) return;
+        int scrollY = settingsScroll.getScrollY();
+        int threshold = dpToPx(12);
+        int active = 0;
+        for (int i = 0; i < 3; i++) {
+            View group = groupAt(i);
+            if (group != null && group.getTop() - scrollY <= threshold) {
+                active = i;
+            }
+        }
+        View content = settingsScroll.getChildAt(0);
+        if (content != null && scrollY + settingsScroll.getHeight() >= content.getBottom() - dpToPx(4)) {
+            active = 2;
+        }
+        setActiveGroup(active);
+    }
+
+    private void setActiveGroup(int index) {
+        activeGroupIndex = index;
+        TextView[] tabs = {tabTip, tabShortcut, tabAdvanced};
+        for (int i = 0; i < tabs.length; i++) {
+            if (tabs[i] == null) continue;
+            boolean selected = i == index;
+            tabs[i].setBackgroundResource(selected
+                    ? R.drawable.tab_chip_selected
+                    : R.drawable.tab_chip_unselected);
+            tabs[i].setTextColor(selected ? 0xFFFFFFFF : resolveThemeColor(R.attr.textSecondary));
+        }
+    }
+
+    private int resolveThemeColor(int attr) {
+        android.util.TypedValue tv = new android.util.TypedValue();
+        getTheme().resolveAttribute(attr, tv, true);
+        return tv.data;
     }
 
     /**

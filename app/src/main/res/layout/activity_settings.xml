@@ -26,7 +26,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="提示条设置"
+                android:text="样式设置"
                 android:textSize="28sp"
                 android:textStyle="bold"
                 android:textColor="?attr/textPrimary" />
@@ -44,6 +44,58 @@
 
         </LinearLayout>
 
+        <!-- 分组锚点：固定在标题栏下方，滑动时保持可见并切换高亮 -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:paddingHorizontal="16dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tab_tip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="14dp"
+                    android:text="提示条"
+                    android:textSize="13sp"
+                    android:textColor="#FFFFFF"
+                    android:background="@drawable/tab_chip_selected"
+                    android:layout_marginEnd="8dp" />
+
+                <TextView
+                    android:id="@+id/tab_shortcut"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="14dp"
+                    android:text="快捷窗口"
+                    android:textSize="13sp"
+                    android:textColor="?attr/textSecondary"
+                    android:background="@drawable/tab_chip_unselected"
+                    android:layout_marginEnd="8dp" />
+
+                <TextView
+                    android:id="@+id/tab_advanced"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="14dp"
+                    android:text="高级"
+                    android:textSize="13sp"
+                    android:textColor="?attr/textSecondary"
+                    android:background="@drawable/tab_chip_unselected" />
+
+            </LinearLayout>
+
+        </HorizontalScrollView>
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
@@ -52,6 +104,7 @@
     </LinearLayout>
 
     <ScrollView
+        android:id="@+id/settings_scroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
@@ -61,477 +114,17 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <!-- ===== 提示条触发行为设置卡片 ===== -->
-        <LinearLayout
-            android:layout_width="match_parent"
+        <!-- 分组：提示条 -->
+        <TextView
+            android:id="@+id/group_tip"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/card_background"
-            android:padding="16dp"
-            android:layout_marginBottom="16dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/bar_trigger_actions"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:textColor="?attr/textPrimary"
-                android:layout_marginBottom="4dp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/bar_trigger_actions_desc"
-                android:textSize="12sp"
-                android:textColor="?attr/textHint"
-                android:layout_marginBottom="16dp" />
-
-            <!-- 单击行为选择 -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/click_action"
-                android:textSize="15sp"
-                android:textColor="?attr/textPrimary"
-                android:layout_marginBottom="8dp" />
-
-            <Spinner
-                android:id="@+id/spinner_click_action"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:entries="@array/action_entries"
-                android:background="@drawable/spinner_background"
-                android:paddingHorizontal="12dp"
-                android:layout_marginBottom="8dp" />
-
-            <!-- 单击触发时振动（行为为"无"时隐藏） -->
-            <LinearLayout
-                android:id="@+id/layout_click_vibrate"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="8dp"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="触发时振动"
-                    android:textSize="14sp"
-                    android:textColor="?attr/textPrimary" />
-
-                <Switch
-                    android:id="@+id/switch_click_vibrate"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:thumbTint="?attr/colorPrimaryBrand"
-                    android:trackTint="#BDBDBD" />
-
-            </LinearLayout>
-
-<!--            <View-->
-<!--                android:layout_width="match_parent"-->
-<!--                android:layout_height="1dp"-->
-<!--                android:background="?attr/dividerLight" />-->
-
-            <!-- 单击应用选择（仅当单击行为为"打开指定应用"时可见） -->
-            <LinearLayout
-                android:id="@+id/layout_click_app"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="14dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="?android:attr/selectableItemBackground"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/select_app"
-                    android:textSize="15sp"
-                    android:textColor="?attr/textPrimary" />
-
-                <TextView
-                    android:id="@+id/text_click_selected_app"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/not_selected"
-                    android:textSize="14sp"
-                    android:textColor="?attr/textSecondary"
-                    android:gravity="end" />
-
-            </LinearLayout>
-
-            <!-- 启动配置（仅当单击行为为"打开指定应用"时可见） -->
-            <LinearLayout
-                android:id="@+id/layout_click_launch"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="14dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="?android:attr/selectableItemBackground"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/launch_config"
-                    android:textSize="15sp"
-                    android:textColor="?attr/textPrimary" />
-
-                <TextView
-                    android:id="@+id/text_click_launch_summary"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:maxWidth="190dp"
-                    android:singleLine="true"
-                    android:ellipsize="end"
-                    android:text="@string/launch_config_default"
-                    android:textSize="14sp"
-                    android:textColor="?attr/textSecondary"
-                    android:gravity="end" />
-
-            </LinearLayout>
-
-            <!-- 单击窗口打开开关 -->
-            <LinearLayout
-                android:id="@+id/layout_click_open_in_window"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="8dp"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="窗口打开"
-                    android:textSize="14sp"
-                    android:textColor="?attr/textPrimary" />
-
-                <Switch
-                    android:id="@+id/switch_click_open_in_window"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:thumbTint="?attr/colorPrimaryBrand"
-                    android:trackTint="#BDBDBD" />
-
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="?attr/dividerLight" />
-
-            <!-- 双击行为选择 -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/double_click_action"
-                android:textSize="15sp"
-                android:textColor="?attr/textPrimary"
-                android:layout_marginTop="16dp"
-                android:layout_marginBottom="8dp" />
-
-            <Spinner
-                android:id="@+id/spinner_double_click_action"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:entries="@array/action_entries"
-                android:background="@drawable/spinner_background"
-                android:paddingHorizontal="12dp"
-                android:layout_marginBottom="8dp" />
-
-            <!-- 双击触发时振动（行为为"无"时隐藏） -->
-            <LinearLayout
-                android:id="@+id/layout_double_click_vibrate"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="8dp"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="触发时振动"
-                    android:textSize="14sp"
-                    android:textColor="?attr/textPrimary" />
-
-                <Switch
-                    android:id="@+id/switch_double_click_vibrate"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:thumbTint="?attr/colorPrimaryBrand"
-                    android:trackTint="#BDBDBD" />
-
-            </LinearLayout>
-
-<!--            <View-->
-<!--                android:layout_width="match_parent"-->
-<!--                android:layout_height="1dp"-->
-<!--                android:background="?attr/dividerLight" />-->
-
-            <!-- 双击应用选择（仅当双击行为为"打开指定应用"时可见） -->
-            <LinearLayout
-                android:id="@+id/layout_double_click_app"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="14dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="?android:attr/selectableItemBackground"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/select_app"
-                    android:textSize="15sp"
-                    android:textColor="?attr/textPrimary" />
-
-                <TextView
-                    android:id="@+id/text_double_click_selected_app"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/not_selected"
-                    android:textSize="14sp"
-                    android:textColor="?attr/textSecondary"
-                    android:gravity="end" />
-
-            </LinearLayout>
-
-            <!-- 启动配置（仅当双击行为为"打开指定应用"时可见） -->
-            <LinearLayout
-                android:id="@+id/layout_double_click_launch"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="14dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="?android:attr/selectableItemBackground"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/launch_config"
-                    android:textSize="15sp"
-                    android:textColor="?attr/textPrimary" />
-
-                <TextView
-                    android:id="@+id/text_double_click_launch_summary"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:maxWidth="190dp"
-                    android:singleLine="true"
-                    android:ellipsize="end"
-                    android:text="@string/launch_config_default"
-                    android:textSize="14sp"
-                    android:textColor="?attr/textSecondary"
-                    android:gravity="end" />
-
-            </LinearLayout>
-
-            <!-- 双击窗口打开开关 -->
-            <LinearLayout
-                android:id="@+id/layout_double_click_open_in_window"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="8dp"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="窗口打开"
-                    android:textSize="14sp"
-                    android:textColor="?attr/textPrimary" />
-
-                <Switch
-                    android:id="@+id/switch_double_click_open_in_window"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:thumbTint="?attr/colorPrimaryBrand"
-                    android:trackTint="#BDBDBD" />
-
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="?attr/dividerLight" />
-
-            <!-- 长按行为选择 -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/long_press_action"
-                android:textSize="15sp"
-                android:textColor="?attr/textPrimary"
-                android:layout_marginTop="16dp"
-                android:layout_marginBottom="8dp" />
-
-            <Spinner
-                android:id="@+id/spinner_long_press_action"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:entries="@array/action_entries"
-                android:background="@drawable/spinner_background"
-                android:paddingHorizontal="12dp"
-                android:layout_marginBottom="8dp" />
-
-            <!-- 长按触发时振动（行为为"无"时隐藏） -->
-            <LinearLayout
-                android:id="@+id/layout_long_press_vibrate"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="8dp"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="触发时振动"
-                    android:textSize="14sp"
-                    android:textColor="?attr/textPrimary" />
-
-                <Switch
-                    android:id="@+id/switch_long_press_vibrate"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:thumbTint="?attr/colorPrimaryBrand"
-                    android:trackTint="#BDBDBD" />
-
-            </LinearLayout>
-
-<!--            <View-->
-<!--                android:layout_width="match_parent"-->
-<!--                android:layout_height="1dp"-->
-<!--                android:background="?attr/dividerLight" />-->
-
-            <!-- 长按应用选择（仅当长按行为为"打开指定应用"时可见） -->
-            <LinearLayout
-                android:id="@+id/layout_long_press_app"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="14dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="?android:attr/selectableItemBackground"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/select_app"
-                    android:textSize="15sp"
-                    android:textColor="?attr/textPrimary" />
-
-                <TextView
-                    android:id="@+id/text_long_press_selected_app"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/not_selected"
-                    android:textSize="14sp"
-                    android:textColor="?attr/textSecondary"
-                    android:gravity="end" />
-
-            </LinearLayout>
-
-            <!-- 启动配置（仅当长按行为为"打开指定应用"时可见） -->
-            <LinearLayout
-                android:id="@+id/layout_long_press_launch"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="14dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="?android:attr/selectableItemBackground"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/launch_config"
-                    android:textSize="15sp"
-                    android:textColor="?attr/textPrimary" />
-
-                <TextView
-                    android:id="@+id/text_long_press_launch_summary"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:maxWidth="190dp"
-                    android:singleLine="true"
-                    android:ellipsize="end"
-                    android:text="@string/launch_config_default"
-                    android:textSize="14sp"
-                    android:textColor="?attr/textSecondary"
-                    android:gravity="end" />
-
-            </LinearLayout>
-
-            <!-- 长按窗口打开开关 -->
-            <LinearLayout
-                android:id="@+id/layout_long_press_open_in_window"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingVertical="8dp"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="窗口打开"
-                    android:textSize="14sp"
-                    android:textColor="?attr/textPrimary" />
-
-                <Switch
-                    android:id="@+id/switch_long_press_open_in_window"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:thumbTint="?attr/colorPrimaryBrand"
-                    android:trackTint="#BDBDBD" />
-
-            </LinearLayout>
-
-        </LinearLayout>
+            android:text="提示条"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="?attr/textHint"
+            android:layout_marginStart="4dp"
+            android:layout_marginBottom="8dp" />
 
         <!-- ===== 提示条触发区域设置卡片 ===== -->
         <LinearLayout
@@ -797,27 +390,6 @@
                 android:progress="60"
                 android:layout_marginBottom="16dp" />
 
-            <!-- 按下时颜色 -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="按下时颜色 (RGB)"
-                android:textSize="14sp"
-                android:textColor="?attr/textPrimary"
-                android:layout_marginBottom="8dp" />
-
-            <EditText
-                android:id="@+id/edit_pressed_bar_color"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:hint="格式：#RRGGBB，默认 #333333"
-                android:inputType="text"
-                android:paddingHorizontal="12dp"
-                android:background="@drawable/input_background"
-                android:textSize="14sp"
-                android:text="#333333"
-                android:layout_marginBottom="16dp" />
-
             <!-- 按下时颜色模式 -->
             <TextView
                 android:layout_width="wrap_content"
@@ -850,6 +422,30 @@
                     android:text="彩虹流光"
                     android:checked="true" />
             </RadioGroup>
+
+            <!-- 按下时颜色（仅自定义颜色模式显示） -->
+            <TextView
+                android:id="@+id/text_pressed_bar_color_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="按下时颜色"
+                android:textSize="14sp"
+                android:textColor="?attr/textPrimary"
+                android:layout_marginBottom="8dp"
+                android:visibility="gone" />
+
+            <EditText
+                android:id="@+id/edit_pressed_bar_color"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:hint="格式：#RRGGBB，默认 #333333"
+                android:inputType="text"
+                android:paddingHorizontal="12dp"
+                android:background="@drawable/input_background"
+                android:textSize="14sp"
+                android:text="#333333"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone" />
 
             <!-- 边缘羽化宽度 -->
             <TextView
@@ -1402,6 +998,18 @@
 
         </LinearLayout>
 
+        <!-- 分组：快捷窗口 -->
+        <TextView
+            android:id="@+id/group_shortcut"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="快捷窗口"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="?attr/textHint"
+            android:layout_marginStart="4dp"
+            android:layout_marginBottom="8dp" />
+
         <!-- ===== 快捷方式窗口设置卡片 ===== -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -1514,6 +1122,46 @@
                 android:background="@drawable/spinner_background"
                 android:paddingHorizontal="12dp"
                 android:layout_marginBottom="16dp" />
+
+            <!-- 模糊半径（仅当样式非不透明时显示） -->
+            <TextView
+                android:id="@+id/text_shortcut_blur_radius"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="模糊半径: 20dp"
+                android:textSize="14sp"
+                android:textColor="?attr/textPrimary"
+                android:layout_marginBottom="8dp"
+                android:visibility="gone" />
+
+            <SeekBar
+                android:id="@+id/seek_shortcut_blur_radius"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="300"
+                android:progress="20"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone" />
+
+            <!-- 叠加色透明度 -->
+            <TextView
+                android:id="@+id/text_shortcut_overlay_alpha"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="叠加色透明度: 70%"
+                android:textSize="14sp"
+                android:textColor="?attr/textPrimary"
+                android:layout_marginBottom="8dp"
+                android:visibility="gone" />
+
+            <SeekBar
+                android:id="@+id/seek_shortcut_overlay_alpha"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="255"
+                android:progress="180"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone" />
 
             <!-- ColorOS 风格效果开关：边缘折射光 -->
             <LinearLayout
@@ -1727,46 +1375,6 @@
 
             </LinearLayout>
 
-            <!-- 模糊半径（仅当样式非不透明时显示） -->
-            <TextView
-                android:id="@+id/text_shortcut_blur_radius"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="模糊半径: 20dp"
-                android:textSize="14sp"
-                android:textColor="?attr/textPrimary"
-                android:layout_marginBottom="8dp"
-                android:visibility="gone" />
-
-            <SeekBar
-                android:id="@+id/seek_shortcut_blur_radius"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:max="300"
-                android:progress="20"
-                android:layout_marginBottom="16dp"
-                android:visibility="gone" />
-
-            <!-- 叠加色透明度 -->
-            <TextView
-                android:id="@+id/text_shortcut_overlay_alpha"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="叠加色透明度: 70%"
-                android:textSize="14sp"
-                android:textColor="?attr/textPrimary"
-                android:layout_marginBottom="8dp"
-                android:visibility="gone" />
-
-            <SeekBar
-                android:id="@+id/seek_shortcut_overlay_alpha"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:max="255"
-                android:progress="180"
-                android:layout_marginBottom="16dp"
-                android:visibility="gone" />
-
             <!-- 图标大小 -->
             <TextView
                 android:id="@+id/text_shortcut_icon_size"
@@ -1805,17 +1413,6 @@
                 android:max="50"
                 android:progress="16"
                 android:layout_marginBottom="16dp" />
-
-            <!-- 编辑快捷方式按钮 -->
-            <Button
-                android:id="@+id/btn_edit_shortcuts"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:text="编辑快捷方式内容"
-                android:textSize="15sp"
-                android:textColor="#1976D2"
-                android:backgroundTint="#E3F2FD"
-                android:stateListAnimator="@null" />
 
         </LinearLayout>
 
@@ -1944,7 +1541,7 @@
 
         </LinearLayout>
 
-        <!-- ===== 展开/收起动画设置卡片 ===== -->
+        <!-- ===== 动画速度卡片（快捷窗口分组） ===== -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -1956,18 +1553,10 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="展开/收起动画设置"
+                android:text="动画速度"
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:textColor="?attr/textPrimary"
-                android:layout_marginBottom="4dp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="对快捷方式和AI窗口同时生效"
-                android:textSize="12sp"
-                android:textColor="?attr/textHint"
                 android:layout_marginBottom="16dp" />
 
             <TextView
@@ -1987,6 +1576,46 @@
                 android:max="800"
                 android:progress="200"
                 android:layout_marginBottom="16dp" />
+
+        </LinearLayout>
+
+        <!-- 分组：高级 -->
+        <TextView
+            android:id="@+id/group_advanced"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="高级"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="?attr/textHint"
+            android:layout_marginStart="4dp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- ===== 高级设置卡片 ===== -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="高级设置"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="?attr/textPrimary"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="兼容性与渲染选项"
+                android:textSize="12sp"
+                android:textColor="?attr/textHint"
+                android:layout_marginBottom="8dp" />
 
             <LinearLayout
                 android:layout_width="match_parent"

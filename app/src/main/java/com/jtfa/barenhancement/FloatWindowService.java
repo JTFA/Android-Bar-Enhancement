@@ -153,6 +153,11 @@ public class FloatWindowService extends Service {
     // 服务实例（同进程静态直连，供设置页控制触发区预览）
     private static volatile FloatWindowService sInstance;
 
+    /** 服务是否正在运行（同进程静态实例是否存活） */
+    public static boolean isRunning() {
+        return sInstance != null;
+    }
+
     /**
      * 设置页「触发区预览」开关。
      *
@@ -965,7 +970,7 @@ public class FloatWindowService extends Service {
      */
     private Notification createNotification() {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("悬浮窗正在运行")
+                .setContentTitle("小横条扩展正在运行")
                 .setContentText("点击可关闭悬浮窗")
                 .setSmallIcon(android.R.drawable.ic_dialog_info) // 使用系统图标
                 .setOngoing(true) // 设置为持续通知，不可滑动删除

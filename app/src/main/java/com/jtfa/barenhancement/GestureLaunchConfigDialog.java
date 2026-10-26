@@ -29,8 +29,10 @@ import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * 提示条手势「启动配置」弹窗
@@ -437,7 +439,7 @@ public class GestureLaunchConfigDialog {
      * 选择目标应用的 Activity（列出该包下已导出的 Activity）
      * 第一项为「应用启动页（默认）」，选择后清空类名
      */
-    private static void showActivityPicker(final Activity activity, final String pkg,
+    static void showActivityPicker(final Activity activity, final String pkg,
                                            final EditText classInput) {
         if (TextUtils.isEmpty(pkg)) {
             Toast.makeText(activity, "请先选择应用", Toast.LENGTH_SHORT).show();
@@ -456,7 +458,12 @@ public class GestureLaunchConfigDialog {
             public void run() {
                 try {
                     android.content.pm.PackageManager pm = activity.getPackageManager();
-                    PackageInfo pi = pm.getPackageInfo(pkg, android.content.pm.PackageManager.GET_ACTIVITIES);
+                    // 默认不返回被禁用/冻结的组件，加上 MATCH_DISABLED_* 才能列出
+                    // 系统冻结或「未使用前禁用」的应用 Activity
+                    final int activityFlags = android.content.pm.PackageManager.GET_ACTIVITIES
+                            | android.content.pm.PackageManager.MATCH_DISABLED_COMPONENTS
+                            | android.content.pm.PackageManager.MATCH_DISABLED_UNTIL_USED_COMPONENTS;
+                    PackageInfo pi = pm.getPackageInfo(pkg, activityFlags);
                     final List<ActivityInfo> list = new ArrayList<>();
                     if (pi.activities != null) {
                         for (ActivityInfo ai : pi.activities) {
@@ -471,16 +478,26 @@ public class GestureLaunchConfigDialog {
                         }
                     });
 
+                    // 记录当前被冻结/停用的组件，列表里给出提示
+                    final Set<String> disabledNames = new HashSet<>();
+                    boolean packageDisabled = isPackageDisabled(pm, pkg);
+                    for (ActivityInfo ai : list) {
+                        if (packageDisabled || isActivityDisabled(pm, pkg, ai)) {
+                            disabledNames.add(ai.name);
+                        }
+                    }
+
                     activity.runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
                             try { loading.dismiss(); } catch (Exception ignored) {}
                             if (list.isEmpty()) {
-                                Toast.makeText(activity, "未找到可启动的 Activity，请手动输入类名",
-                                        Toast.LENGTH_SHORT).show();
+                                Toast.makeText(activity,
+                                        "未找到可启动的 Activity。应用被系统停用，可能需要手动开启一次后才可使用",
+                                        Toast.LENGTH_LONG).show();
                                 return;
                             }
-                            showActivityListDialog(activity, pkg, list, classInput);
+                            showActivityListDialog(activity, pkg, list, disabledNames, classInput);
                         }
                     });
                 } catch (final Exception e) {
@@ -499,6 +516,7 @@ public class GestureLaunchConfigDialog {
 
     private static void showActivityListDialog(final Activity activity, final String pkg,
                                                final List<ActivityInfo> list,
+                                               final Set<String> disabledNames,
                                                final EditText classInput) {
         final android.content.pm.PackageManager pm = activity.getPackageManager();
 
@@ -515,6 +533,14 @@ public class GestureLaunchConfigDialog {
         listView.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         listView.setDivider(null);
+        if (!disabledNames.isEmpty()) {
+            TextView frozenHint = new TextView(activity);
+            frozenHint.setText("应用被系统停用，可能需要手动开启一次后才可使用");
+            frozenHint.setTextSize(12);
+            frozenHint.setTextColor(0xFFF57C00);
+            frozenHint.setPadding(dp(activity, 12), dp(activity, 4), dp(activity, 12), dp(activity, 8));
+            layout.addView(frozenHint);
+        }
         layout.addView(listView);
 
         listView.setAdapter(new android.widget.BaseAdapter() {
@@ -545,8 +571,13 @@ public class GestureLaunchConfigDialog {
                 TextView clsView = new TextView(activity);
                 clsView.setTextSize(11);
                 clsView.setTextColor(resolveThemeColor(activity, R.attr.textHint));
+                TextView statusView = new TextView(activity);
+                statusView.setTextSize(11);
+                statusView.setTextColor(0xFFF57C00);
+                statusView.setVisibility(View.GONE);
                 textCol.addView(nameView);
                 textCol.addView(clsView);
+                textCol.addView(statusView);
                 row.addView(textCol, textLp);
 
                 String clsName = classNames.get(position);
@@ -563,6 +594,10 @@ public class GestureLaunchConfigDialog {
                         iconView.setImageDrawable(matched.loadIcon(pm));
                         nameView.setText(matched.loadLabel(pm));
                         clsView.setText(matched.name);
+                        if (disabledNames.contains(matched.name)) {
+                            statusView.setText("已停用");
+                            statusView.setVisibility(View.VISIBLE);
+                        }
                     } else {
                         iconView.setImageDrawable(pm.getDefaultActivityIcon());
                         nameView.setText(clsName);
@@ -581,12 +616,53 @@ public class GestureLaunchConfigDialog {
 
         listView.setOnItemClickListener((parent, view, position, id) -> {
             String clsName = classNames.get(position);
+            if (!TextUtils.isEmpty(clsName) && disabledNames.contains(clsName)) {
+                Toast.makeText(activity,
+                        "应用被系统停用，可能需要手动开启一次后才可使用",
+                        Toast.LENGTH_LONG).show();
+            }
             classInput.setText(clsName);
             classInput.setSelection(classInput.getText().length());
             listDialog.dismiss();
         });
 
         listDialog.show();
+    }
+
+    /** 应用本身是否被系统冻结/停用（整包禁用时所有 Activity 都不可用） */
+    private static boolean isPackageDisabled(android.content.pm.PackageManager pm, String pkg) {
+        try {
+            int state = pm.getApplicationEnabledSetting(pkg);
+            if (state == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                    || state == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER
+                    || state == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED) {
+                return true;
+            }
+            if (state == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT) {
+                android.content.pm.ApplicationInfo appInfo = pm.getApplicationInfo(pkg, 0);
+                return !appInfo.enabled;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /** 单个 Activity 当前是否被冻结/停用 */
+    private static boolean isActivityDisabled(android.content.pm.PackageManager pm,
+                                              String pkg, ActivityInfo ai) {
+        try {
+            int state = pm.getComponentEnabledSetting(
+                    new android.content.ComponentName(pkg, ai.name));
+            if (state == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                    || state == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER
+                    || state == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED) {
+                return true;
+            }
+            return state == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
+                    && !ai.enabled;
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     /**

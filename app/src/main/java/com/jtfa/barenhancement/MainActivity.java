@@ -1,5 +1,6 @@
 package com.jtfa.barenhancement;
 
+import android.app.ActivityManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -10,6 +11,7 @@ import android.provider.Settings;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.Switch;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -28,6 +30,8 @@ public class MainActivity extends AppCompatActivity {
     private Switch switchService;
     private Switch switchBootStart;
     private Switch switchExcludeRecents;
+    private TextView textOverlayStatus;
+    private TriggerActionsController triggerActionsController;
     private SharedPreferences prefs;
 
     // 代码里 setChecked() 会同步触发监听器，刷新状态时用它屏蔽
@@ -42,17 +46,19 @@ public class MainActivity extends AppCompatActivity {
         
         setContentView(R.layout.activity_main);
 
-        Button btnCheckPermission = findViewById(R.id.btn_check_permission);
         switchService = findViewById(R.id.switch_service);
         switchBootStart = findViewById(R.id.switch_boot_start);
         switchExcludeRecents = findViewById(R.id.switch_exclude_recents);
+        textOverlayStatus = findViewById(R.id.text_overlay_status);
         Button btnOpenSettings = findViewById(R.id.btn_open_settings);
-        Button btnTestSimple = findViewById(R.id.btn_test_simple);
+        Button btnEditShortcuts = findViewById(R.id.btn_edit_shortcuts);
 
-        // 检查权限按钮点击事件：跳转到权限管理页面
-        btnCheckPermission.setOnClickListener(v -> {
-            startActivity(new Intent(MainActivity.this, PermissionCheckActivity.class));
-        });
+        // 快捷方式编辑入口（原设置页按钮，随触发卡搬到首页）
+        btnEditShortcuts.setOnClickListener(v ->
+                startActivity(new Intent(MainActivity.this, ShortcutEditActivity.class)));
+
+        // 交互与样式设置卡片（原设置页触发行为，搬到首页后由控制器负责读写）
+        triggerActionsController = new TriggerActionsController(this, prefs);
 
         // 悬浮窗服务开关
         updateServiceSwitchState();
@@ -87,29 +93,16 @@ public class MainActivity extends AppCompatActivity {
         // 在最近任务中隐藏开关
         boolean excludeFromRecentsSetting = prefs.getBoolean("exclude_from_recents", false);
         switchExcludeRecents.setChecked(excludeFromRecentsSetting);
+        // 冷启动时把任务属性与偏好对齐（从桌面进入的 Intent 已带标志，这里兜底）
+        applyExcludeFromRecents(excludeFromRecentsSetting);
         switchExcludeRecents.setOnCheckedChangeListener((buttonView, isChecked) -> {
             prefs.edit().putBoolean("exclude_from_recents", isChecked).apply();
-            
-            if (isChecked) {
-                // 显示对话框，询问是否立即重启
-                new androidx.appcompat.app.AlertDialog.Builder(this)
-                    .setTitle("启用隐藏功能")
-                    .setMessage("需要在最近任务中隐藏MainActivity。\n\n是否立即重启应用以应用此设置？")
-                    .setPositiveButton("立即重启", (dialog, which) -> {
-                        Intent intent = new Intent(this, SplashActivity.class);
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                        startActivity(intent);
-                        finish();
-                    })
-                    .setNegativeButton("稍后重启", (dialog, which) -> {
-                        Toast.makeText(this, "已保存设置，下次启动应用时生效", Toast.LENGTH_SHORT).show();
-                    })
-                    .show();
-                Log.d("MainActivity", "已在最近任务中隐藏开关打开");
-            } else {
-                Toast.makeText(this, "已关闭：应用将在最近任务中显示", Toast.LENGTH_SHORT).show();
-                Log.d("MainActivity", "已在最近任务中隐藏开关关闭");
-            }
+            // 直接修改当前任务属性，立即生效，不需要重启应用
+            applyExcludeFromRecents(isChecked);
+            Toast.makeText(this,
+                    isChecked ? "已开启：应用已从最近任务中隐藏" : "已关闭：应用将在最近任务中显示",
+                    Toast.LENGTH_SHORT).show();
+            Log.d("MainActivity", "最近任务隐藏开关: " + isChecked);
         });
         
         // 打开设置页面按钮点击事件
@@ -117,16 +110,31 @@ public class MainActivity extends AppCompatActivity {
             Intent intent = new Intent(MainActivity.this, SettingsActivity.class);
             startActivity(intent);
         });
-        
-        // 测试简化版服务
-        btnTestSimple.setOnClickListener(v -> {
-            if (hasOverlayPermission()) {
-                startSimpleService();
-            } else {
-                Toast.makeText(this, "请先授予悬浮窗权限", Toast.LENGTH_SHORT).show();
-                checkOverlayPermission();
+    }
+
+    /**
+     * 运行时修改本应用任务是否出现在最近任务中。
+     *
+     * 启动 Intent 的 FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS 只在创建任务时生效，
+     * 这里直接改任务属性，切换开关立即生效，不需要重启应用。
+     * 系统最近任务列表在下次打开时刷新；个别 OEM 桌面可能缓存卡片。
+     */
+    private void applyExcludeFromRecents(boolean exclude) {
+        try {
+            ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            if (am == null) {
+                Log.w("MainActivity", "ActivityManager 不可用，跳过最近任务设置");
+                return;
             }
-        });
+            int count = 0;
+            for (ActivityManager.AppTask task : am.getAppTasks()) {
+                task.setExcludeFromRecents(exclude);
+                count++;
+            }
+            Log.d("MainActivity", "setExcludeFromRecents(" + exclude + ") 已应用，任务数=" + count);
+        } catch (Exception e) {
+            Log.e("MainActivity", "设置最近任务隐藏失败", e);
+        }
     }
 
     /**
@@ -289,20 +297,6 @@ public class MainActivity extends AppCompatActivity {
             return false;
         }
     }
-    
-    /**
-     * 启动简化测试服务
-     */
-    private void startSimpleService() {
-        Log.d("MainActivity", "准备启动 SimpleFloatService（红色测试条）");
-        Intent serviceIntent = new Intent(this, SimpleFloatService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent);
-        } else {
-            startService(serviceIntent);
-        }
-        Toast.makeText(this, "简化测试服务已启动，请查看底部红色条", Toast.LENGTH_LONG).show();
-    }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -319,11 +313,19 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        updateOverlayStatus();
         // 每次回到页面时检查权限状态和服务状态
         if (hasOverlayPermission()) {
             Toast.makeText(this, "当前已拥有悬浮窗权限", Toast.LENGTH_SHORT).show();
         }
         // 更新服务开关状态：若用户上次开着且服务没跑（覆盖安装/被系统回收），自动恢复
         refreshServiceState();
+    }
+
+    /** 刷新首页「悬浮窗权限」状态行 */
+    private void updateOverlayStatus() {
+        boolean granted = hasOverlayPermission();
+        textOverlayStatus.setText(granted ? "✓ 已授予" : "✗ 未授予");
+        textOverlayStatus.setTextColor(granted ? 0xFF4CAF50 : 0xFFF44336);
     }
 }
