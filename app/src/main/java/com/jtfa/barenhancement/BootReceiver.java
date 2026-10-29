@@ -1,5 +1,6 @@
 package com.jtfa.barenhancement;
 
+import android.app.AlarmManager;
 import android.app.ForegroundServiceStartNotAllowedException;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -19,12 +20,14 @@ import androidx.core.app.NotificationCompat;
  * 开机自启 / 覆盖安装恢复广播接收器
  *
  * - 开机完成：用户开启了「开机自启」才启动悬浮窗服务
- * - 覆盖安装（MY_PACKAGE_REPLACED）：用户上次把悬浮窗服务开关留着「开」就自动恢复，
- *   无需先打开应用
+ * - 覆盖安装（MY_PACKAGE_REPLACED）：用户上次把悬浮窗服务开关留着「开」就自动恢复
  *
- * 每次收到广播都会把「动作 / 时间 / 当时的开关与权限 / 启动结果」写入
- * ai_window_settings，首页连点「开机自启」文字 5 次即可查看（见 MainActivity）。
- * 这样即使 ColorOS 之类 ROM 拦截了广播，也能一眼区分「广播没到」和「启动被拒」。
+ * ColorOS 等 ROM 上，开机广播能收到、startForegroundService 也不报错，
+ * 但进程会在广播返回后立刻被回收，服务根本没机会 onCreate。
+ * 所以开机广播后额外安排两次「补拉」闹钟（+15s / +60s），
+ * 到点若服务没在跑就再启动一次。
+ *
+ * 每次广播/补拉都会把结果写入 ai_window_settings，首页连点「开机自启」5 次查看。
  */
 public class BootReceiver extends BroadcastReceiver {
 
@@ -34,6 +37,20 @@ public class BootReceiver extends BroadcastReceiver {
     private static final String KEY_SERVICE_ENABLED = "service_enabled";
     private static final String ACTION_MY_PACKAGE_REPLACED = "android.intent.action.MY_PACKAGE_REPLACED";
 
+    /** 启动来源：boot=开机广播，retry=开机补拉闹钟，manual=用户手动 */
+    public static final String EXTRA_START_SOURCE = "start_source";
+    public static final String SOURCE_BOOT = "boot";
+    public static final String SOURCE_RETRY = "retry";
+
+    /** 开机后补拉：广播返回后进程可能立刻被系统回收，隔一会儿再拉一次 */
+    static final String ACTION_BOOT_RETRY = "com.jtfa.barenhancement.BOOT_RETRY";
+    /** 开机 3 分钟后的最终检查：服务还没起来就发通知提醒用户 */
+    static final String ACTION_BOOT_VERIFY = "com.jtfa.barenhancement.BOOT_VERIFY";
+    private static final long[] RETRY_DELAYS_MS = {15_000L, 60_000L};
+    private static final long VERIFY_DELAY_MS = 180_000L;
+    private static final int RETRY_REQUEST_BASE = 7301;
+    private static final int VERIFY_REQUEST_CODE = 7309;
+
     // 诊断信息（首页「开机自启」文字连点 5 次查看）
     private static final String KEY_DIAG_LAST_ACTION = "diag_boot_last_action";
     private static final String KEY_DIAG_LAST_TIME = "diag_boot_last_time";
@@ -41,6 +58,10 @@ public class BootReceiver extends BroadcastReceiver {
     private static final String KEY_DIAG_OVERLAY = "diag_boot_overlay";
     private static final String KEY_DIAG_RESULT = "diag_boot_result";
     private static final String KEY_DIAG_COUNT = "diag_boot_count";
+
+    private static final String KEY_DIAG_RETRY_TIME = "diag_retry_last_time";
+    private static final String KEY_DIAG_RETRY_RESULT = "diag_retry_last_result";
+    private static final String KEY_DIAG_RETRY_COUNT = "diag_retry_count";
 
     // 启动被系统拦截时的恢复提醒
     private static final String GUARD_CHANNEL_ID = "boot_guard_channel";
@@ -61,6 +82,18 @@ public class BootReceiver extends BroadcastReceiver {
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         boolean overlayGranted = Settings.canDrawOverlays(context);
 
+        // 开机补拉闹钟
+        if (ACTION_BOOT_RETRY.equals(action)) {
+            handleBootRetry(context, prefs, overlayGranted);
+            return;
+        }
+
+        // 开机 3 分钟后的最终检查
+        if (ACTION_BOOT_VERIFY.equals(action)) {
+            handleBootVerify(context, prefs);
+            return;
+        }
+
         // 覆盖安装：按用户上次的开关意图恢复服务
         if (ACTION_MY_PACKAGE_REPLACED.equals(action)) {
             boolean serviceEnabled = prefs.getBoolean(KEY_SERVICE_ENABLED, false);
@@ -76,7 +109,7 @@ public class BootReceiver extends BroadcastReceiver {
                         false, "覆盖安装：悬浮窗权限未授予");
                 return;
             }
-            String result = startFloatWindowService(context);
+            String result = startFloatWindowService(context, SOURCE_BOOT);
             record(prefs, action, prefs.getBoolean(KEY_BOOT_START_ENABLED, false), true,
                     "覆盖安装：" + result);
             if (!result.startsWith("已")) {
@@ -91,8 +124,6 @@ public class BootReceiver extends BroadcastReceiver {
 
         if (!isBootAction) {
             Log.d(TAG, "忽略其他 Action: " + action);
-            record(prefs, action, prefs.getBoolean(KEY_BOOT_START_ENABLED, false),
-                    overlayGranted, "忽略的广播");
             return;
         }
 
@@ -118,13 +149,94 @@ public class BootReceiver extends BroadcastReceiver {
             return;
         }
 
-        String result = startFloatWindowService(context);
+        String result = startFloatWindowService(context, SOURCE_BOOT);
         record(prefs, action, true, true, result);
-        if (!result.startsWith("已")) {
+        if (result.startsWith("已")) {
+            // 关键：广播返回后进程可能被系统回收，服务来不及 onCreate。
+            // 安排两次补拉，到点确认服务是否真的起来了。
+            scheduleBootRetries(context);
+        } else {
             notifyGuard(context, result);
         }
 
         Log.d(TAG, "========================================");
+    }
+
+    /** 补拉闹钟到点：服务没在跑就再启动一次 */
+    private void handleBootRetry(Context context, SharedPreferences prefs, boolean overlayGranted) {
+        boolean bootStartEnabled = prefs.getBoolean(KEY_BOOT_START_ENABLED, false);
+        if (!bootStartEnabled) {
+            recordRetry(prefs, "开机自启已关闭，跳过");
+            return;
+        }
+        if (FloatWindowService.isRunning()) {
+            recordRetry(prefs, "服务已在运行，跳过");
+            return;
+        }
+        if (!overlayGranted) {
+            recordRetry(prefs, "悬浮窗权限未授予");
+            notifyGuard(context, "悬浮窗权限未授予");
+            return;
+        }
+
+        Log.d(TAG, "开机补拉：服务未运行，再次启动");
+        String result = startFloatWindowService(context, SOURCE_RETRY);
+        recordRetry(prefs, result);
+        if (!result.startsWith("已")) {
+            notifyGuard(context, result);
+        }
+    }
+
+    /** 开机 3 分钟后：服务还没在跑就发通知，避免用户完全无感 */
+    private void handleBootVerify(Context context, SharedPreferences prefs) {
+        if (!prefs.getBoolean(KEY_BOOT_START_ENABLED, false)) {
+            recordRetry(prefs, "最终检查：开机自启已关闭");
+            return;
+        }
+        if (FloatWindowService.isRunning()) {
+            recordRetry(prefs, "最终检查：服务运行中");
+            return;
+        }
+        Log.w(TAG, "最终检查：服务仍未运行，发通知提醒");
+        recordRetry(prefs, "最终检查：服务未运行，已通知");
+        notifyGuard(context, "开机补拉后服务仍未运行");
+    }
+
+    /** 安排 +15s / +60s 两次补拉（无需精确闹钟权限） */
+    private void scheduleBootRetries(Context context) {
+        AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        if (am == null) {
+            Log.w(TAG, "AlarmManager 不可用，无法安排开机补拉");
+            return;
+        }
+        for (int i = 0; i < RETRY_DELAYS_MS.length; i++) {
+            Intent retryIntent = new Intent(context, BootReceiver.class)
+                    .setAction(ACTION_BOOT_RETRY);
+            PendingIntent pi = PendingIntent.getBroadcast(context, RETRY_REQUEST_BASE + i,
+                    retryIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            long at = System.currentTimeMillis() + RETRY_DELAYS_MS[i];
+            try {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+                Log.d(TAG, "已安排开机补拉 #" + i + "，延迟 " + RETRY_DELAYS_MS[i] + "ms");
+            } catch (Exception e) {
+                Log.e(TAG, "安排开机补拉失败 #" + i, e);
+            }
+        }
+
+        // 3 分钟后最终检查一次，服务仍没起来就发通知
+        Intent verifyIntent = new Intent(context, BootReceiver.class)
+                .setAction(ACTION_BOOT_VERIFY);
+        PendingIntent verifyPi = PendingIntent.getBroadcast(context, VERIFY_REQUEST_CODE,
+                verifyIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        try {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,
+                    System.currentTimeMillis() + VERIFY_DELAY_MS, verifyPi);
+            Log.d(TAG, "已安排开机最终检查，延迟 " + VERIFY_DELAY_MS + "ms");
+        } catch (Exception e) {
+            Log.e(TAG, "安排开机最终检查失败", e);
+        }
     }
 
     /**
@@ -132,10 +244,12 @@ public class BootReceiver extends BroadcastReceiver {
      *
      * @return 结果描述，以「已」开头表示启动命令已成功发出
      */
-    private String startFloatWindowService(Context context) {
+    private String startFloatWindowService(Context context, String source) {
         try {
-            Log.d(TAG, "准备启动悬浮窗服务...");
-            Intent serviceIntent = new Intent(context, FloatWindowService.class);
+            Log.d(TAG, "准备启动悬浮窗服务，来源: " + source);
+            FloatWindowService.sPendingStartSource = source;
+            Intent serviceIntent = new Intent(context, FloatWindowService.class)
+                    .putExtra(EXTRA_START_SOURCE, source);
             context.startForegroundService(serviceIntent);
             Log.d(TAG, "✅ 悬浮窗服务启动命令已发送");
             return "已发送启动命令";
@@ -150,7 +264,7 @@ public class BootReceiver extends BroadcastReceiver {
         }
     }
 
-    /** 记录本次广播的诊断信息 */
+    /** 记录本次开机/安装广播的诊断信息 */
     private static void record(SharedPreferences prefs, String action, boolean bootEnabled,
                                boolean overlayGranted, String result) {
         prefs.edit()
@@ -163,11 +277,20 @@ public class BootReceiver extends BroadcastReceiver {
                 .apply();
     }
 
+    /** 记录补拉闹钟的诊断信息 */
+    private static void recordRetry(SharedPreferences prefs, String result) {
+        prefs.edit()
+                .putLong(KEY_DIAG_RETRY_TIME, System.currentTimeMillis())
+                .putString(KEY_DIAG_RETRY_RESULT, result)
+                .putInt(KEY_DIAG_RETRY_COUNT, prefs.getInt(KEY_DIAG_RETRY_COUNT, 0) + 1)
+                .apply();
+    }
+
     /**
      * 启动失败时发一条可点击的通知。
      * 用户点击后进入应用，属于「用户操作」，此时再启动前台服务不会被系统拦截。
      */
-    private void notifyGuard(Context context, String reason) {
+    static void notifyGuard(Context context, String reason) {
         try {
             NotificationManager nm =
                     (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);

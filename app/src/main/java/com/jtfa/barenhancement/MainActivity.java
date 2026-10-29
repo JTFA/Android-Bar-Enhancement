@@ -300,6 +300,7 @@ public class MainActivity extends AppCompatActivity {
      */
     private boolean startFloatWindowService() {
         Log.d("MainActivity", "准备启动 FloatWindowService");
+        FloatWindowService.sPendingStartSource = "manual";
         Intent serviceIntent = new Intent(this, FloatWindowService.class);
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -424,6 +425,36 @@ public class MainActivity extends AppCompatActivity {
         }
         sb.append("累计收到广播：").append(prefs.getInt("diag_boot_count", 0)).append(" 次\n\n");
 
+        long bootSvcAt = prefs.getLong("diag_boot_service_time", 0L);
+        sb.append("开机拉起服务：");
+        if (bootSvcAt == 0L) {
+            sb.append("无记录\n（服务从未 onCreate：广播返回后进程被系统回收）\n");
+        } else {
+            sb.append("\n  来源：").append(prefs.getString("diag_boot_service_source", "?"))
+                    .append("　时间：").append(formatTime(bootSvcAt)).append("\n");
+            sb.append("  结果：").append(prefs.getString("diag_boot_service_result", "?")).append("\n");
+            long destroyAt = prefs.getLong("diag_boot_service_destroy_time", 0L);
+            if (destroyAt == 0L) {
+                sb.append("  销毁：无记录（仍在运行，或被系统直接杀进程）\n");
+            } else {
+                sb.append("  销毁：").append(formatTime(destroyAt))
+                        .append(prefs.getBoolean("diag_boot_service_stopped_by_self", false)
+                                ? "（服务自己停止）" : "（系统销毁）")
+                        .append("\n");
+            }
+        }
+
+        long retryAt = prefs.getLong("diag_retry_last_time", 0L);
+        sb.append("开机补拉：");
+        if (retryAt == 0L) {
+            sb.append("未触发\n");
+        } else {
+            sb.append(prefs.getString("diag_retry_last_result", "?"))
+                    .append(" @ ").append(formatTime(retryAt))
+                    .append("（共 ").append(prefs.getInt("diag_retry_count", 0)).append(" 次）\n");
+        }
+        sb.append("\n");
+
         long svcAt = prefs.getLong("diag_service_last_start_time", 0L);
         sb.append("上次服务启动：");
         if (svcAt == 0L) {
@@ -433,7 +464,7 @@ public class MainActivity extends AppCompatActivity {
             sb.append("  结果：").append(prefs.getString("diag_service_last_start_result", "?")).append("\n");
         }
 
-        sb.append("\n提示：若「上次开机/安装广播：无记录」，请到系统设置 → 应用 → 自启动/后台运行中允许本应用，并关闭电池优化。");
+        sb.append("\n提示：广播有记录但「开机拉起服务：无记录」= 广播返回后进程被系统回收，已在 +15s / +60s 自动补拉；若补拉仍失败，请允许「自启动 / 后台运行」并关闭电池优化。");
         return sb.toString();
     }
 

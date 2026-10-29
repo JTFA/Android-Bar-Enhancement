@@ -12,6 +12,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.*;
 import android.graphics.drawable.BitmapDrawable;
@@ -99,8 +100,21 @@ public class FloatWindowService extends Service {
 
     // 开机/后台拉起时窗口服务可能尚未就绪：提示条挂载失败先重试，避免服务直接退出
     private static final long[] BAR_INIT_RETRY_DELAYS = {500L, 2000L, 5000L};
+    // 开机拉起时给系统更长的恢复窗口（ColorOS 开机后一段时间内窗口/进程都可能被限制）
+    private static final long[] BAR_INIT_RETRY_DELAYS_BOOT =
+            {500L, 2000L, 5000L, 10000L, 20000L, 30000L};
     private int barInitRetryIndex = 0;
     private boolean barInitSucceeded = false;
+    /** 启动来源：manual / boot / retry，来自 BootReceiver.EXTRA_START_SOURCE */
+    private String startSource = "manual";
+    /**
+     * 启动方在 startForegroundService 之前写入的来源。
+     * Service.getIntent() 在 API 36 已移除，onCreate 里拿不到启动 Intent，
+     * 因此用同进程静态变量传递；onStartCommand 里再用 Intent extra 兜底。
+     */
+    public static volatile String sPendingStartSource = null;
+    /** 是否由服务自己 stopSelf（用于区分系统杀进程） */
+    private boolean stoppedBySelf = false;
 
     private WindowManager windowManager;
     private View floatView;
@@ -718,8 +732,13 @@ public class FloatWindowService extends Service {
         sInstance = this;
         DiagLog.installUncaughtHandler(this);
         DiagLog.log(this, "service onCreate");
+
+        // 记录启动来源：开机/补拉时走更长的重试窗口，并单独落盘诊断
+        startSource = sPendingStartSource != null ? sPendingStartSource : "manual";
+        sPendingStartSource = null;
+
         Log.d(TAG, "========================================");
-        Log.d(TAG, "FloatWindowService onCreate 被调用");
+        Log.d(TAG, "FloatWindowService onCreate 被调用，来源: " + startSource);
         Log.d(TAG, "Android 版本: " + Build.VERSION.SDK_INT);
         Log.d(TAG, "权限状态: " + hasOverlayPermission());
 
@@ -741,6 +760,10 @@ public class FloatWindowService extends Service {
             Log.e(TAG, "❌❌❌ 服务启动失败", e);
             e.printStackTrace();
             recordStartResult("失败: " + e.getClass().getSimpleName());
+            if (!"manual".equals(startSource)) {
+                BootReceiver.notifyGuard(this, "前台服务启动失败");
+            }
+            stoppedBySelf = true;
             stopSelf(); // 启动失败则停止服务
             return;
         }
@@ -782,24 +805,54 @@ public class FloatWindowService extends Service {
             Log.d(TAG, "底部提示条初始化完成");
         } catch (Exception e) {
             Log.e(TAG, "提示条初始化失败（第 " + (barInitRetryIndex + 1) + " 次）", e);
-            if (barInitRetryIndex < BAR_INIT_RETRY_DELAYS.length) {
-                long delay = BAR_INIT_RETRY_DELAYS[barInitRetryIndex++];
+            long[] delays = "manual".equals(startSource)
+                    ? BAR_INIT_RETRY_DELAYS : BAR_INIT_RETRY_DELAYS_BOOT;
+            if (barInitRetryIndex < delays.length) {
+                long delay = delays[barInitRetryIndex++];
                 new Handler(Looper.getMainLooper()).postDelayed(
                         this::initBottomBarWithRetry, delay);
             } else {
                 recordStartResult("失败: " + e.getClass().getSimpleName());
+                if (!"manual".equals(startSource)) {
+                    BootReceiver.notifyGuard(this, "开机拉起后横条未能显示");
+                }
+                stoppedBySelf = true;
                 stopSelf();
             }
+        }
+    }
+
+    /** 记录服务销毁；进程被系统直接杀掉时不会走到这里，诊断里会表现为「只有启动没有销毁」 */
+    private void recordServiceDestroy() {
+        try {
+            long now = System.currentTimeMillis();
+            SharedPreferences.Editor e = getSharedPreferences("ai_window_settings", MODE_PRIVATE)
+                    .edit()
+                    .putLong("diag_service_destroy_time", now);
+            if (!"manual".equals(startSource)) {
+                e.putLong("diag_boot_service_destroy_time", now)
+                        .putBoolean("diag_boot_service_stopped_by_self", stoppedBySelf);
+            }
+            e.apply();
+        } catch (Exception ignored) {
         }
     }
 
     /** 记录最近一次服务启动结果，供首页「开机自启」连点 5 次的诊断弹窗查看 */
     private void recordStartResult(String result) {
         try {
-            getSharedPreferences("ai_window_settings", MODE_PRIVATE).edit()
-                    .putLong("diag_service_last_start_time", System.currentTimeMillis())
-                    .putString("diag_service_last_start_result", result)
-                    .apply();
+            long now = System.currentTimeMillis();
+            SharedPreferences.Editor e = getSharedPreferences("ai_window_settings", MODE_PRIVATE)
+                    .edit()
+                    .putLong("diag_service_last_start_time", now)
+                    .putString("diag_service_last_start_result", result);
+            // 开机/补拉单独记录，避免被之后的手动启动覆盖
+            if (!"manual".equals(startSource)) {
+                e.putLong("diag_boot_service_time", now)
+                        .putString("diag_boot_service_source", startSource)
+                        .putString("diag_boot_service_result", result);
+            }
+            e.apply();
         } catch (Exception ignored) {
         }
     }
@@ -864,6 +917,11 @@ public class FloatWindowService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null) {
             DiagLog.log(this, "onStartCommand action=" + intent.getAction());
+            // 兜底：万一 onCreate 没拿到静态来源（例如进程刚被系统重建）
+            String src = intent.getStringExtra(BootReceiver.EXTRA_START_SOURCE);
+            if (src != null && !src.isEmpty()) {
+                startSource = src;
+            }
         }
         // 设置页关闭后，在途的即时预览 UPDATE_* 可能晚于退出时的重载到达。
         // 忽略这些过期更新，避免把刚恢复的竖屏值又覆盖回横屏值。
@@ -8156,6 +8214,7 @@ public class FloatWindowService extends Service {
     @Override
     public void onDestroy() {
         DiagLog.log(this, "service onDestroy");
+        recordServiceDestroy();
         if (sInstance == this) {
             sInstance = null;
         }
