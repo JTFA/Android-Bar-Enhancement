@@ -97,6 +97,11 @@ public class FloatWindowService extends Service {
     private static final String CHANNEL_ID = "float_window_channel";
     private static final int NOTIFICATION_ID = 1001;
 
+    // 开机/后台拉起时窗口服务可能尚未就绪：提示条挂载失败先重试，避免服务直接退出
+    private static final long[] BAR_INIT_RETRY_DELAYS = {500L, 2000L, 5000L};
+    private int barInitRetryIndex = 0;
+    private boolean barInitSucceeded = false;
+
     private WindowManager windowManager;
     private View floatView;
     private WindowManager.LayoutParams layoutParams;
@@ -722,6 +727,7 @@ public class FloatWindowService extends Service {
         loadSettings();
         Log.d(TAG, "AI 窗口尺寸 - 宽: " + aiWindowWidth + "px, 高: " + aiWindowHeight + "px");
 
+        // 前台服务必须尽快 startForeground；失败则记录后退出
         try {
             createNotificationChannel();
             Log.d(TAG, "通知渠道创建成功");
@@ -731,11 +737,19 @@ public class FloatWindowService extends Service {
 
             startForeground(NOTIFICATION_ID, notification);
             Log.d(TAG, "前台服务启动成功，通知已显示");
+        } catch (Exception e) {
+            Log.e(TAG, "❌❌❌ 服务启动失败", e);
+            e.printStackTrace();
+            recordStartResult("失败: " + e.getClass().getSimpleName());
+            stopSelf(); // 启动失败则停止服务
+            return;
+        }
 
-            initBottomBar();
-            Log.d(TAG, "底部提示条初始化完成");
+        // 开机瞬间窗口服务可能尚未就绪：挂载失败先重试，全部失败才退出
+        initBottomBarWithRetry();
 
-            // 注册广播接收器，用于接收 Activity 发送的恢复提示条通知
+        // 注册广播接收器，用于接收 Activity 发送的恢复提示条通知
+        try {
             IntentFilter filter = new IntentFilter("com.jtfa.barenhancement.RESTORE_BAR");
             // Android 13+ (API 33) 必须指定 RECEIVER_EXPORTED 或 RECEIVER_NOT_EXPORTED
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -743,14 +757,51 @@ public class FloatWindowService extends Service {
             } else {
                 registerReceiver(restoreBarReceiver, filter, 0); // 使用 0 作为默认标志
             }
-
         } catch (Exception e) {
-            Log.e(TAG, "❌❌❌ 服务启动失败", e);
-            e.printStackTrace();
-            stopSelf(); // 启动失败则停止服务
+            Log.w(TAG, "注册恢复提示条广播失败", e);
         }
 
         Log.d(TAG, "========================================");
+    }
+
+    /**
+     * 挂载提示条；失败时按 500ms / 2s / 5s 重试。
+     * 开机广播到达时系统窗口服务可能还没准备好，直接 stopSelf 会导致
+     * 「服务启动过、通知也在，但横条没出现」。
+     */
+    private void initBottomBarWithRetry() {
+        if (barInitSucceeded) return;
+        try {
+            boolean attached = initBottomBar();
+            if (!attached) {
+                throw new IllegalStateException("addView 未成功");
+            }
+            barInitSucceeded = true;
+            barInitRetryIndex = 0;
+            recordStartResult("成功");
+            Log.d(TAG, "底部提示条初始化完成");
+        } catch (Exception e) {
+            Log.e(TAG, "提示条初始化失败（第 " + (barInitRetryIndex + 1) + " 次）", e);
+            if (barInitRetryIndex < BAR_INIT_RETRY_DELAYS.length) {
+                long delay = BAR_INIT_RETRY_DELAYS[barInitRetryIndex++];
+                new Handler(Looper.getMainLooper()).postDelayed(
+                        this::initBottomBarWithRetry, delay);
+            } else {
+                recordStartResult("失败: " + e.getClass().getSimpleName());
+                stopSelf();
+            }
+        }
+    }
+
+    /** 记录最近一次服务启动结果，供首页「开机自启」连点 5 次的诊断弹窗查看 */
+    private void recordStartResult(String result) {
+        try {
+            getSharedPreferences("ai_window_settings", MODE_PRIVATE).edit()
+                    .putLong("diag_service_last_start_time", System.currentTimeMillis())
+                    .putString("diag_service_last_start_result", result)
+                    .apply();
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
@@ -1177,7 +1228,7 @@ public class FloatWindowService extends Service {
     /**
      * 初始化底部提示条
      */
-    private void initBottomBar() {
+    private boolean initBottomBar() {
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
 
         // 创建容器
@@ -1227,8 +1278,10 @@ public class FloatWindowService extends Service {
 
 
         // 添加到底部窗口（在遮罩之上）
+        boolean attached = false;
         try {
             windowManager.addView(barContainer, barLayoutParams);
+            attached = true;
             Log.d(TAG, "底部提示条已成功添加到窗口");
         } catch (Exception e) {
             Log.e(TAG, "添加底部提示条失败", e);
@@ -1252,6 +1305,7 @@ public class FloatWindowService extends Service {
                         + " children=" + barContainer.getChildCount());
             }
         });
+        return attached;
     }
 
     /**

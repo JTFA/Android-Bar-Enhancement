@@ -1,6 +1,7 @@
 package com.jtfa.barenhancement;
 
 import android.Manifest;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -8,6 +9,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -68,6 +70,7 @@ public class PermissionCheckActivity extends AppCompatActivity {
 
         container = findViewById(R.id.permission_list_container);
         buildPermissionList();
+        buildExtraRows(container);
     }
 
     @Override
@@ -76,6 +79,7 @@ public class PermissionCheckActivity extends AppCompatActivity {
         // 每次回到页面时刷新状态（从系统设置返回后自动更新）
         container.removeAllViews();
         buildPermissionList();
+        buildExtraRows(container);
     }
 
     /** 动态构建权限列表 */
@@ -204,6 +208,138 @@ public class PermissionCheckActivity extends AppCompatActivity {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) {
                 Toast.makeText(this, "悬浮窗权限已授予", Toast.LENGTH_SHORT).show();
             }
+        }
+    }
+
+    /** 电池优化 / 系统自启动：不是 Android 运行时权限，单独成行 */
+    private void buildExtraRows(LinearLayout parent) {
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        boolean ignoring = pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
+        addSpecialRow(parent,
+                "电池优化",
+                "关闭电池优化可降低后台服务被系统清理的概率",
+                ignoring ? "✓ 已忽略" : "✗ 未忽略",
+                ignoring ? Color.parseColor("#4CAF50") : Color.parseColor("#F44336"),
+                ignoring ? null : "去设置",
+                this::requestIgnoreBatteryOptimizations);
+
+        addSpecialRow(parent,
+                "自启动 / 后台运行",
+                "系统级权限，需在手机管家中手动允许；未允许时重启后可能收不到开机广播",
+                "需手动确认",
+                Color.parseColor("#FF9800"),
+                "去设置",
+                this::openAutoStartSettings);
+    }
+
+    private void addSpecialRow(LinearLayout parent, String name, String desc,
+                               String status, int statusColor, String buttonText, Runnable action) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable cardBg = new GradientDrawable();
+        cardBg.setColor(resolveThemeColor(R.attr.bgCard));
+        cardBg.setCornerRadius(dp2px(10));
+        card.setBackground(cardBg);
+        int padH = dp2px(16), padV = dp2px(14);
+        card.setPadding(padH, padV, padH, padV);
+
+        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        cardLp.bottomMargin = dp2px(10);
+        card.setLayoutParams(cardLp);
+
+        LinearLayout row1 = new LinearLayout(this);
+        row1.setOrientation(LinearLayout.HORIZONTAL);
+        row1.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView tvName = new TextView(this);
+        tvName.setText(name);
+        tvName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        tvName.setTextColor(resolveThemeColor(R.attr.textPrimary));
+        row1.addView(tvName, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        TextView tvStatus = new TextView(this);
+        tvStatus.setText(status);
+        tvStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        tvStatus.setTextColor(statusColor);
+        row1.addView(tvStatus);
+
+        card.addView(row1);
+
+        TextView tvDesc = new TextView(this);
+        tvDesc.setText(desc);
+        tvDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        tvDesc.setTextColor(resolveThemeColor(R.attr.textSecondary));
+        LinearLayout.LayoutParams descLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        descLp.topMargin = dp2px(4);
+        card.addView(tvDesc, descLp);
+
+        if (buttonText != null && action != null) {
+            Button btn = new Button(this);
+            btn.setText(buttonText);
+            btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            btn.setTextColor(Color.WHITE);
+            btn.setBackgroundTintList(ContextCompat.getColorStateList(this, R.color.teal_700));
+            LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            btnLp.topMargin = dp2px(10);
+            btnLp.gravity = Gravity.END;
+            card.addView(btn, btnLp);
+            btn.setOnClickListener(v -> action.run());
+        }
+
+        parent.addView(card);
+    }
+
+    /** 申请忽略电池优化（部分 ROM 的「无限制」入口就是这里） */
+    private void requestIgnoreBatteryOptimizations() {
+        try {
+            Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+            return;
+        } catch (Exception ignored) {
+        }
+        try {
+            startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开电池优化设置", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** 跳转各 ROM 的「自启动管理」；找不到就退回应用详情页 */
+    private void openAutoStartSettings() {
+        String[][] candidates = {
+                {"com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity"},
+                {"com.coloros.safecenter", "com.coloros.safecenter.startupapp.StartupAppListActivity"},
+                {"com.oplus.safecenter", "com.oplus.safecenter.permission.startup.StartupAppListActivity"},
+                {"com.oppo.safe", "com.oppo.safe.permission.startup.StartupAppListActivity"},
+                {"com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"},
+                {"com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity"},
+                {"com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"},
+                {"com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"},
+                {"com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity"},
+        };
+        for (String[] c : candidates) {
+            try {
+                Intent intent = new Intent();
+                intent.setComponent(new ComponentName(c[0], c[1]));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                if (getPackageManager().resolveActivity(intent, 0) != null) {
+                    startActivity(intent);
+                    return;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        try {
+            startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + getPackageName())));
+            Toast.makeText(this, "请在应用信息中查找「自启动 / 后台运行」", Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开系统设置", Toast.LENGTH_SHORT).show();
         }
     }
 

@@ -1,12 +1,18 @@
 package com.jtfa.barenhancement;
 
 import android.app.ActivityManager;
+import android.app.NotificationManager;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
 import android.widget.Button;
@@ -15,6 +21,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -31,8 +38,15 @@ public class MainActivity extends AppCompatActivity {
     private Switch switchBootStart;
     private Switch switchExcludeRecents;
     private TextView textOverlayStatus;
+    private TextView textBootStart;
     private TriggerActionsController triggerActionsController;
     private SharedPreferences prefs;
+
+    // 连点「开机自启」文字查看诊断
+    private static final int BOOT_DIAG_TAP_TARGET = 5;
+    private static final long BOOT_DIAG_TAP_RESET_MS = 2000L;
+    private int bootDiagTapCount = 0;
+    private long bootDiagLastTapAt = 0L;
 
     // 代码里 setChecked() 会同步触发监听器，刷新状态时用它屏蔽
     private boolean suppressServiceSwitchCallback = false;
@@ -50,6 +64,7 @@ public class MainActivity extends AppCompatActivity {
         switchBootStart = findViewById(R.id.switch_boot_start);
         switchExcludeRecents = findViewById(R.id.switch_exclude_recents);
         textOverlayStatus = findViewById(R.id.text_overlay_status);
+        textBootStart = findViewById(R.id.text_boot_start);
         Button btnOpenSettings = findViewById(R.id.btn_open_settings);
         Button btnEditShortcuts = findViewById(R.id.btn_edit_shortcuts);
 
@@ -89,6 +104,9 @@ public class MainActivity extends AppCompatActivity {
             prefs.edit().putBoolean("boot_start_enabled", isChecked).apply();
             Toast.makeText(this, isChecked ? "已开启开机自启" : "已关闭开机自启", Toast.LENGTH_SHORT).show();
         });
+
+        // 连点「开机自启」文字 5 次：查看开机自启诊断（不占首页空间）
+        textBootStart.setOnClickListener(v -> onBootStartTextTapped());
         
         // 在最近任务中隐藏开关
         boolean excludeFromRecentsSetting = prefs.getBoolean("exclude_from_recents", false);
@@ -327,5 +345,100 @@ public class MainActivity extends AppCompatActivity {
         boolean granted = hasOverlayPermission();
         textOverlayStatus.setText(granted ? "✓ 已授予" : "✗ 未授予");
         textOverlayStatus.setTextColor(granted ? 0xFF4CAF50 : 0xFFF44336);
+    }
+
+    // ===== 开机自启诊断（连点「开机自启」文字 5 次） =====
+
+    private void onBootStartTextTapped() {
+        long now = SystemClock.elapsedRealtime();
+        if (now - bootDiagLastTapAt > BOOT_DIAG_TAP_RESET_MS) {
+            bootDiagTapCount = 0;
+        }
+        bootDiagLastTapAt = now;
+        bootDiagTapCount++;
+        if (bootDiagTapCount >= BOOT_DIAG_TAP_TARGET) {
+            bootDiagTapCount = 0;
+            showBootDiagnostics();
+        } else if (bootDiagTapCount >= 3) {
+            Toast.makeText(this, "再点 " + (BOOT_DIAG_TAP_TARGET - bootDiagTapCount) + " 次查看诊断",
+                    Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void showBootDiagnostics() {
+        final String text = buildBootDiagnosticsText();
+        new AlertDialog.Builder(this)
+                .setTitle("开机自启诊断")
+                .setMessage(text)
+                .setPositiveButton("复制", (d, w) -> {
+                    ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (cm != null) {
+                        cm.setPrimaryClip(ClipData.newPlainText("开机自启诊断", text));
+                        Toast.makeText(this, "诊断信息已复制", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("关闭", null)
+                .show();
+    }
+
+    private String buildBootDiagnosticsText() {
+        StringBuilder sb = new StringBuilder();
+
+        String versionName = "?";
+        long versionCode = 0;
+        try {
+            PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+            versionName = pi.versionName;
+            versionCode = pi.getLongVersionCode();
+        } catch (Exception ignored) {
+        }
+        sb.append("应用版本：").append(versionName).append(" (").append(versionCode).append(")\n");
+        sb.append("系统：Android ").append(Build.VERSION.RELEASE)
+                .append(" (API ").append(Build.VERSION.SDK_INT).append(")\n");
+        sb.append("机型：").append(Build.MANUFACTURER).append(" ").append(Build.MODEL).append("\n");
+        sb.append("系统版本：").append(Build.DISPLAY).append("\n\n");
+
+        sb.append("开机自启开关：").append(prefs.getBoolean("boot_start_enabled", false) ? "开" : "关").append("\n");
+        sb.append("悬浮窗服务开关：").append(prefs.getBoolean(KEY_SERVICE_ENABLED, false) ? "开" : "关").append("\n");
+        sb.append("悬浮窗权限：").append(Settings.canDrawOverlays(this) ? "已授予" : "未授予").append("\n");
+
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        sb.append("通知权限：").append(nm != null && nm.areNotificationsEnabled() ? "已允许" : "未允许").append("\n");
+
+        PowerManager pm = getSystemService(PowerManager.class);
+        sb.append("电池优化：")
+                .append(pm != null && pm.isIgnoringBatteryOptimizations(getPackageName()) ? "已忽略" : "未忽略")
+                .append("\n");
+        sb.append("服务当前状态：").append(isServiceRunning(FloatWindowService.class) ? "运行中" : "未运行").append("\n\n");
+
+        long bootAt = prefs.getLong("diag_boot_last_time", 0L);
+        sb.append("上次开机/安装广播：");
+        if (bootAt == 0L) {
+            sb.append("无记录\n（广播从未到达：多为系统「自启动」未允许）\n");
+        } else {
+            sb.append("\n  动作：").append(prefs.getString("diag_boot_last_action", "?")).append("\n");
+            sb.append("  时间：").append(formatTime(bootAt)).append("\n");
+            sb.append("  当时开机自启：").append(prefs.getBoolean("diag_boot_enabled", false) ? "开" : "关").append("\n");
+            sb.append("  当时悬浮窗权限：").append(prefs.getBoolean("diag_boot_overlay", false) ? "有" : "无").append("\n");
+            sb.append("  启动结果：").append(prefs.getString("diag_boot_result", "?")).append("\n");
+        }
+        sb.append("累计收到广播：").append(prefs.getInt("diag_boot_count", 0)).append(" 次\n\n");
+
+        long svcAt = prefs.getLong("diag_service_last_start_time", 0L);
+        sb.append("上次服务启动：");
+        if (svcAt == 0L) {
+            sb.append("无记录\n");
+        } else {
+            sb.append("\n  时间：").append(formatTime(svcAt)).append("\n");
+            sb.append("  结果：").append(prefs.getString("diag_service_last_start_result", "?")).append("\n");
+        }
+
+        sb.append("\n提示：若「上次开机/安装广播：无记录」，请到系统设置 → 应用 → 自启动/后台运行中允许本应用，并关闭电池优化。");
+        return sb.toString();
+    }
+
+    private String formatTime(long millis) {
+        return new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                .format(new java.util.Date(millis));
     }
 }

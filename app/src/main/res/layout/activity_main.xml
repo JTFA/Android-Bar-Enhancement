@@ -177,6 +177,7 @@
                     android:orientation="vertical">
 
                     <TextView
+                        android:id="@+id/text_boot_start"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="开机自启"
@@ -190,6 +191,14 @@
                         android:textSize="12sp"
                         android:textColor="?attr/textHint"
                         android:layout_marginTop="2dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="需在系统设置中允许「自启动 / 后台运行」"
+                        android:textSize="11sp"
+                        android:textColor="?attr/textHint"
+                        android:layout_marginTop="1dp" />
 
                 </LinearLayout>
 
