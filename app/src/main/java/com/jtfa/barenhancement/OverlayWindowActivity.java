@@ -1739,6 +1739,23 @@ public class OverlayWindowActivity extends AppCompatActivity {
             launchShortcutApp(item);
             awaitingLaunchResult = true;
             collapseAndFinish();
+
+            // 兜底：目标页面未导出/被 OEM 静默拦截时，目标应用不会进入前台，
+            // onStop/onWindowFocusChanged 不会触发，2 秒后主动退出窗口。
+            final String launchItemName = item.getName();
+            cell.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (!awaitingLaunchResult || isFinishing()) return;
+                    Log.w(TAG, "快捷方式启动后未进入前台，主动退出窗口: " + launchItemName);
+                    awaitingLaunchResult = false;
+                    if (rootLayout != null) rootLayout.setVisibility(View.GONE);
+                    BlurWindowActivity.fadeOutIfAlive();
+                    sendRestoreBarBroadcast();
+                    suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+                    finishAndRemoveTask();
+                }
+            }, 2000);
         });
 
         // 按压缩放动画
@@ -2832,10 +2849,25 @@ public class OverlayWindowActivity extends AppCompatActivity {
         restoreBarReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                Log.d(TAG, "Received RESTORE_BAR broadcast");
+                if ("com.jtfa.barenhancement.SHORTCUT_LAUNCH_FAILED".equals(intent.getAction())) {
+                    Log.d(TAG, "Received SHORTCUT_LAUNCH_FAILED broadcast");
+                    // 目标 Activity 未导出/启动失败时，目标应用不会进入前台，
+                    // onStop/onWindowFocusChanged 不会触发，必须主动退出窗口。
+                    awaitingLaunchResult = false;
+                    if (rootLayout != null) rootLayout.setVisibility(View.GONE);
+                    BlurWindowActivity.fadeOutIfAlive();
+                    sendRestoreBarBroadcast();
+                    suppressTransition(Activity.OVERRIDE_TRANSITION_CLOSE);
+                    if (!isFinishing()) {
+                        finishAndRemoveTask();
+                    }
+                } else {
+                    Log.d(TAG, "Received RESTORE_BAR broadcast");
+                }
             }
         };
         IntentFilter filter = new IntentFilter("com.jtfa.barenhancement.RESTORE_BAR");
+        filter.addAction("com.jtfa.barenhancement.SHORTCUT_LAUNCH_FAILED");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(restoreBarReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {

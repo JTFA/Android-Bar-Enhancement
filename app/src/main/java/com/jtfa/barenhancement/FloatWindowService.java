@@ -1147,6 +1147,7 @@ public class FloatWindowService extends Service {
             String appName = intent.getStringExtra("app_name");
             if (launchIntent == null) {
                 Log.e(TAG, "LAUNCH_APP 缺少 launch_intent");
+                notifyShortcutLaunchFailed(appName);
             } else {
                 try {
                     launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -1155,6 +1156,8 @@ public class FloatWindowService extends Service {
                 } catch (Exception e) {
                     Log.e(TAG, "格子点击打开应用失败: " + appName, e);
                     Toast.makeText(this, "打开 " + appName + " 失败", Toast.LENGTH_SHORT).show();
+                    // 通知快捷窗口退出，避免启动失败后 activity 一直停在原地
+                    notifyShortcutLaunchFailed(appName);
                 }
             }
         }
@@ -6033,6 +6036,23 @@ public class FloatWindowService extends Service {
     }
 
     /**
+     * 快捷窗口启动失败时通知 OverlayWindowActivity 退出。
+     * 某些 ROM 上 startActivity 失败不会让目标应用进入前台，
+     * Activity 的 onStop/onWindowFocusChanged 不会触发，窗口会卡住。
+     */
+    private void notifyShortcutLaunchFailed(String appName) {
+        try {
+            Intent intent = new Intent("com.jtfa.barenhancement.SHORTCUT_LAUNCH_FAILED");
+            intent.setPackage(getPackageName());
+            intent.putExtra("app_name", appName == null ? "" : appName);
+            sendBroadcast(intent);
+            Log.d(TAG, "已发送快捷方式启动失败广播: " + appName);
+        } catch (Exception e) {
+            Log.w(TAG, "发送快捷方式启动失败广播失败", e);
+        }
+    }
+
+    /**
      * 通过快捷方式打开应用
      */
     /**
@@ -6069,10 +6089,12 @@ public class FloatWindowService extends Service {
             } catch (Exception e2) {
                 Log.e(TAG, "打开快捷方式失败: " + item.getName(), e2);
                 Toast.makeText(this, "打开 " + item.getName() + " 失败", Toast.LENGTH_SHORT).show();
+                notifyShortcutLaunchFailed(item.getName());
             }
         } catch (Exception e) {
             Log.e(TAG, "打开快捷方式失败: " + item.getName(), e);
             Toast.makeText(this, "打开 " + item.getName() + " 失败", Toast.LENGTH_SHORT).show();
+            notifyShortcutLaunchFailed(item.getName());
         }
     }
 
