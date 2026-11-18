@@ -20,6 +20,8 @@ public class ShortcutLaunchConfig {
     public String uri = "";
     public String targetPackage = "";
     public String targetClass = "";
+    /** Intent action；为空时沿用旧行为（URL/Intent 模式用 ACTION_VIEW，显式组件模式不设置 action） */
+    public String action = "";
     public boolean openInWindow = false; // 是否使用系统小窗打开
     
     // 支持多个 Extra
@@ -101,6 +103,7 @@ public class ShortcutLaunchConfig {
         c.uri = json.optString("uri", "");
         c.targetPackage = json.optString("targetPackage", "");
         c.targetClass = json.optString("targetClass", "");
+        c.action = json.optString("action", "");
         c.openInWindow = json.optBoolean("openInWindow", false);
         
         // 尝试读取 extras 列表
@@ -143,6 +146,7 @@ public class ShortcutLaunchConfig {
             json.put("uri", uri);
             json.put("targetPackage", targetPackage);
             json.put("targetClass", targetClass);
+            json.put("action", action);
             json.put("openInWindow", openInWindow);
             
             // 保存 extras 列表
@@ -284,17 +288,37 @@ public class ShortcutLaunchConfig {
      */
     public android.content.Intent buildLaunchIntent() {
         switch (launchMode) {
-            case MODE_URL:
+            case MODE_URL: {
+                String act = TextUtils.isEmpty(action)
+                        ? android.content.Intent.ACTION_VIEW : action;
                 if (!TextUtils.isEmpty(uri)) {
-                    return new android.content.Intent(android.content.Intent.ACTION_VIEW,
-                            android.net.Uri.parse(uri))
-                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                    android.content.Intent intent = new android.content.Intent(act,
+                            android.net.Uri.parse(uri));
+                    // 仅导入的快捷方式（带 action）才按 targetPackage 限定，避免改变旧配置行为
+                    if (!TextUtils.isEmpty(action) && !TextUtils.isEmpty(targetPackage)) {
+                        intent.setPackage(targetPackage);
+                    }
+                    return intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                }
+                // 只有 action、没有 URI 的快捷方式（少见，但静态 shortcuts.xml 允许）
+                if (!TextUtils.isEmpty(action)) {
+                    android.content.Intent intent = new android.content.Intent(action);
+                    if (!TextUtils.isEmpty(targetPackage)) {
+                        intent.setPackage(targetPackage);
+                    }
+                    return intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
                 }
                 break;
+            }
             case MODE_INTENT:
                 if (!TextUtils.isEmpty(targetPackage) && !TextUtils.isEmpty(targetClass)) {
-                    android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_VIEW);
+                    android.content.Intent intent = new android.content.Intent(
+                            TextUtils.isEmpty(action)
+                                    ? android.content.Intent.ACTION_VIEW : action);
                     intent.setClassName(targetPackage, targetClass);
+                    if (!TextUtils.isEmpty(uri)) {
+                        intent.setData(android.net.Uri.parse(uri));
+                    }
                     
                     // 添加所有 extras
                     for (ExtraItem item : extras) {
@@ -338,8 +362,12 @@ public class ShortcutLaunchConfig {
                 break;
             case MODE_EXPLICIT:
                 if (!TextUtils.isEmpty(targetPackage) && !TextUtils.isEmpty(targetClass)) {
-                    android.content.Intent intent = new android.content.Intent();
+                    android.content.Intent intent = TextUtils.isEmpty(action)
+                            ? new android.content.Intent() : new android.content.Intent(action);
                     intent.setClassName(targetPackage, targetClass);
+                    if (!TextUtils.isEmpty(uri)) {
+                        intent.setData(android.net.Uri.parse(uri));
+                    }
                     intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
                     return intent;
                 }

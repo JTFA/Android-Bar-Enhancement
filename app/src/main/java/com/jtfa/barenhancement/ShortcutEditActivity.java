@@ -31,7 +31,12 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.ClipData;
+import android.content.ComponentName;
 import android.content.Intent;
+import android.content.res.Resources;
+import android.graphics.Canvas;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.view.DragEvent;
 
 import org.json.JSONArray;
@@ -73,6 +78,16 @@ public class ShortcutEditActivity extends AppCompatActivity {
     // 图片选择启动器
     private final ActivityResultLauncher<String> imagePickerLauncher =
             registerForActivityResult(new ActivityResultContracts.GetContent(), this::onImagePicked);
+
+    // 应用自己的「创建快捷方式」选择页（ACTION_CREATE_SHORTCUT）
+    private final ActivityResultLauncher<Intent> shortcutPickerLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() != RESULT_OK || result.getData() == null) {
+                    Toast.makeText(this, "未选择快捷方式", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                handleShortcutPickerResult(result.getData());
+            });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -202,6 +217,18 @@ public class ShortcutEditActivity extends AppCompatActivity {
         stylePrimaryButton(addButton);
         addButton.setOnClickListener(v -> showEditDialog(null, -1));
         contentLayout.addView(addButton);
+
+        // 从应用快捷方式导入（静态 shortcuts.xml / ACTION_CREATE_SHORTCUT）
+        Button importButton = new Button(this);
+        LinearLayout.LayoutParams importParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dpToPx(52));
+        importParams.setMargins(0, dpToPx(10), 0, 0);
+        importButton.setLayoutParams(importParams);
+        importButton.setText("从应用快捷方式导入");
+        styleSecondaryButton(importButton);
+        importButton.setOnClickListener(v -> showShortcutImportDialog());
+        contentLayout.addView(importButton);
 
         scrollView.addView(contentLayout);
         rootContainer.addView(scrollView);
@@ -1665,6 +1692,366 @@ public class ShortcutEditActivity extends AppCompatActivity {
             return iconFile.getAbsolutePath();
         }
         return null;
+    }
+
+    // ==================== 从应用快捷方式导入 ====================
+
+    private void showShortcutImportDialog() {
+        final AlertDialog loadingDialog = new AlertDialog.Builder(this)
+                .setTitle("从应用快捷方式导入")
+                .setMessage("正在扫描应用快捷方式...")
+                .setCancelable(false)
+                .create();
+        loadingDialog.show();
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final AppShortcutDiscovery.Result result;
+                try {
+                    result = AppShortcutDiscovery.scan(ShortcutEditActivity.this);
+                } catch (Exception e) {
+                    android.util.Log.e("ShortcutEdit", "扫描快捷方式失败", e);
+                    runOnUiThread(() -> {
+                        loadingDialog.dismiss();
+                        Toast.makeText(ShortcutEditActivity.this,
+                                "扫描快捷方式失败", Toast.LENGTH_SHORT).show();
+                    });
+                    return;
+                }
+                runOnUiThread(() -> {
+                    loadingDialog.dismiss();
+                    if (isFinishing() || isDestroyed()) return;
+                    showShortcutImportList(result);
+                });
+            }
+        }).start();
+    }
+
+    private void showShortcutImportList(final AppShortcutDiscovery.Result result) {
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dpToPx(20), dpToPx(8), dpToPx(20), dpToPx(8));
+
+        TextView hint = new TextView(this);
+        hint.setText("系统只允许读取应用安装包中声明的静态快捷方式。部分应用（如微信、支付宝）的长按菜单是运行时生成的，普通应用无法读取；如果这里没有，请用「选择应用」手动添加，或试试下方支持快捷方式选择的应用。");
+        hint.setTextSize(12);
+        hint.setTextColor(resolveThemeColor(R.attr.textSecondary));
+        hint.setPadding(0, 0, 0, dpToPx(12));
+        content.addView(hint);
+
+        final AlertDialog[] dialogRef = new AlertDialog[1];
+
+        if (!result.staticShortcuts.isEmpty()) {
+            content.addView(createImportSectionTitle("应用声明的快捷方式"));
+            for (final AppShortcutDiscovery.StaticShortcut sc : result.staticShortcuts) {
+                View row = createImportRow(
+                        sc.icon,
+                        sc.label,
+                        sc.appLabel + (sc.launchable
+                                ? " · 应用快捷方式"
+                                : " · 目标页面未导出，可能无法打开"),
+                        "添加",
+                        () -> {
+                            if (dialogRef[0] != null) dialogRef[0].dismiss();
+                            addImportedShortcut(sc.label, sc.icon, sc.intent, sc.packageName);
+                        });
+                content.addView(row);
+            }
+        }
+
+        if (!result.pickerApps.isEmpty()) {
+            content.addView(createImportSectionTitle("支持快捷方式选择的应用"));
+            for (final AppShortcutDiscovery.ShortcutPickerApp app : result.pickerApps) {
+                View row = createImportRow(
+                        app.icon,
+                        app.appLabel,
+                        "打开该应用的快捷方式选择页",
+                        "打开",
+                        () -> {
+                            if (dialogRef[0] != null) dialogRef[0].dismiss();
+                            launchShortcutPicker(app);
+                        });
+                content.addView(row);
+            }
+        }
+
+        if (result.staticShortcuts.isEmpty() && result.pickerApps.isEmpty()) {
+            TextView empty = new TextView(this);
+            empty.setText("没有找到可导入的快捷方式。\n\nAndroid 只向默认桌面/助手开放其他应用的完整快捷方式列表；普通应用只能读取静态 shortcuts.xml，或使用应用自己提供的快捷方式选择页。");
+            empty.setTextSize(14);
+            empty.setTextColor(resolveThemeColor(R.attr.textSecondary));
+            empty.setPadding(0, dpToPx(16), 0, dpToPx(16));
+            content.addView(empty);
+        }
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(content);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("从应用快捷方式导入")
+                .setView(scroll)
+                .setNegativeButton("关闭", null)
+                .create();
+        dialogRef[0] = dialog;
+        dialog.setOnShowListener(d -> {
+            android.view.Window window = dialog.getWindow();
+            if (window != null) {
+                window.setLayout(
+                        (int) (getResources().getDisplayMetrics().widthPixels * 0.92),
+                        (int) (getResources().getDisplayMetrics().heightPixels * 0.75));
+            }
+        });
+        dialog.show();
+    }
+
+    private TextView createImportSectionTitle(String text) {
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(13);
+        tv.setTypeface(null, android.graphics.Typeface.BOLD);
+        tv.setTextColor(resolveThemeColor(R.attr.colorPrimaryBrand));
+        tv.setPadding(0, dpToPx(12), 0, dpToPx(4));
+        return tv;
+    }
+
+    private View createImportRow(Drawable icon, String title, String subtitle,
+                                 String actionText, final Runnable onClick) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dpToPx(8), 0, dpToPx(8));
+
+        android.util.TypedValue selectable = new android.util.TypedValue();
+        getTheme().resolveAttribute(android.R.attr.selectableItemBackground, selectable, true);
+        if (selectable.resourceId != 0) {
+            row.setBackgroundResource(selectable.resourceId);
+        }
+
+        ImageView iconView = new ImageView(this);
+        int size = dpToPx(40);
+        LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(size, size);
+        iconView.setLayoutParams(iconLp);
+        iconView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        if (icon != null) {
+            iconView.setImageDrawable(icon);
+        }
+        row.addView(iconView);
+
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.setPadding(dpToPx(12), 0, dpToPx(8), 0);
+        texts.setLayoutParams(new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        TextView titleView = new TextView(this);
+        titleView.setText(title);
+        titleView.setTextSize(15);
+        titleView.setTextColor(resolveThemeColor(R.attr.textPrimary));
+        titleView.setSingleLine(true);
+        titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        texts.addView(titleView);
+
+        TextView subtitleView = new TextView(this);
+        subtitleView.setText(subtitle);
+        subtitleView.setTextSize(12);
+        subtitleView.setTextColor(resolveThemeColor(R.attr.textSecondary));
+        subtitleView.setSingleLine(true);
+        subtitleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        texts.addView(subtitleView);
+        row.addView(texts);
+
+        if (!TextUtils.isEmpty(actionText)) {
+            TextView action = new TextView(this);
+            action.setText(actionText);
+            action.setTextSize(12);
+            action.setTextColor(resolveThemeColor(R.attr.colorPrimaryBrand));
+            action.setPadding(dpToPx(8), dpToPx(4), 0, dpToPx(4));
+            row.addView(action);
+        }
+
+        row.setOnClickListener(v -> onClick.run());
+        return row;
+    }
+
+    private void launchShortcutPicker(AppShortcutDiscovery.ShortcutPickerApp app) {
+        try {
+            Intent intent = new Intent(Intent.ACTION_CREATE_SHORTCUT);
+            intent.setComponent(new ComponentName(app.packageName, app.activityName));
+            shortcutPickerLauncher.launch(intent);
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开 " + app.appLabel + " 的快捷方式选择页", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void handleShortcutPickerResult(Intent data) {
+        Intent shortcutIntent = data.getParcelableExtra(Intent.EXTRA_SHORTCUT_INTENT);
+        if (shortcutIntent == null) {
+            Toast.makeText(this, "该应用没有返回可用的快捷方式", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String name = data.getStringExtra(Intent.EXTRA_SHORTCUT_NAME);
+        if (TextUtils.isEmpty(name)) {
+            ComponentName comp = shortcutIntent.getComponent();
+            name = comp != null ? comp.getPackageName() : "快捷方式";
+        }
+
+        Drawable icon = null;
+        Bitmap bitmap = data.getParcelableExtra(Intent.EXTRA_SHORTCUT_ICON);
+        if (bitmap != null) {
+            icon = new BitmapDrawable(getResources(), bitmap);
+        }
+        if (icon == null) {
+            Intent.ShortcutIconResource iconRes =
+                    data.getParcelableExtra(Intent.EXTRA_SHORTCUT_ICON_RESOURCE);
+            if (iconRes != null) {
+                try {
+                    Resources res = getPackageManager()
+                            .getResourcesForApplication(iconRes.packageName);
+                    int resId = res.getIdentifier(iconRes.resourceName, null, null);
+                    if (resId != 0) {
+                        icon = res.getDrawable(resId, null);
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        if (icon == null) {
+            ComponentName comp = shortcutIntent.getComponent();
+            if (comp != null) {
+                try {
+                    icon = getPackageManager().getActivityIcon(comp);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        if (icon == null) {
+            icon = getPackageManager().getDefaultActivityIcon();
+        }
+
+        addImportedShortcut(name, icon, shortcutIntent, null);
+    }
+
+    private void addImportedShortcut(String name, Drawable icon, Intent intent, String fallbackPackage) {
+        if (intent == null) {
+            Toast.makeText(this, "快捷方式启动 Intent 为空", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (shortcutList == null) {
+            loadShortcuts();
+        }
+
+        String id = "sc_" + System.currentTimeMillis() + "_" + (int) (Math.random() * 1000);
+        String pkg = "";
+        String cls = "";
+        ComponentName comp = intent.getComponent();
+        if (comp != null) {
+            pkg = comp.getPackageName();
+            cls = comp.getClassName();
+        } else if (intent.getPackage() != null) {
+            pkg = intent.getPackage();
+        } else if (!TextUtils.isEmpty(fallbackPackage)) {
+            pkg = fallbackPackage;
+        }
+
+        String iconPath = saveImportedIcon(pkg, id, icon);
+        ShortcutItem item = new ShortcutItem(id, name, "", "image", iconPath, pkg, cls);
+
+        ShortcutLaunchConfig config = configFromIntent(intent);
+        SharedPreferences.Editor editor = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit();
+        ShortcutLaunchConfig.save(editor, id, config);
+        editor.apply();
+
+        shortcutList.add(item);
+        saveShortcuts();
+        refreshList();
+        Toast.makeText(this, "已添加：" + name, Toast.LENGTH_SHORT).show();
+    }
+
+    private ShortcutLaunchConfig configFromIntent(Intent intent) {
+        ShortcutLaunchConfig config = new ShortcutLaunchConfig();
+        String action = intent.getAction();
+        if (!TextUtils.isEmpty(action)) {
+            config.action = action;
+        }
+
+        ComponentName comp = intent.getComponent();
+        if (comp != null) {
+            config.targetPackage = comp.getPackageName();
+            config.targetClass = comp.getClassName();
+        } else if (intent.getPackage() != null) {
+            config.targetPackage = intent.getPackage();
+        }
+
+        if (intent.getData() != null) {
+            config.uri = intent.getData().toString();
+        }
+
+        Bundle extras = intent.getExtras();
+        if (extras != null) {
+            for (String key : extras.keySet()) {
+                Object value = extras.get(key);
+                if (value == null) continue;
+                if (value instanceof Boolean) {
+                    config.extras.add(new ShortcutLaunchConfig.ExtraItem(
+                            key, String.valueOf(value), "boolean"));
+                } else if (value instanceof Integer) {
+                    config.extras.add(new ShortcutLaunchConfig.ExtraItem(
+                            key, String.valueOf(value), "int"));
+                } else if (value instanceof Long) {
+                    config.extras.add(new ShortcutLaunchConfig.ExtraItem(
+                            key, String.valueOf(value), "long"));
+                } else if (value instanceof Float) {
+                    config.extras.add(new ShortcutLaunchConfig.ExtraItem(
+                            key, String.valueOf(value), "float"));
+                } else if (value instanceof String || value instanceof CharSequence) {
+                    config.extras.add(new ShortcutLaunchConfig.ExtraItem(
+                            key, value.toString(), "string"));
+                }
+            }
+        }
+
+        if (!TextUtils.isEmpty(config.targetClass)) {
+            config.launchMode = config.extras.isEmpty()
+                    ? ShortcutLaunchConfig.MODE_EXPLICIT
+                    : ShortcutLaunchConfig.MODE_INTENT;
+        } else {
+            config.launchMode = ShortcutLaunchConfig.MODE_URL;
+        }
+        return config;
+    }
+
+    private String saveImportedIcon(String packageName, String id, Drawable drawable) {
+        if (drawable == null) return "";
+        try {
+            File iconsDir = new File(getFilesDir(), ICONS_DIR);
+            if (!iconsDir.exists()) {
+                iconsDir.mkdirs();
+            }
+            String safe = (packageName + "_" + id).replaceAll("[^a-zA-Z0-9._-]", "_");
+            File destFile = new File(iconsDir, "imported_" + safe + ".png");
+
+            Bitmap bitmap;
+            if (drawable instanceof BitmapDrawable) {
+                bitmap = ((BitmapDrawable) drawable).getBitmap();
+            } else {
+                int size = Math.max(dpToPx(96), 192);
+                bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+                Canvas canvas = new Canvas(bitmap);
+                drawable.setBounds(0, 0, size, size);
+                drawable.draw(canvas);
+            }
+
+            try (FileOutputStream out = new FileOutputStream(destFile)) {
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+            }
+            return destFile.getAbsolutePath();
+        } catch (Exception e) {
+            android.util.Log.e("ShortcutEdit", "保存导入图标失败", e);
+            return "";
+        }
     }
 
     private int resolveThemeColor(int attrResId) {
